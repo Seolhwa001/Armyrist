@@ -412,7 +412,7 @@ object ArmyristPortableDataManager {
         payloadBytes: ByteArray,
         password: CharArray?
     ): ByteArray {
-        val encrypted = !password.isNullOrEmpty()
+        val encrypted = password != null && password.isNotEmpty()
 
         val encryptionMetadata: JSONObject
         val outputPayload: ByteArray

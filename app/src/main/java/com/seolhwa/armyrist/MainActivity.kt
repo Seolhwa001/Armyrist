@@ -111,7 +111,35 @@ private fun ArmyristApp(
                         sheet = sheet,
                         onHome = onHome,
                         onBack = { screen = Screen.SHEETS },
-                        onGroups = { screen = Screen.GROUPS },
+                        onAddGroup = { name, color, showAggregate ->
+                            if (
+                                repo.addGroup(
+                                    sheet.id,
+                                    name,
+                                    color,
+                                    showAggregate
+                                )
+                            ) refresh()
+                        },
+                        onRenameGroup = {
+                            groupId,
+                            name,
+                            color,
+                            showAggregate ->
+                            if (
+                                repo.renameGroup(
+                                    sheet.id,
+                                    groupId,
+                                    name,
+                                    color,
+                                    showAggregate
+                                )
+                            ) refresh()
+                        },
+                        onDeleteGroup = {
+                            repo.deleteGroup(sheet.id, it)
+                            refresh()
+                        },
                         onCalculations = { screen = Screen.CALCULATIONS },
                         onResult = { screen = Screen.RESULT },
                         onRename = {
@@ -413,7 +441,9 @@ private fun CountingScreen(
     sheet: CountingSheet,
     onHome: () -> Unit,
     onBack: () -> Unit,
-    onGroups: () -> Unit,
+    onAddGroup: (String, String, Boolean) -> Unit,
+    onRenameGroup: (String, String, String, Boolean) -> Unit,
+    onDeleteGroup: (String) -> Unit,
     onCalculations: () -> Unit,
     onResult: () -> Unit,
     onRename: (String) -> Unit,
@@ -433,6 +463,7 @@ private fun CountingScreen(
     var deleteTarget by remember { mutableStateOf<CountingItem?>(null) }
     var titleEdit by remember { mutableStateOf(false) }
     var memoEdit by remember { mutableStateOf(false) }
+    var groupManager by remember { mutableStateOf(false) }
     var menuTarget by remember { mutableStateOf<CountingItem?>(null) }
 
     var groupPickerOpen by remember { mutableStateOf(false) }
@@ -555,7 +586,7 @@ private fun CountingScreen(
                 ) {
                     ArmyristUtilityButton(
                         text = "그룹",
-                        onClick = onGroups
+                        onClick = { groupManager = true }
                     )
                     ArmyristUtilityButton(
                         text = "그룹 지정",
@@ -581,7 +612,7 @@ private fun CountingScreen(
 
                 Surface(
                     color = targetGroup?.let { parseColor(it.color).copy(alpha = 0.14f) }
-                        ?: MaterialTheme.colorScheme.secondaryContainer,
+                        ?: ArmyristColors.SecondaryControl,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -678,7 +709,7 @@ private fun CountingScreen(
                     val selectedColor = sheet.groups
                         .firstOrNull { it.id == assignmentGroupId }
                         ?.let { parseColor(it.color).copy(alpha = 0.26f) }
-                        ?: MaterialTheme.colorScheme.secondaryContainer
+                        ?: ArmyristColors.SecondaryControl
 
                     Card(
                         colors = CardDefaults.cardColors(
@@ -1020,6 +1051,16 @@ private fun CountingScreen(
             titleEdit = false
             if (it != null && it.trim().isNotEmpty()) onRename(it)
         }
+    }
+
+    if (groupManager) {
+        CountingGroupManagerDialog(
+            sheet = sheet,
+            onAdd = onAddGroup,
+            onRename = onRenameGroup,
+            onDelete = onDeleteGroup,
+            onDismiss = { groupManager = false }
+        )
     }
 
     if (memoEdit) {
@@ -1380,6 +1421,192 @@ private fun QuantityDialog(
             }
         }
     )
+}
+
+@Composable
+private fun CountingGroupManagerDialog(
+    sheet: CountingSheet,
+    onAdd: (String, String, Boolean) -> Unit,
+    onRename: (String, String, String, Boolean) -> Unit,
+    onDelete: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var create by remember { mutableStateOf(false) }
+    var rename by remember { mutableStateOf<CountingGroup?>(null) }
+    var delete by remember { mutableStateOf<CountingGroup?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = ArmyristPanelShape,
+        containerColor = ArmyristColors.WorkSurface,
+        title = {
+            Text(
+                "그룹 관리",
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column {
+                if (sheet.groups.isEmpty()) {
+                    Text(
+                        "그룹이 없습니다.",
+                        color = ArmyristColors.SecondaryText,
+                        modifier = Modifier.padding(vertical = 12.dp)
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 340.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                        items(
+                            sheet.groups.sortedBy { it.order },
+                            key = { it.id }
+                        ) { group ->
+                            val color = parseColor(group.color)
+                            Surface(
+                                color = color.copy(alpha = 0.12f),
+                                shape = ArmyristPanelShape,
+                                border = BorderStroke(
+                                    1.dp,
+                                    color.copy(alpha = 0.65f)
+                                )
+                            ) {
+                                Column(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(10.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment =
+                                            Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            Modifier
+                                                .size(18.dp)
+                                                .background(
+                                                    color,
+                                                    CircleShape
+                                                )
+                                        )
+                                        Spacer(Modifier.width(9.dp))
+                                        Column(Modifier.weight(1f)) {
+                                            Text(
+                                                group.name,
+                                                fontWeight =
+                                                    FontWeight.SemiBold
+                                            )
+                                            Text(
+                                                if (group.showAggregate) {
+                                                    "합계 표시"
+                                                } else {
+                                                    "합계 숨김"
+                                                },
+                                                style =
+                                                    MaterialTheme.typography
+                                                        .bodySmall,
+                                                color =
+                                                    ArmyristColors
+                                                        .SecondaryText
+                                            )
+                                        }
+                                        TextButton(
+                                            onClick = { rename = group }
+                                        ) {
+                                            Text("편집")
+                                        }
+                                        TextButton(
+                                            onClick = { delete = group }
+                                        ) {
+                                            Text("삭제")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    onClick = { create = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = ArmyristPanelShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ArmyristColors.PrimaryControl,
+                        contentColor = ArmyristColors.OnDark
+                    )
+                ) {
+                    Text("+ 그룹 추가")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("닫기")
+            }
+        }
+    )
+
+    if (create) {
+        GroupEditDialog(
+            title = "그룹 추가",
+            initialName = "",
+            initialColor = "#6750A4",
+            initialShowAggregate = true
+        ) { name, color, showAggregate ->
+            create = false
+            if (name != null) {
+                onAdd(name, color, showAggregate)
+            }
+        }
+    }
+
+    rename?.let { group ->
+        GroupEditDialog(
+            title = "그룹 편집",
+            initialName = group.name,
+            initialColor = group.color,
+            initialShowAggregate = group.showAggregate
+        ) { name, color, showAggregate ->
+            rename = null
+            if (name != null) {
+                onRename(
+                    group.id,
+                    name,
+                    color,
+                    showAggregate
+                )
+            }
+        }
+    }
+
+    delete?.let { group ->
+        AlertDialog(
+            onDismissRequest = { delete = null },
+            title = { Text("그룹 삭제") },
+            text = {
+                Text(
+                    "이 그룹의 항목은 삭제되지 않고 미지정으로 변경됩니다. " +
+                        "관련 계산은 삭제됩니다."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete(group.id)
+                        delete = null
+                    }
+                ) {
+                    Text("삭제")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { delete = null }) {
+                    Text("취소")
+                }
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

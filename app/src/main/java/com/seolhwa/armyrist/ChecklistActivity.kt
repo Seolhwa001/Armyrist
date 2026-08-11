@@ -651,6 +651,14 @@ private fun ChecklistDetailScreen(
                     AssistChip(onClick = { groupManager = true }, label = { Text("그룹") })
                     AssistChip(onClick = { groupPicker = true }, label = { Text("그룹 지정") })
                     AssistChip(
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = ArmyristColors.WorkSurface,
+                            labelColor = ArmyristColors.PrimaryText
+                        ),
+                        border = AssistChipDefaults.assistChipBorder(
+                            enabled = true,
+                            borderColor = ArmyristColors.Border
+                        ),
                         onClick = {
                             val enabledItems =
                                 checklist.items.filter { it.notificationEnabled }
@@ -815,7 +823,7 @@ private fun ChecklistDetailScreen(
                     val cardColor = when {
                         selected -> assignmentGroup?.let {
                             parseColor(it.color).copy(alpha = 0.26f)
-                        } ?: MaterialTheme.colorScheme.secondaryContainer
+                        } ?: ArmyristColors.SecondaryControl
                         group != null -> parseColor(group.color).copy(alpha = 0.13f)
                         else -> ArmyristColors.RaisedSurface
                     }
@@ -1086,7 +1094,7 @@ private fun ChecklistDetailScreen(
 private fun ChecklistProgressSummary(checklist: Checklist) {
     val p = ChecklistRules.progress(checklist.items)
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f),
+        color = ArmyristColors.WorkSurface,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
@@ -1244,7 +1252,7 @@ private fun StatusButton(
     Surface(
         onClick = onClick,
         modifier = modifier.height(42.dp),
-        shape = MaterialTheme.shapes.medium,
+        shape = ArmyristPanelShape,
         color = if (selected) selectedColor else MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
         contentColor = if (selected) selectedTextColor else MaterialTheme.colorScheme.onSurfaceVariant,
         border = ButtonDefaults.outlinedButtonBorder(enabled = true)
@@ -1276,7 +1284,7 @@ private fun CompactStatusButton(
         onClick = onClick,
         color = bg,
         contentColor = fg,
-        shape = MaterialTheme.shapes.medium
+        shape = ArmyristPanelShape
     ) {
         Text(
             text,
@@ -1567,7 +1575,7 @@ private fun GroupManagerDialog(
                         items(checklist.groups.sortedBy { it.order }, key = { it.id }) { group ->
                             Surface(
                                 color = parseColor(group.color).copy(alpha = 0.12f),
-                                shape = MaterialTheme.shapes.medium
+                                shape = ArmyristPanelShape
                             ) {
                                 Column(Modifier.fillMaxWidth().padding(10.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1692,8 +1700,8 @@ private fun GroupPickerDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    shape = MaterialTheme.shapes.medium,
+                    color = ArmyristColors.RaisedSurface,
+                    shape = ArmyristPanelShape,
                     modifier = Modifier.fillMaxWidth().clickable {
                         onSelect(null, true)
                     }
@@ -1704,7 +1712,7 @@ private fun GroupPickerDialog(
                 checklist.groups.sortedBy { it.order }.forEach { group ->
                     Surface(
                         color = parseColor(group.color).copy(alpha = 0.12f),
-                        shape = MaterialTheme.shapes.medium,
+                        shape = ArmyristPanelShape,
                         modifier = Modifier.fillMaxWidth().clickable {
                             onSelect(group.id, false)
                         }
