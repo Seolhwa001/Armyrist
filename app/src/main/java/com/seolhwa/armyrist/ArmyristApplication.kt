@@ -15,11 +15,27 @@ class ArmyristApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
+        // Restore journal recovery MUST happen before repository snapshots load.
+        ArmyristPortableDataManager.recoverInterruptedRestore(this)
+
+        reloadRepositories()
+
+        ChecklistNotificationManager.reconcile(
+            this,
+            coreSuiteRepository
+        )
+    }
+
+    fun reloadAfterPortableDataChange() {
+        reloadRepositories()
+        ChecklistNotificationManager.reconcile(
+            this,
+            coreSuiteRepository
+        )
+    }
+
+    private fun reloadRepositories() {
         repository = CountingRepository(this)
         coreSuiteRepository = CoreSuiteRepository(this)
-
-        // Channels are now item-sound specific and are created per ChecklistItem.
-        // Reconciliation creates the required channels and schedules eligible alarms.
-        ChecklistNotificationManager.reconcile(this, coreSuiteRepository)
     }
 }

@@ -39,6 +39,14 @@ class HomeActivity : ComponentActivity() {
                         },
                         onUserProfile = {
                             startActivity(Intent(this, UserProfileActivity::class.java))
+                        },
+                        onDataManagement = {
+                            startActivity(
+                                Intent(
+                                    this,
+                                    DataManagementActivity::class.java
+                                )
+                            )
                         }
                     )
                 }
@@ -53,7 +61,8 @@ private fun HomeScreen(
     onChecklist: () -> Unit,
     onTimePlan: () -> Unit,
     onReportTemplate: () -> Unit,
-    onUserProfile: () -> Unit
+    onUserProfile: () -> Unit,
+    onDataManagement: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -142,6 +151,35 @@ private fun HomeScreen(
                 )
                 Text(
                     "사용자 이름 관리  ›",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ArmyristColors.SecondaryText
+                )
+            }
+        }
+
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onDataManagement),
+            color = ArmyristColors.WorkSurface,
+            shape = ArmyristPanelShape,
+            border = BorderStroke(1.dp, ArmyristColors.Border)
+        ) {
+            Row(
+                modifier = Modifier.padding(
+                    horizontal = 14.dp,
+                    vertical = 13.dp
+                ),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "데이터 관리",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "백업 · 복원  ›",
                     style = MaterialTheme.typography.bodySmall,
                     color = ArmyristColors.SecondaryText
                 )
