@@ -420,6 +420,12 @@ private fun TimePlanListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = ArmyristColors.Header,
+                    titleContentColor = ArmyristColors.OnDark,
+                    navigationIconContentColor = ArmyristColors.OnDark,
+                    actionIconContentColor = ArmyristColors.OnDark
+                ),
                 title = {
                     Column {
                         Text(
@@ -488,7 +494,12 @@ private fun TimePlanListScreen(
                             onClick = onCreate,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 52.dp)
+                                .heightIn(min = 54.dp),
+                            shape = ArmyristPanelShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = ArmyristColors.PrimaryControl,
+                                contentColor = ArmyristColors.OnDark
+                            )
                         ) {
                             Text("새 시간계획 만들기")
                         }
@@ -511,7 +522,15 @@ private fun TimePlanListScreen(
                 ) { plan ->
                     Card(
                         onClick = { onOpen(plan.id) },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = ArmyristPanelShape,
+                        colors = CardDefaults.cardColors(
+                            containerColor = ArmyristColors.RaisedSurface
+                        ),
+                        border = BorderStroke(
+                            1.dp,
+                            ArmyristColors.Border
+                        )
                     ) {
                         Row(
                             Modifier
@@ -656,6 +675,12 @@ private fun TimePlanDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = ArmyristColors.Header,
+                    titleContentColor = ArmyristColors.OnDark,
+                    navigationIconContentColor = ArmyristColors.OnDark,
+                    actionIconContentColor = ArmyristColors.OnDark
+                ),
                 title = {
                     Column {
                         Row(
@@ -1464,6 +1489,12 @@ private fun TimePlanResultScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = ArmyristColors.Header,
+                    titleContentColor = ArmyristColors.OnDark,
+                    navigationIconContentColor = ArmyristColors.OnDark,
+                    actionIconContentColor = ArmyristColors.OnDark
+                ),
                 title = {
                     Text("결과 미리보기")
                 },

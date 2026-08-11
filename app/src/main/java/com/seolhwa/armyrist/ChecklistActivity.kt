@@ -382,6 +382,12 @@ private fun ChecklistListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = ArmyristColors.Header,
+                    titleContentColor = ArmyristColors.OnDark,
+                    navigationIconContentColor = ArmyristColors.OnDark,
+                    actionIconContentColor = ArmyristColors.OnDark
+                ),
                 title = {
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -438,7 +444,12 @@ private fun ChecklistListScreen(
                         Spacer(Modifier.height(20.dp))
                         Button(
                             onClick = onCreate,
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
+                            shape = ArmyristPanelShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = ArmyristColors.PrimaryControl,
+                                contentColor = ArmyristColors.OnDark
+                            )
                         ) { Text("새 체크리스트 만들기") }
                     }
                 }
@@ -453,7 +464,15 @@ private fun ChecklistListScreen(
                     val p = ChecklistRules.progress(checklist.items)
                     Card(
                         onClick = { onOpen(checklist.id) },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = ArmyristPanelShape,
+                        colors = CardDefaults.cardColors(
+                            containerColor = ArmyristColors.RaisedSurface
+                        ),
+                        border = BorderStroke(
+                            1.dp,
+                            ArmyristColors.Border
+                        )
                     ) {
                         Row(
                             Modifier.fillMaxWidth().padding(16.dp),
@@ -559,6 +578,12 @@ private fun ChecklistDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = ArmyristColors.Header,
+                    titleContentColor = ArmyristColors.OnDark,
+                    navigationIconContentColor = ArmyristColors.OnDark,
+                    actionIconContentColor = ArmyristColors.OnDark
+                ),
                 title = {
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -800,7 +825,12 @@ private fun ChecklistDetailScreen(
                 item {
                     Card(
                         onClick = { memoEdit = true },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = ArmyristPanelShape,
+                        colors = CardDefaults.cardColors(
+                            containerColor = ArmyristColors.RaisedSurface
+                        ),
+                        border = BorderStroke(1.dp, ArmyristColors.Border)
                     ) {
                         Column(Modifier.padding(14.dp)) {
                             Row(Modifier.fillMaxWidth()) {
