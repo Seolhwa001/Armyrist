@@ -13,7 +13,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
 import com.seolhwa.armyrist.stage2.domain.ReportTemplate
@@ -158,8 +160,30 @@ private fun TemplateEditor(
 ) {
     val context = LocalContext.current
     var name by remember(template?.id) { mutableStateOf(template?.name ?: "") }
-    var body by remember(template?.id) { mutableStateOf(template?.body ?: "") }
+    var body by remember(template?.id) {
+        val initial = template?.body ?: ""
+        mutableStateOf(
+            TextFieldValue(
+                text = initial,
+                selection = TextRange(initial.length)
+            )
+        )
+    }
     var error by remember { mutableStateOf("") }
+
+    fun insertToken(token: String) {
+        val start = body.selection.min.coerceIn(0, body.text.length)
+        val end = body.selection.max.coerceIn(0, body.text.length)
+        val newText =
+            body.text.substring(0, start) +
+                token +
+                body.text.substring(end)
+        val newCursor = start + token.length
+        body = TextFieldValue(
+            text = newText,
+            selection = TextRange(newCursor)
+        )
+    }
 
     Column(
         Modifier.fillMaxSize().padding(20.dp),
@@ -182,12 +206,12 @@ private fun TemplateEditor(
         Text("지원 변수", fontWeight = FontWeight.SemiBold)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf("{사용자}", "{제목}", "{전달내용}").forEach { token ->
-                AssistChip(onClick = { body += token }, label = { Text(token) })
+                AssistChip(onClick = { insertToken(token) }, label = { Text(token) })
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf("{날짜}", "{시간}").forEach { token ->
-                AssistChip(onClick = { body += token }, label = { Text(token) })
+                AssistChip(onClick = { insertToken(token) }, label = { Text(token) })
             }
         }
 
@@ -205,7 +229,7 @@ private fun TemplateEditor(
             onClick = {
                 if (name.trim().isEmpty()) {
                     error = "양식 이름을 입력하세요."
-                } else if (onSave(name, body)) {
+                } else if (onSave(name, body.text)) {
                     Toast.makeText(context, "저장되었습니다.", Toast.LENGTH_SHORT).show()
                 } else {
                     error = "저장할 수 없습니다."
@@ -215,7 +239,7 @@ private fun TemplateEditor(
         ) { Text("저장") }
 
         Text(
-            "예: 충성! {사용자}입니다.\\n\\n{전달내용}\\n\\n{날짜} {시간}",
+            "예: 충성! {사용자}입니다.\n\n{전달내용}\n\n{날짜} {시간}",
             style = MaterialTheme.typography.bodySmall
         )
     }
