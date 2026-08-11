@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -57,11 +58,13 @@ private fun HomeScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 14.dp, vertical = 16.dp),
+            .statusBarsPadding()
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         ArmyristPanel(
             modifier = Modifier.fillMaxWidth(),
+            dark = true,
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
         ) {
             Row(
@@ -75,12 +78,15 @@ private fun HomeScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(Modifier.height(2.dp))
-                    ArmyristSystemLabel("ARMYRIST SYSTEM")
+                    ArmyristSystemLabel(
+                        "ARMYRIST SYSTEM",
+                        onDark = true
+                    )
                 }
                 Text(
                     "SYS: NORMAL",
                     style = MaterialTheme.typography.labelMedium,
-                    color = ArmyristColors.Accent,
+                    color = Color(0xFFD7E0B9),
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -120,7 +126,7 @@ private fun HomeScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(onClick = onUserProfile),
-            color = ArmyristColors.Panel,
+            color = ArmyristColors.WorkSurface,
             shape = ArmyristPanelShape,
             border = BorderStroke(1.dp, ArmyristColors.Border)
         ) {
@@ -162,7 +168,7 @@ private fun HomeToolPanel(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        color = ArmyristColors.RaisedPanel,
+        color = ArmyristColors.RaisedSurface,
         shape = ArmyristPanelShape,
         border = BorderStroke(1.dp, ArmyristColors.Border)
     ) {
@@ -193,7 +199,7 @@ private fun HomeToolPanel(
             Text(
                 "›",
                 style = MaterialTheme.typography.headlineSmall,
-                color = ArmyristColors.Accent
+                color = ArmyristColors.PrimaryControl
             )
         }
     }

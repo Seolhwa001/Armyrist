@@ -247,8 +247,8 @@ private fun SheetListScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = ArmyristColors.AppBackground,
-                    titleContentColor = ArmyristColors.PrimaryText
+                    containerColor = ArmyristColors.Header,
+                    titleContentColor = ArmyristColors.OnDark
                 )
             )
         },
@@ -272,7 +272,7 @@ private fun SheetListScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = ArmyristPanelShape,
                     colors = CardDefaults.cardColors(
-                        containerColor = ArmyristColors.Panel
+                        containerColor = ArmyristColors.WorkSurface
                     ),
                     border = BorderStroke(
                         1.dp,
@@ -320,7 +320,7 @@ private fun SheetListScreen(
                         modifier = Modifier.fillMaxWidth(),
                         shape = ArmyristPanelShape,
                         colors = CardDefaults.cardColors(
-                            containerColor = ArmyristColors.RaisedPanel
+                            containerColor = ArmyristColors.RaisedSurface
                         ),
                         border = BorderStroke(
                             1.dp,
@@ -465,11 +465,11 @@ private fun CountingScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = ArmyristColors.AppBackground,
-                    titleContentColor = ArmyristColors.PrimaryText,
+                    containerColor = ArmyristColors.Header,
+                    titleContentColor = ArmyristColors.OnDark,
                     navigationIconContentColor =
-                        ArmyristColors.SecondaryText,
-                    actionIconContentColor = ArmyristColors.Accent
+                        ArmyristColors.OnDark,
+                    actionIconContentColor = ArmyristColors.OnDark
                 )
             )
         }
@@ -595,9 +595,12 @@ private fun CountingScreen(
                         mutableFloatStateOf(0f)
                     }
 
-                    val baseColor = currentGroup
-                        ?.let { parseColor(it.color).copy(alpha = 0.12f) }
-                        ?: MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f)
+                    val groupColor =
+                        currentGroup?.let { parseColor(it.color) }
+
+                    val baseColor = groupColor
+                        ?.copy(alpha = 0.13f)
+                        ?: ArmyristColors.RaisedSurface
 
                     val selectedColor = sheet.groups
                         .firstOrNull { it.id == assignmentGroupId }
@@ -616,10 +619,11 @@ private fun CountingScreen(
                         shape = ArmyristPanelShape,
                         border = BorderStroke(
                             1.dp,
-                            if (selected) {
-                                ArmyristColors.Accent
-                            } else {
-                                ArmyristColors.Border
+                            when {
+                                selected -> ArmyristColors.PrimaryControl
+                                groupColor != null ->
+                                    groupColor.copy(alpha = 0.75f)
+                                else -> ArmyristColors.Divider
                             }
                         ),
                         modifier = Modifier
@@ -662,11 +666,27 @@ private fun CountingScreen(
                             }
                     ) {
                         Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            if (groupColor != null) {
+                                Box(
+                                    Modifier
+                                        .width(5.dp)
+                                        .heightIn(min = 70.dp)
+                                        .background(groupColor)
+                                )
+                            }
+
+                            Row(
+                                Modifier
+                                    .weight(1f)
+                                    .padding(
+                                        horizontal = 12.dp,
+                                        vertical = 10.dp
+                                    ),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                             Text(
                                 if (selected) "✓" else "${index + 1}.",
                                 fontWeight = FontWeight.Bold,
@@ -718,9 +738,9 @@ private fun CountingScreen(
                                     shape = ArmyristPanelShape,
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor =
-                                            ArmyristColors.OliveMuted,
+                                            ArmyristColors.HeaderRaised,
                                         contentColor =
-                                            ArmyristColors.PrimaryText
+                                            ArmyristColors.OnDark
                                     ),
                                     contentPadding = PaddingValues(
                                         horizontal = 8.dp
@@ -744,9 +764,9 @@ private fun CountingScreen(
                                     shape = ArmyristPanelShape,
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor =
-                                            ArmyristColors.Olive,
+                                            ArmyristColors.PrimaryControl,
                                         contentColor =
-                                            ArmyristColors.PrimaryText
+                                            ArmyristColors.OnDark
                                     ),
                                     contentPadding = PaddingValues(0.dp)
                                 ) {
@@ -803,6 +823,7 @@ private fun CountingScreen(
                                     modifier = Modifier.padding(horizontal = 12.dp)
                                 )
                             }
+                            }
                         }
                     }
                 }
@@ -829,7 +850,7 @@ private fun CountingScreen(
                         modifier = Modifier.fillMaxWidth(),
                         shape = ArmyristPanelShape,
                         colors = CardDefaults.cardColors(
-                            containerColor = ArmyristColors.Panel
+                            containerColor = ArmyristColors.WorkSurface
                         ),
                         border = BorderStroke(
                             1.dp,
@@ -1005,8 +1026,9 @@ private fun AggregateSummary(sheet: CountingSheet) {
                 items(sections) { (name, totals) ->
                     val group = sheet.groups.firstOrNull { it.name == name }
                     Surface(
-                        color = group?.let { parseColor(it.color).copy(alpha = 0.10f) }
-                            ?: MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        color = group?.let {
+                            parseColor(it.color).copy(alpha = 0.12f)
+                        } ?: ArmyristColors.RaisedSurface,
                         shape = ArmyristPanelShape,
                         border = BorderStroke(
                             1.dp,
