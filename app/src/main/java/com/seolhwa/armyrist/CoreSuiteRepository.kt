@@ -190,7 +190,7 @@ class CoreSuiteRepository(context: Context) {
     }
 
     @Synchronized
-    fun addChecklistGroup(checklistId: String, name: String): Boolean {
+    fun addChecklistGroup(checklistId: String, name: String, color: String = "#6750A4"): Boolean {
         val normalized = name.trim().takeIf { it.isNotEmpty() } ?: return false
         val checklist = getChecklist(checklistId) ?: return false
         val order = (checklist.groups.maxOfOrNull { it.order } ?: -1) + 1
@@ -200,7 +200,8 @@ class CoreSuiteRepository(context: Context) {
                 groups = it.groups + ChecklistGroup(
                     checklistId = checklistId,
                     name = normalized,
-                    order = order
+                    order = order,
+                    color = color
                 )
             )
         } != null
@@ -222,6 +223,14 @@ class CoreSuiteRepository(context: Context) {
             )
         } != null
     }
+
+    @Synchronized
+    fun setChecklistGroupColor(checklistId: String, groupId: String, color: String): Boolean =
+        updateChecklist(checklistId) { current ->
+            current.copy(groups = current.groups.map {
+                if (it.id == groupId) it.copy(color = color) else it
+            })
+        } != null
 
     @Synchronized
     fun deleteChecklistGroup(checklistId: String, groupId: String) {
@@ -470,6 +479,7 @@ class CoreSuiteRepository(context: Context) {
                             .put("checklistId", group.checklistId)
                             .put("name", group.name)
                             .put("order", group.order)
+                            .put("color", group.color)
                     )
                 }
             })
@@ -502,7 +512,8 @@ class CoreSuiteRepository(context: Context) {
                     id = group.getString("id"),
                     checklistId = group.getString("checklistId"),
                     name = group.getString("name"),
-                    order = group.getInt("order")
+                    order = group.getInt("order"),
+                    color = group.optString("color", "#6750A4")
                 )
             },
             items = List(items.length()) { index ->
