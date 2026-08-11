@@ -534,6 +534,7 @@ private fun ChecklistDetailScreen(
     onReset: () -> Unit,
     onMove: (String, Int) -> Unit
 ) {
+    val context = LocalContext.current
     var titleEdit by remember { mutableStateOf(false) }
     var addingItem by remember { mutableStateOf(false) }
     var editingItem by remember { mutableStateOf<ChecklistItem?>(null) }

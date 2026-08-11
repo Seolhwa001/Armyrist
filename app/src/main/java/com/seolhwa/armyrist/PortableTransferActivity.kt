@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.seolhwa.armyrist.notification.ChecklistNotificationManager
 
 class PortableTransferActivity : ComponentActivity() {
     companion object {

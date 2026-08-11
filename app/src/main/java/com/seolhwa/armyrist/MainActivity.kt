@@ -430,6 +430,7 @@ private fun CountingScreen(
     onMove: (String, Int) -> Unit,
     onAssignGroup: (Set<String>, String?) -> Unit
 ) {
+    val context = LocalContext.current
     var itemEditor by remember { mutableStateOf<CountingItem?>(null) }
     var creating by remember { mutableStateOf(false) }
     var quantityTarget by remember { mutableStateOf<CountingItem?>(null) }

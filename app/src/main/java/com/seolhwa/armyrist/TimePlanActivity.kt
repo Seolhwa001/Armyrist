@@ -637,6 +637,7 @@ private fun TimePlanDetailScreen(
         durationLabel: String
     ) -> Boolean
 ) {
+    val context = LocalContext.current
     var titleEdit by remember {
         mutableStateOf(false)
     }
