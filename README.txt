@@ -1,3 +1,3 @@
-기존 .github/workflows/android-build.yml 파일을 이 ZIP의 파일로 덮어쓰세요.
-다른 파일은 수정할 필요 없습니다.
-커밋하면 GitHub Actions가 다시 실행됩니다.
+ZIP의 경로 그대로 Armyrist 저장소 루트에 덮어쓰세요.
+교체 대상:
+app/src/main/java/com/seolhwa/armyrist/MainActivity.kt
