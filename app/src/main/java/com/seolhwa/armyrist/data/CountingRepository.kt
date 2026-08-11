@@ -120,19 +120,29 @@ class CountingRepository(context: Context) {
     }
 
     @Synchronized
-    fun addGroup(sheetId: String, name: String): Boolean {
+    fun addGroup(sheetId: String, name: String, color: String = "#6750A4"): Boolean {
         val n = DomainRules.normalizeRequired(name) ?: return false
         val sheet = getSheet(sheetId) ?: return false
         val order = (sheet.groups.maxOfOrNull { it.order } ?: -1) + 1
-        val group = CountingGroup(sheetId = sheetId, name = n, order = order)
+        val group = CountingGroup(sheetId = sheetId, name = n, order = order, color = color)
         return updateSheet(sheetId) { it.copy(groups = it.groups + group) } != null
     }
 
     @Synchronized
-    fun renameGroup(sheetId: String, groupId: String, name: String): Boolean {
+    fun renameGroup(sheetId: String, groupId: String, name: String, color: String? = null): Boolean {
         val n = DomainRules.normalizeRequired(name) ?: return false
         return updateSheet(sheetId) { s ->
-            s.copy(groups = s.groups.map { if (it.id == groupId) it.copy(name = n) else it })
+            s.copy(groups = s.groups.map { if (it.id == groupId) it.copy(name = n, color = color ?: it.color) else it })
+        } != null
+    }
+
+
+    @Synchronized
+    fun assignItemsToGroup(sheetId: String, itemIds: Set<String>, groupId: String?): Boolean {
+        val sheet = getSheet(sheetId) ?: return false
+        if (groupId != null && sheet.groups.none { it.id == groupId }) return false
+        return updateSheet(sheetId) { s ->
+            s.copy(items = s.items.map { if (it.id in itemIds) it.copy(groupId = groupId) else it })
         } != null
     }
 
@@ -207,7 +217,7 @@ class CountingRepository(context: Context) {
         .put("groupId", i.groupId ?: JSONObject.NULL).put("order", i.order)
 
     private fun groupToJson(g: CountingGroup) = JSONObject()
-        .put("id", g.id).put("sheetId", g.sheetId).put("name", g.name).put("order", g.order)
+        .put("id", g.id).put("sheetId", g.sheetId).put("name", g.name).put("order", g.order).put("color", g.color)
 
     private fun calcToJson(c: GroupCalculation) = JSONObject()
         .put("id", c.id).put("sheetId", c.sheetId).put("leftGroupId", c.leftGroupId)
@@ -233,7 +243,7 @@ class CountingRepository(context: Context) {
     )
 
     private fun groupFromJson(o: JSONObject) = CountingGroup(
-        id = o.getString("id"), sheetId = o.getString("sheetId"), name = o.getString("name"), order = o.getInt("order")
+        id = o.getString("id"), sheetId = o.getString("sheetId"), name = o.getString("name"), order = o.getInt("order"), color = o.optString("color", "#6750A4")
     )
 
     private fun calcFromJson(o: JSONObject) = GroupCalculation(
