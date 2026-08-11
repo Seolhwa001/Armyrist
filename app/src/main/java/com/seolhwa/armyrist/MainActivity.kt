@@ -254,8 +254,17 @@ private fun SheetListScreen(
         },
         floatingActionButton = {
             if (sheets.isNotEmpty()) {
-                ExtendedFloatingActionButton(onClick = onCreate) {
-                    Text("+ 새 실셈")
+                ExtendedFloatingActionButton(
+                    onClick = onCreate,
+                    modifier = Modifier.heightIn(min = 58.dp),
+                    shape = ArmyristPanelShape,
+                    containerColor = ArmyristColors.PrimaryControl,
+                    contentColor = ArmyristColors.OnDark
+                ) {
+                    Text(
+                        "+ 새 실셈",
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
@@ -508,6 +517,12 @@ private fun CountingScreen(
                 }
             } else {
                 val targetGroup = sheet.groups.firstOrNull { it.id == assignmentGroupId }
+                val targetLabel =
+                    if (assignmentGroupId?.isEmpty() == true) {
+                        "미지정"
+                    } else {
+                        targetGroup?.name ?: "그룹"
+                    }
 
                 Surface(
                     color = targetGroup?.let { parseColor(it.color).copy(alpha = 0.14f) }
@@ -522,7 +537,7 @@ private fun CountingScreen(
                     ) {
                         Column(Modifier.weight(1f)) {
                             Text(
-                                "${targetGroup?.name ?: "그룹"} 지정 중",
+                                "$targetLabel 지정 중",
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
@@ -541,7 +556,10 @@ private fun CountingScreen(
                         Button(
                             enabled = assignmentSelected.isNotEmpty(),
                             onClick = {
-                                onAssignGroup(assignmentSelected, assignmentGroupId)
+                                onAssignGroup(
+                                    assignmentSelected,
+                                    assignmentGroupId?.takeIf { it.isNotEmpty() }
+                                )
                                 assignmentGroupId = null
                                 assignmentSelected = emptySet()
                             }
@@ -931,7 +949,8 @@ private fun CountingScreen(
         GroupPickerDialog(sheet) { groupId ->
             groupPickerOpen = false
             if (groupId != null) {
-                assignmentGroupId = groupId
+                assignmentGroupId =
+                    if (groupId == "__UNASSIGNED__") "" else groupId
                 assignmentSelected = emptySet()
             }
         }
@@ -1199,6 +1218,13 @@ private fun ItemDialog(
                     onClick = { groupId = null },
                     label = { Text("미지정") }
                 )
+
+                TextButton(
+                    onClick = { done("__UNASSIGNED__") },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("미지정")
+                }
 
                 sheet.groups.sortedBy { it.order }.forEach { group ->
                     FilterChip(

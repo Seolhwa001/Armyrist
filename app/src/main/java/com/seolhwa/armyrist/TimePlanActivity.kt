@@ -458,7 +458,17 @@ private fun TimePlanListScreen(
                     .padding(24.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Card(Modifier.fillMaxWidth()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = ArmyristPanelShape,
+                    colors = CardDefaults.cardColors(
+                        containerColor = ArmyristColors.WorkSurface
+                    ),
+                    border = BorderStroke(
+                        1.dp,
+                        ArmyristColors.Border
+                    )
+                ) {
                     Column(
                         Modifier.padding(28.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
