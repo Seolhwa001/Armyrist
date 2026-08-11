@@ -3,108 +3,114 @@ package com.seolhwa.armyrist.stage2.domain
 object ChecklistResultGenerator {
     fun generate(checklist: Checklist): ToolResult {
         val blocks = mutableListOf<String>()
-        val orderedGroups = checklist.groups.sortedBy { it.order }
 
-        blocks += "[${checklist.title}]"
+        blocks += checklist.title.trim()
 
-        for (group in orderedGroups) {
-            val groupItems = checklist.items
-                .filter { it.groupId == group.id }
+        val ungrouped =
+            checklist.items
+                .filter { it.groupId == null }
                 .sortedBy { it.order }
 
-            if (groupItems.isNotEmpty()) {
-                blocks += groupBlock(group.name, groupItems)
-            }
+        if (ungrouped.isNotEmpty()) {
+            blocks +=
+                ungrouped
+                    .flatMap(::formatChecklistItem)
+                    .joinToString("\n")
         }
 
-        val ungrouped = checklist.items
-            .filter { it.groupId == null }
-            .sortedBy { it.order }
+        checklist.groups.sortedBy { it.order }.forEach { group ->
+            val items =
+                checklist.items
+                    .filter { it.groupId == group.id }
+                    .sortedBy { it.order }
 
-        if (ungrouped.isNotEmpty()) {
-            blocks += groupBlock("미지정", ungrouped)
+            if (items.isEmpty()) return@forEach
+
+            val lines = mutableListOf("[${group.name}]")
+            lines += items.flatMap(::formatChecklistItem)
+            blocks += lines.joinToString("\n")
         }
 
         val progress = ChecklistRules.progress(checklist.items)
-        val progressText = progress.completionPercent?.let { "$it%" } ?: "진행 대상 없음"
 
         blocks += buildString {
-            appendLine("[전체 현황]")
-            appendLine("완료: ${progress.completeItems}")
-            appendLine("미완료: ${progress.incompleteItems}")
-            appendLine("해당 없음: ${progress.notApplicableItems}")
-            append("진행률: $progressText")
+            appendLine("완료 : ${progress.completeItems}")
+            appendLine("미완료 : ${progress.incompleteItems}")
+            append("해당 없음 : ${progress.notApplicableItems}")
         }
 
-        if (checklist.memo.isNotBlank()) {
-            blocks += "[메모]\n${checklist.memo.trim()}"
+        val memo = checklist.memo.trim()
+        if (memo.isNotEmpty()) {
+            blocks += "[메모]\n$memo"
         }
 
         return ToolResult(
             title = checklist.title,
-            body = blocks.joinToString("\n\n").trim()
+            body =
+                blocks
+                    .filter { it.isNotBlank() }
+                    .joinToString("\n\n")
+                    .trim()
         )
     }
 
-    private fun groupBlock(name: String, items: List<ChecklistItem>): String {
-        val progress = ChecklistRules.progress(items)
-        val lines = mutableListOf<String>()
-
-        lines += "[$name]"
-        lines += "완료 ${progress.completeItems} / 미완료 ${progress.incompleteItems} / 해당 없음 ${progress.notApplicableItems}"
-
-        val sections = listOf(
-            ChecklistStatus.COMPLETE to "완료",
-            ChecklistStatus.INCOMPLETE to "미완료",
-            ChecklistStatus.NOT_APPLICABLE to "해당 없음"
-        )
-
-        for ((status, label) in sections) {
-            val matching = items.filter { it.status == status }
-            if (matching.isEmpty()) continue
-
-            lines += ""
-            lines += "[$label]"
-            for (item in matching) {
-                val timeSuffix =
-                    if (item.notificationEnabled && item.scheduledTimeMinutes != null) {
-                        " — ${formatChecklistTime(item.scheduledTimeMinutes)}"
-                    } else {
-                        ""
-                    }
-
-                lines += item.name + timeSuffix
-
-                if (item.note.isNotBlank()) {
-                    lines += "  비고: ${item.note.trim()}"
-                }
+    private fun formatChecklistItem(
+        item: ChecklistItem
+    ): List<String> {
+        val statusText =
+            when (item.status) {
+                ChecklistStatus.INCOMPLETE -> "미완료"
+                ChecklistStatus.COMPLETE -> "완료"
+                ChecklistStatus.NOT_APPLICABLE -> "해당 없음"
             }
+
+        val timeSuffix =
+            item.scheduledTimeMinutes?.let {
+                " — ${formatChecklistTime(it)}"
+            } ?: ""
+
+        val base =
+            "- $statusText : ${item.name}$timeSuffix"
+
+        val note = item.note.trim()
+        if (note.isEmpty()) return listOf(base)
+
+        val hasLineBreak =
+            note.contains('\n') || note.contains('\r')
+
+        if (!hasLineBreak && note.length <= 30) {
+            return listOf("$base ($note)")
         }
 
-        return lines.joinToString("\n")
+        val noteLines =
+            note.replace("\r\n", "\n")
+                .replace('\r', '\n')
+                .split('\n')
+                .map { "  $it" }
+
+        return listOf(base) + noteLines
     }
 
-    private fun formatChecklistTime(minutes: Int): String {
-        val hour = minutes / 60
-        val minute = minutes % 60
-        return "%02d:%02d".format(hour, minute)
-    }
+    private fun formatChecklistTime(minutes: Int): String =
+        "%02d:%02d".format(minutes / 60, minutes % 60)
 }
 
 object TimePlanResultGenerator {
     fun generate(plan: TimePlan): ToolResult {
         val ordered = plan.points.sortedBy { it.order }
+        val lines = mutableListOf(plan.title.trim())
 
-        val lines = mutableListOf("[${plan.title}]")
-        for (point in ordered) {
-            val time = point.timeMinutes ?: continue
-            lines += "${TimePlanRules.formatShareClock(time)} ${point.name}"
+        ordered.forEach { point ->
+            val time = point.timeMinutes ?: return@forEach
+            lines +=
+                "${TimePlanRules.formatShareClock(time)} ${point.name}"
         }
 
-        if (plan.memo.isNotBlank()) {
+        val memo = plan.memo.trim()
+        if (memo.isNotEmpty()) {
             lines += ""
             lines += "[메모]"
-            lines += plan.memo.trim()
+            lines += memo
         }
 
         return ToolResult(
