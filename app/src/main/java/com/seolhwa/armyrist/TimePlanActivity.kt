@@ -243,10 +243,10 @@ private fun TimePlanApp(
                 },
                 onEditDuration = { leftPointId, duration, label ->
                     val candidate =
-                        TimePlanRules.editDuration(
-                            selected.points,
-                            leftPointId,
-                            duration
+                        editDurationAllowMissingEndpoint(
+                            points = selected.points,
+                            leftPointId = leftPointId,
+                            durationMinutes = duration
                         )
 
                     if (candidate != null) {
@@ -269,6 +269,38 @@ private fun TimePlanApp(
                 }
             )
         }
+    }
+}
+
+private fun editDurationAllowMissingEndpoint(
+    points: List<TimePoint>,
+    leftPointId: String,
+    durationMinutes: Int
+): List<TimePoint>? {
+    if (durationMinutes !in 0..1439) return null
+
+    val ordered = points.sortedBy { it.order }
+    val leftIndex = ordered.indexOfFirst { it.id == leftPointId }
+
+    if (leftIndex !in 0 until ordered.lastIndex) return null
+
+    val leftTime = ordered[leftIndex].timeMinutes ?: return null
+
+    val nextTime =
+        (leftTime + durationMinutes) % 1440
+
+    val candidate = ordered.mapIndexed { index, point ->
+        if (index == leftIndex + 1) {
+            point.copy(timeMinutes = nextTime)
+        } else {
+            point
+        }
+    }
+
+    return if (isValidPartialOrCompleteTimeline(candidate)) {
+        candidate
+    } else {
+        null
     }
 }
 
@@ -783,7 +815,7 @@ private fun TimePlanDetailScreen(
 
                         Surface(
                             onClick = {
-                                if (duration != null) {
+                                if (point.timeMinutes != null) {
                                     editingDurationIndex = index
                                 }
                             },
@@ -816,14 +848,18 @@ private fun TimePlanDetailScreen(
                                 Text(
                                     duration?.let {
                                         formatDuration(it)
-                                    } ?: "시각 입력 후 계산",
+                                    } ?: if (point.timeMinutes != null) {
+                                        "경과시간 입력"
+                                    } else {
+                                        "앞 지점 시각 입력 필요"
+                                    },
                                     fontWeight =
                                         FontWeight.SemiBold,
                                     modifier =
                                         Modifier.weight(1f)
                                 )
 
-                                if (duration != null) {
+                                if (point.timeMinutes != null) {
                                     Text(
                                         "편집",
                                         style =
@@ -950,16 +986,13 @@ private fun TimePlanDetailScreen(
     }
 
     editingDurationIndex?.let { index ->
-        val duration =
-            TimePlanRules.adjacentDuration(
-                ordered,
-                index
-            )
+        if (index in 0 until ordered.lastIndex) {
+            val duration =
+                TimePlanRules.adjacentDuration(
+                    ordered,
+                    index
+                )
 
-        if (
-            duration != null &&
-            index in 0 until ordered.lastIndex
-        ) {
             DurationEditDialog(
                 duration = duration,
                 initialLabel = intervalLabel(ordered[index].id),
@@ -1214,14 +1247,14 @@ private fun TimePointEditDialog(
 
 @Composable
 private fun DurationEditDialog(
-    duration: Int,
+    duration: Int?,
     initialLabel: String,
     onDismiss: () -> Unit,
     onConfirm: (Int, String) -> Boolean
 ) {
     var raw by remember(duration) {
         mutableStateOf(
-            formatDurationInput(duration)
+            duration?.let(::formatDurationInput) ?: ""
         )
     }
 
@@ -1277,7 +1310,7 @@ private fun DurationEditDialog(
                     },
                     supportingText = {
                         Text(
-                            "변경하면 다음 지점의 시각만 이동합니다."
+                            "다음 지점 시각이 비어 있어도 경과시간을 입력하면 자동 계산됩니다."
                         )
                     },
                     modifier = Modifier.fillMaxWidth()
