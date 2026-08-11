@@ -500,7 +500,7 @@ private fun CountingScreen(
                 },
                 navigationIcon = {
                     OutlinedButton(
-                        onClick = onBack,
+                        onClick = onHome,
                         shape = ArmyristPanelShape,
                         border = BorderStroke(
                             1.dp,
@@ -511,7 +511,7 @@ private fun CountingScreen(
                         ),
                         contentPadding = PaddingValues(horizontal = 10.dp)
                     ) {
-                        Text("목록")
+                        Text("홈")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -534,7 +534,7 @@ private fun CountingScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
-                    onClick = onHome,
+                    onClick = onBack,
                     modifier = Modifier.weight(1f),
                     shape = ArmyristPanelShape,
                     colors = ButtonDefaults.buttonColors(
@@ -542,7 +542,7 @@ private fun CountingScreen(
                         contentColor = ArmyristColors.OnDark
                     )
                 ) {
-                    Text("홈", fontWeight = FontWeight.Bold)
+                    Text("목록", fontWeight = FontWeight.Bold)
                 }
 
                 OutlinedButton(
@@ -974,7 +974,7 @@ private fun CountingScreen(
                                 )
                                 Text(
                                     "편집",
-                                    color = MaterialTheme.colorScheme.primary
+                                    color = ArmyristColors.PrimaryControl
                                 )
                             }
                             Spacer(Modifier.height(4.dp))
@@ -1464,6 +1464,7 @@ private fun CountingGroupManagerDialog(
                         ) { group ->
                             val color = parseColor(group.color)
                             Surface(
+                                onClick = { rename = group },
                                 color = color.copy(alpha = 0.12f),
                                 shape = ArmyristPanelShape,
                                 border = BorderStroke(
@@ -1551,7 +1552,7 @@ private fun CountingGroupManagerDialog(
         GroupEditDialog(
             title = "그룹 추가",
             initialName = "",
-            initialColor = "#6750A4",
+            initialColor = "#596B45",
             initialShowAggregate = true
         ) { name, color, showAggregate ->
             create = false
@@ -1709,7 +1710,7 @@ private fun GroupScreen(
         GroupEditDialog(
             title = "그룹 추가",
             initialName = "",
-            initialColor = "#6750A4",
+            initialColor = "#596B45",
             initialShowAggregate = true
         ) { name, color, showAggregate ->
             create = false
@@ -2007,7 +2008,7 @@ private fun CalculationDialog(
 }
 
 private val GROUP_COLORS = listOf(
-    "#6750A4",
+    "#596B45",
     "#006C4C",
     "#9C4238",
     "#0061A4",
@@ -2020,7 +2021,7 @@ private val GROUP_COLORS = listOf(
 private fun parseColor(hex: String): Color {
     return runCatching {
         Color(android.graphics.Color.parseColor(hex))
-    }.getOrDefault(Color(0xFF6750A4))
+    }.getOrDefault(Color(0xFF596B45))
 }
 
 @Composable

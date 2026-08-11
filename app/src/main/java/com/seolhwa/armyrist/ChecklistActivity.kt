@@ -261,6 +261,7 @@ private fun ChecklistApp(
             ChecklistDetailScreen(
                 checklist = selected,
                 onBack = { selectedId = null },
+                onHome = onHome,
                 onResult = { showingResult = true },
                 onRename = {
                     if (repo.renameChecklist(selected.id, it)) refresh()
@@ -532,6 +533,7 @@ private fun progressText(p: ChecklistProgress): String =
 private fun ChecklistDetailScreen(
     checklist: Checklist,
     onBack: () -> Unit,
+    onHome: () -> Unit,
     onResult: () -> Unit,
     onRename: (String) -> Unit,
     onAddItem: (String, String, String?, Boolean, Int?, String?) -> Unit,
@@ -596,23 +598,6 @@ private fun ChecklistDetailScreen(
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(checklist.title, fontWeight = FontWeight.Bold)
-                            OutlinedButton(
-                                onClick = { titleEdit = true },
-                                shape = ArmyristPanelShape,
-                                border = BorderStroke(
-                                    1.dp,
-                                    ArmyristColors.OnDark.copy(alpha = 0.65f)
-                                ),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = ArmyristColors.OnDark
-                                ),
-                                contentPadding = PaddingValues(
-                                    horizontal = 10.dp,
-                                    vertical = 4.dp
-                                )
-                            ) {
-                                Text("제목 수정")
-                            }
                         }
                         Text(
                             "항목 ${checklist.items.size} · 자동 저장",
@@ -622,25 +607,67 @@ private fun ChecklistDetailScreen(
                     }
                 },
                 navigationIcon = {
-                    TextButton(onClick = onBack) { Text("‹ 목록") }
-                },
-                actions = {
-                    Button(
-                        onClick = onResult,
+                    OutlinedButton(
+                        onClick = onHome,
                         shape = ArmyristPanelShape,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = ArmyristColors.PrimaryControl,
+                        border = BorderStroke(
+                            1.dp,
+                            ArmyristColors.OnDark.copy(alpha = 0.65f)
+                        ),
+                        colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = ArmyristColors.OnDark
                         ),
-                        contentPadding = PaddingValues(horizontal = 14.dp)
+                        contentPadding = PaddingValues(horizontal = 10.dp)
                     ) {
-                        Text("전달", fontWeight = FontWeight.Bold)
+                        Text("홈")
                     }
                 }
             )
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onBack,
+                    modifier = Modifier.weight(1f),
+                    shape = ArmyristPanelShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ArmyristColors.HeaderRaised,
+                        contentColor = ArmyristColors.OnDark
+                    )
+                ) {
+                    Text("목록", fontWeight = FontWeight.Bold)
+                }
+                OutlinedButton(
+                    onClick = { titleEdit = true },
+                    modifier = Modifier.weight(1f),
+                    shape = ArmyristPanelShape,
+                    border = BorderStroke(1.dp, ArmyristColors.PrimaryControl),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = ArmyristColors.WorkSurface,
+                        contentColor = ArmyristColors.PrimaryText
+                    )
+                ) {
+                    Text("제목 수정", fontWeight = FontWeight.Bold)
+                }
+                Button(
+                    onClick = onResult,
+                    modifier = Modifier.weight(1f),
+                    shape = ArmyristPanelShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ArmyristColors.PrimaryControl,
+                        contentColor = ArmyristColors.OnDark
+                    )
+                ) {
+                    Text("전달", fontWeight = FontWeight.Bold)
+                }
+            }
+
             ChecklistProgressSummary(checklist)
 
             if (!assignmentMode) {
@@ -648,8 +675,8 @@ private fun ChecklistDetailScreen(
                     Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    AssistChip(onClick = { groupManager = true }, label = { Text("그룹") })
-                    AssistChip(onClick = { groupPicker = true }, label = { Text("그룹 지정") })
+                    ArmyristUtilityButton(text = "그룹", onClick = { groupManager = true })
+                    ArmyristUtilityButton(text = "그룹 지정", onClick = { groupPicker = true })
                     AssistChip(
                         colors = AssistChipDefaults.assistChipColors(
                             containerColor = ArmyristColors.WorkSurface,
@@ -675,8 +702,8 @@ private fun ChecklistDetailScreen(
                         },
                         label = { Text("알람음 일괄") }
                     )
-                    AssistChip(onClick = { memoEdit = true }, label = { Text("메모") })
-                    AssistChip(onClick = { resetConfirm = true }, label = { Text("초기화") })
+                    ArmyristUtilityButton(text = "메모", onClick = { memoEdit = true })
+                    ArmyristUtilityButton(text = "초기화", onClick = { resetConfirm = true })
                 }
 
                 Row(
@@ -931,7 +958,7 @@ private fun ChecklistDetailScreen(
                         Column(Modifier.padding(14.dp)) {
                             Row(Modifier.fillMaxWidth()) {
                                 Text("메모", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                                Text("편집", color = MaterialTheme.colorScheme.primary)
+                                Text("편집", color = ArmyristColors.PrimaryControl)
                             }
                             Spacer(Modifier.height(4.dp))
                             Text(
@@ -1807,4 +1834,4 @@ private fun DeletedItemsDialog(
 private fun parseColor(hex: String): Color =
     runCatching {
         Color(android.graphics.Color.parseColor(hex))
-    }.getOrDefault(Color(0xFF6750A4))
+    }.getOrDefault(Color(0xFF596B45))

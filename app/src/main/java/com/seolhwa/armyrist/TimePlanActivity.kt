@@ -131,6 +131,7 @@ private fun TimePlanApp(
             TimePlanDetailScreen(
                 plan = selected,
                 onBack = { selectedId = null },
+                onHome = onHome,
                 onResult = { showingResult = true },
                 onRename = { title ->
                     if (repo.renameTimePlan(selected.id, title)) {
@@ -637,6 +638,7 @@ private fun timePlanSummary(
 private fun TimePlanDetailScreen(
     plan: TimePlan,
     onBack: () -> Unit,
+    onHome: () -> Unit,
     onResult: () -> Unit,
     onRename: (String) -> Unit,
     onSetMemo: (String) -> Unit,
@@ -698,26 +700,6 @@ private fun TimePlanDetailScreen(
                                 plan.title,
                                 fontWeight = FontWeight.Bold
                             )
-
-                            OutlinedButton(
-                                onClick = {
-                                    titleEdit = true
-                                },
-                                shape = ArmyristPanelShape,
-                                border = BorderStroke(
-                                    1.dp,
-                                    ArmyristColors.OnDark.copy(alpha = 0.65f)
-                                ),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = ArmyristColors.OnDark
-                                ),
-                                contentPadding = PaddingValues(
-                                    horizontal = 10.dp,
-                                    vertical = 4.dp
-                                )
-                            ) {
-                                Text("제목 수정")
-                            }
                         }
 
                         Text(
@@ -730,21 +712,19 @@ private fun TimePlanDetailScreen(
                     }
                 },
                 navigationIcon = {
-                    TextButton(onClick = onBack) {
-                        Text("‹ 목록")
-                    }
-                },
-                actions = {
-                    Button(
-                        onClick = onResult,
+                    OutlinedButton(
+                        onClick = onHome,
                         shape = ArmyristPanelShape,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = ArmyristColors.PrimaryControl,
+                        border = BorderStroke(
+                            1.dp,
+                            ArmyristColors.OnDark.copy(alpha = 0.65f)
+                        ),
+                        colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = ArmyristColors.OnDark
                         ),
-                        contentPadding = PaddingValues(horizontal = 14.dp)
+                        contentPadding = PaddingValues(horizontal = 10.dp)
                     ) {
-                        Text("전달", fontWeight = FontWeight.Bold)
+                        Text("홈")
                     }
                 }
             )
@@ -755,6 +735,48 @@ private fun TimePlanDetailScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onBack,
+                    modifier = Modifier.weight(1f),
+                    shape = ArmyristPanelShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ArmyristColors.HeaderRaised,
+                        contentColor = ArmyristColors.OnDark
+                    )
+                ) {
+                    Text("목록", fontWeight = FontWeight.Bold)
+                }
+                OutlinedButton(
+                    onClick = { titleEdit = true },
+                    modifier = Modifier.weight(1f),
+                    shape = ArmyristPanelShape,
+                    border = BorderStroke(1.dp, ArmyristColors.PrimaryControl),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = ArmyristColors.WorkSurface,
+                        contentColor = ArmyristColors.PrimaryText
+                    )
+                ) {
+                    Text("제목 수정", fontWeight = FontWeight.Bold)
+                }
+                Button(
+                    onClick = onResult,
+                    modifier = Modifier.weight(1f),
+                    shape = ArmyristPanelShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ArmyristColors.PrimaryControl,
+                        contentColor = ArmyristColors.OnDark
+                    )
+                ) {
+                    Text("전달", fontWeight = FontWeight.Bold)
+                }
+            }
+
             TimePlanStatusCard(plan)
 
             LazyColumn(
