@@ -740,6 +740,8 @@ private fun ChecklistDetailScreen(
                                     selectedIds =
                                         if (selected) selectedIds - item.id
                                         else selectedIds + item.id
+                                } else if (!dragging) {
+                                    editingItem = item
                                 }
                             }
                     ) {

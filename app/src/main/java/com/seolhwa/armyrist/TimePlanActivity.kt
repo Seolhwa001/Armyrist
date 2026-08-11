@@ -354,7 +354,7 @@ private fun generateTimePlanResultWithDurations(
     intervalLabel: (String) -> String
 ): ToolResult {
     val ordered = plan.points.sortedBy { it.order }
-    val lines = mutableListOf(plan.title.trim())
+    val lines = mutableListOf<String>()
 
     ordered.forEachIndexed { index, point ->
         val time = point.timeMinutes
