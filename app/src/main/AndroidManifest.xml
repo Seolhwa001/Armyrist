@@ -19,6 +19,7 @@
         <activity android:name=".UserProfileActivity" android:exported="false" />
         <activity android:name=".ReportTemplateActivity" android:exported="false" />
         <activity android:name=".DataManagementActivity" android:exported="false" />
+        <activity android:name=".PortableTransferActivity" android:exported="false" />
         <activity android:name=".HomeActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
