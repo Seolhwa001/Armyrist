@@ -41,7 +41,8 @@ data class ChecklistItem(
     val status: ChecklistStatus = ChecklistStatus.INCOMPLETE,
     val note: String = "",
     val notificationEnabled: Boolean = false,
-    val scheduledTimeMinutes: Int? = null
+    val scheduledTimeMinutes: Int? = null,
+    val notificationSoundUri: String? = null
 )
 
 data class TimePlan(
