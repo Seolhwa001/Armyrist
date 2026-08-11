@@ -1,0 +1,222 @@
+package com.seolhwa.armyrist
+
+import android.os.Bundle
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
+import com.seolhwa.armyrist.stage2.domain.ReportTemplate
+
+class ReportTemplateActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val repo = (application as ArmyristApplication).coreSuiteRepository
+        setContent {
+            MaterialTheme {
+                Surface(Modifier.fillMaxSize()) {
+                    ReportTemplateApp(repo) { finish() }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReportTemplateApp(repo: CoreSuiteRepository, onHome: () -> Unit) {
+    var revision by remember { mutableIntStateOf(0) }
+    var editingId by remember { mutableStateOf<String?>(null) }
+    var creating by remember { mutableStateOf(false) }
+    val templates = remember(revision) { repo.getReportTemplates() }
+    val editing = editingId?.let(repo::getReportTemplate)
+
+    BackHandler {
+        when {
+            editingId != null -> editingId = null
+            creating -> creating = false
+            else -> onHome()
+        }
+    }
+
+    if (editing != null || creating) {
+        TemplateEditor(
+            template = editing,
+            onBack = { editingId = null; creating = false },
+            onSave = { name, body ->
+                val ok = if (editing == null) {
+                    repo.createReportTemplate(name, body) != null
+                } else {
+                    repo.updateReportTemplate(editing.id, name, body)
+                }
+                if (ok) {
+                    revision++
+                    editingId = null
+                    creating = false
+                }
+                ok
+            }
+        )
+    } else {
+        TemplateList(
+            templates = templates,
+            onHome = onHome,
+            onCreate = { creating = true },
+            onOpen = { editingId = it },
+            onDefault = {
+                repo.setDefaultTemplate(it)
+                revision++
+            },
+            onUnsetDefault = {
+                repo.setDefaultTemplate(null)
+                revision++
+            },
+            onDelete = {
+                repo.deleteReportTemplate(it)
+                revision++
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TemplateList(
+    templates: List<ReportTemplate>,
+    onHome: () -> Unit,
+    onCreate: () -> Unit,
+    onOpen: (String) -> Unit,
+    onDefault: (String) -> Unit,
+    onUnsetDefault: () -> Unit,
+    onDelete: (String) -> Unit
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("보고 양식 설정") },
+                navigationIcon = { TextButton(onClick = onHome) { Text("‹ 홈") } }
+            )
+        },
+        floatingActionButton = { FloatingActionButton(onClick = onCreate) { Text("+") } }
+    ) { padding ->
+        if (templates.isEmpty()) {
+            Column(Modifier.padding(padding).padding(20.dp)) {
+                Text("등록된 보고 양식이 없습니다.", fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                Text("{사용자}, {제목}, {전달내용}, {날짜}, {시간} 변수를 사용할 수 있습니다.")
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.padding(padding).fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(templates, key = { it.id }) { template ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth().clickable { onOpen(template.id) }
+                    ) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(template.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                if (template.isDefault) AssistChip(onClick = {}, label = { Text("기본") })
+                            }
+                            Text(
+                                template.body.ifBlank { "내용 없음" },
+                                maxLines = 3,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                if (template.isDefault) {
+                                    TextButton(onClick = onUnsetDefault) { Text("기본 해제") }
+                                } else {
+                                    TextButton(onClick = { onDefault(template.id) }) { Text("기본 지정") }
+                                }
+                                TextButton(onClick = { onDelete(template.id) }) { Text("삭제") }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TemplateEditor(
+    template: ReportTemplate?,
+    onBack: () -> Unit,
+    onSave: (String, String) -> Boolean
+) {
+    val context = LocalContext.current
+    var name by remember(template?.id) { mutableStateOf(template?.name ?: "") }
+    var body by remember(template?.id) { mutableStateOf(template?.body ?: "") }
+    var error by remember { mutableStateOf("") }
+
+    Column(
+        Modifier.fillMaxSize().padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(onClick = onBack) { Text("‹ 목록") }
+            Text(if (template == null) "새 보고 양식" else "보고 양식 편집", style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.width(48.dp))
+        }
+
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it; error = "" },
+            label = { Text("양식 이름") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Text("지원 변수", fontWeight = FontWeight.SemiBold)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("{사용자}", "{제목}", "{전달내용}").forEach { token ->
+                AssistChip(onClick = { body += token }, label = { Text(token) })
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("{날짜}", "{시간}").forEach { token ->
+                AssistChip(onClick = { body += token }, label = { Text(token) })
+            }
+        }
+
+        OutlinedTextField(
+            value = body,
+            onValueChange = { body = it },
+            label = { Text("보고 양식") },
+            minLines = 8,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        if (error.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error)
+
+        Button(
+            onClick = {
+                if (name.trim().isEmpty()) {
+                    error = "양식 이름을 입력하세요."
+                } else if (onSave(name, body)) {
+                    Toast.makeText(context, "저장되었습니다.", Toast.LENGTH_SHORT).show()
+                } else {
+                    error = "저장할 수 없습니다."
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("저장") }
+
+        Text(
+            "예: 충성! {사용자}입니다.\\n\\n{전달내용}\\n\\n{날짜} {시간}",
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+}

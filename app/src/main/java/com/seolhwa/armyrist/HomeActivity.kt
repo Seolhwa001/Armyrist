@@ -23,7 +23,7 @@ class HomeActivity : ComponentActivity() {
                         onCounting = { startActivity(Intent(this, MainActivity::class.java)) },
                         onChecklist = { startActivity(Intent(this, ChecklistActivity::class.java)) },
                         onTimePlan = { startActivity(Intent(this, TimePlanActivity::class.java)) },
-                        onReportTemplate = { /* next patch */ },
+                        onReportTemplate = { startActivity(Intent(this, ReportTemplateActivity::class.java)) },
                         onUserProfile = { startActivity(Intent(this, UserProfileActivity::class.java)) }
                     )
                 }
