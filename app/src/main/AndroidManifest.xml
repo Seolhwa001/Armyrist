@@ -15,8 +15,6 @@
 
         <activity android:name=".MainActivity" android:exported="false" />
         <activity android:name=".ChecklistActivity" android:exported="false" />
-        <activity android:name=".NotificationSettingsActivity" android:exported="false" />
-
         <activity
             android:name=".HomeActivity"
             android:exported="true">
