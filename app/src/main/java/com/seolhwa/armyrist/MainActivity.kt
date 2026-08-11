@@ -113,36 +113,84 @@ private fun SheetListScreen(
     var delete by remember { mutableStateOf<CountingSheet?>(null) }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("실셈") }) },
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text("실셈", fontWeight = FontWeight.Bold)
+                        Text(
+                            "현장 수량 기록",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            )
+        },
         floatingActionButton = {
-            ExtendedFloatingActionButton(onClick = onCreate) {
-                Text("새 실셈")
+            if (sheets.isNotEmpty()) {
+                ExtendedFloatingActionButton(onClick = onCreate) {
+                    Text("+ 새 실셈")
+                }
             }
         }
     ) { padding ->
         if (sheets.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("저장된 실셈표가 없습니다.")
-                    Spacer(Modifier.height(12.dp))
-                    Button(onClick = onCreate) { Text("새 실셈 만들기") }
+            Box(
+                Modifier.fillMaxSize().padding(padding).padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(
+                        Modifier.padding(28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("아직 실셈표가 없습니다", style = MaterialTheme.typography.titleLarge)
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "새 실셈표를 만들어 바로 수량을 기록하세요.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(20.dp))
+                        Button(
+                            onClick = onCreate,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                        ) {
+                            Text("새 실셈 만들기")
+                        }
+                    }
                 }
             }
         } else {
             LazyColumn(
                 Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(12.dp),
+                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(sheets, key = { it.id }) { sheet ->
-                    Card(onClick = { onOpen(sheet.id) }, modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(16.dp)) {
-                            Text(sheet.title, fontWeight = FontWeight.Bold)
-                            Text("항목 ${sheet.items.size}개 · 그룹 ${sheet.groups.size}개")
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                TextButton(onClick = { rename = sheet }) { Text("이름 변경") }
-                                TextButton(onClick = { delete = sheet }) { Text("삭제") }
+                    Card(
+                        onClick = { onOpen(sheet.id) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    sheet.title,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(Modifier.height(3.dp))
+                                Text(
+                                    "항목 ${sheet.items.size} · 그룹 ${sheet.groups.size}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
+                            TextButton(onClick = { rename = sheet }) { Text("이름") }
+                            TextButton(onClick = { delete = sheet }) { Text("삭제") }
                         }
                     }
                 }
@@ -188,83 +236,155 @@ private fun CountingScreen(
     var deleteTarget by remember { mutableStateOf<CountingItem?>(null) }
     var titleEdit by remember { mutableStateOf(false) }
     var memoEdit by remember { mutableStateOf(false) }
+    var menuTarget by remember { mutableStateOf<CountingItem?>(null) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(sheet.title) },
-                navigationIcon = { TextButton(onClick = onBack) { Text("목록") } },
+                title = {
+                    Column {
+                        Text(sheet.title, fontWeight = FontWeight.Bold)
+                        Text(
+                            "항목 ${sheet.items.size} · 자동 저장",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                navigationIcon = { TextButton(onClick = onBack) { Text("‹ 목록") } },
                 actions = { TextButton(onClick = onResult) { Text("결과") } }
             )
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(onClick = { creating = true }) {
-                Text("항목 추가")
+                Text("+ 항목")
             }
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
+            AggregateSummary(sheet)
+
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                TextButton(onClick = { titleEdit = true }) { Text("제목") }
-                TextButton(onClick = onGroups) { Text("그룹") }
-                TextButton(onClick = onCalculations) { Text("계산") }
-                TextButton(onClick = { memoEdit = true }) { Text("메모") }
+                AssistChip(onClick = onGroups, label = { Text("그룹") })
+                AssistChip(onClick = onCalculations, label = { Text("계산") })
+                AssistChip(onClick = { memoEdit = true }, label = { Text("메모") })
+                AssistChip(onClick = { titleEdit = true }, label = { Text("제목") })
             }
 
-            AggregateSummary(sheet)
             HorizontalDivider()
 
             if (sheet.items.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("항목이 없습니다. 항목을 추가하세요.")
+                Box(
+                    Modifier.fillMaxSize().padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("항목이 없습니다", style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "아래 + 항목 버튼으로 첫 항목을 추가하세요.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 96.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     items(sheet.items.sortedBy { it.order }, key = { it.id }) { item ->
                         val group = sheet.groups.firstOrNull { it.id == item.groupId }?.name ?: "미지정"
-                        Card(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(12.dp)) {
-                                Row(
-                                    Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(Modifier.weight(1f)) {
-                                        Text(item.name, fontWeight = FontWeight.Bold)
-                                        Text("${item.unit} · $group")
-                                        if (item.note.isNotBlank()) Text("비고: ${item.note}")
-                                    }
-                                    FilledTonalButton(
-                                        onClick = { onDecrement(item.id) },
-                                        modifier = Modifier.sizeIn(minWidth = 56.dp, minHeight = 48.dp)
-                                    ) { Text("−") }
 
-                                    TextButton(
-                                        onClick = { quantityTarget = item },
-                                        modifier = Modifier.sizeIn(minWidth = 72.dp, minHeight = 48.dp)
-                                    ) {
-                                        Text(
-                                            item.quantity.toString(),
-                                            style = MaterialTheme.typography.headlineSmall
-                                        )
-                                    }
-
-                                    FilledTonalButton(
-                                        onClick = { onIncrement(item.id) },
-                                        modifier = Modifier.sizeIn(minWidth = 56.dp, minHeight = 48.dp)
-                                    ) { Text("+") }
+                        Card(
+                            onClick = { itemEditor = item },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        item.name,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        "${item.unit} · $group" + if (item.note.isNotBlank()) " · 비고 있음" else "",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
 
-                                Row {
-                                    TextButton(onClick = { onMove(item.id, -1) }) { Text("↑") }
-                                    TextButton(onClick = { onMove(item.id, 1) }) { Text("↓") }
-                                    TextButton(onClick = { itemEditor = item }) { Text("편집") }
-                                    TextButton(onClick = { deleteTarget = item }) { Text("삭제") }
+                                FilledTonalButton(
+                                    onClick = { onDecrement(item.id) },
+                                    modifier = Modifier.sizeIn(minWidth = 52.dp, minHeight = 52.dp),
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Text("−", style = MaterialTheme.typography.titleLarge)
+                                }
+
+                                TextButton(
+                                    onClick = { quantityTarget = item },
+                                    modifier = Modifier.widthIn(min = 68.dp).heightIn(min = 52.dp)
+                                ) {
+                                    Text(
+                                        item.quantity.toString(),
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                FilledTonalButton(
+                                    onClick = { onIncrement(item.id) },
+                                    modifier = Modifier.sizeIn(minWidth = 52.dp, minHeight = 52.dp),
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Text("+", style = MaterialTheme.typography.titleLarge)
+                                }
+
+                                Box {
+                                    TextButton(
+                                        onClick = { menuTarget = item },
+                                        modifier = Modifier.widthIn(min = 44.dp)
+                                    ) { Text("⋮") }
+
+                                    DropdownMenu(
+                                        expanded = menuTarget?.id == item.id,
+                                        onDismissRequest = { menuTarget = null }
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text("편집") },
+                                            onClick = {
+                                                menuTarget = null
+                                                itemEditor = item
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("위로 이동") },
+                                            onClick = {
+                                                menuTarget = null
+                                                onMove(item.id, -1)
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("아래로 이동") },
+                                            onClick = {
+                                                menuTarget = null
+                                                onMove(item.id, 1)
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("삭제") },
+                                            onClick = {
+                                                menuTarget = null
+                                                deleteTarget = item
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -325,7 +445,8 @@ private fun CountingScreen(
 private fun AggregateSummary(sheet: CountingSheet) {
     val sections = mutableListOf<Pair<String, Map<String, Int>>>()
     sheet.groups.sortedBy { it.order }.forEach { g ->
-        sections += g.name to DomainRules.aggregate(sheet.items.filter { it.groupId == g.id })
+        val totals = DomainRules.aggregate(sheet.items.filter { it.groupId == g.id })
+        if (totals.isNotEmpty()) sections += g.name to totals
     }
     val ungrouped = sheet.items.filter { it.groupId == null }
     if (ungrouped.isNotEmpty()) {
@@ -333,14 +454,41 @@ private fun AggregateSummary(sheet: CountingSheet) {
     }
 
     if (sections.isNotEmpty()) {
-        LazyColumn(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(max = 150.dp)
-                .padding(horizontal = 12.dp)
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)
         ) {
-            items(sections) { (name, totals) ->
-                Text("$name  " + totals.entries.joinToString(" / ") { "${it.key} ${it.value}" })
+            Text(
+                "현재 합계",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+            )
+            LazyColumn(
+                Modifier.fillMaxWidth().heightIn(max = 112.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                items(sections) { (name, totals) ->
+                    Surface(
+                        tonalElevation = 1.dp,
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                name,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.widthIn(min = 76.dp)
+                            )
+                            Text(
+                                totals.entries.joinToString("   ") { "${it.key} ${it.value}" },
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
             }
         }
     }
