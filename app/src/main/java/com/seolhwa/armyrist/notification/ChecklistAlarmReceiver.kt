@@ -9,10 +9,7 @@ import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
 import com.seolhwa.armyrist.stage2.domain.ChecklistStatus
 
 class ChecklistAlarmReceiver : BroadcastReceiver() {
-    override fun onReceive(
-        context: Context,
-        intent: Intent
-    ) {
+    override fun onReceive(context: Context, intent: Intent) {
         val checklistId =
             intent.getStringExtra(
                 ChecklistNotificationManager.EXTRA_CHECKLIST_ID
@@ -30,11 +27,9 @@ class ChecklistAlarmReceiver : BroadcastReceiver() {
             repository.getChecklist(checklistId) ?: return
 
         val item =
-            checklist.items.firstOrNull {
-                it.id == itemId
-            } ?: return
+            checklist.items.firstOrNull { it.id == itemId } ?: return
 
-        // Stale alarms are safe no-ops.
+        // A delivered but stale alarm must never recreate or mutate deleted/completed data.
         if (
             item.status != ChecklistStatus.INCOMPLETE ||
             !item.notificationEnabled
@@ -42,12 +37,12 @@ class ChecklistAlarmReceiver : BroadcastReceiver() {
             return
         }
 
-        if (!ChecklistNotificationManager.notificationsEnabled(context)) {
+        if (!ChecklistNotificationManager.notificationsEnabled(context, item)) {
             return
         }
 
         val channelId =
-            ChecklistNotificationManager.createChannel(context)
+            ChecklistNotificationManager.createChannel(context, item)
 
         val notification =
             NotificationCompat.Builder(context, channelId)
@@ -71,8 +66,7 @@ class ChecklistAlarmReceiver : BroadcastReceiver() {
                 )
                 .build()
 
-        context
-            .getSystemService(NotificationManager::class.java)
+        context.getSystemService(NotificationManager::class.java)
             .notify(
                 item.id.hashCode() and 0x7fffffff,
                 notification

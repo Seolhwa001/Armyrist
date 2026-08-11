@@ -9,6 +9,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
+import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import com.seolhwa.armyrist.ChecklistActivity
 import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
@@ -18,48 +20,63 @@ import com.seolhwa.armyrist.stage2.domain.ChecklistStatus
 import java.util.Calendar
 
 object ChecklistNotificationManager {
-    private const val CHANNEL_PREFIX = "checklist_scheduled_v3_"
+    private const val CHANNEL_PREFIX = "checklist_item_sound_v4_"
 
     const val EXTRA_CHECKLIST_ID = "checklistId"
     const val EXTRA_ITEM_ID = "itemId"
 
-    fun currentChannelId(context: Context): String {
-        val sound = ChecklistNotificationSettings.soundUri(context).toString()
-        val vibration = ChecklistNotificationSettings.vibrationEnabled(context)
-        return CHANNEL_PREFIX + (sound + "|" + vibration).hashCode().toUInt().toString(16)
+    fun soundUri(context: Context, item: ChecklistItem): Uri =
+        item.notificationSoundUri
+            ?.takeIf { it.isNotBlank() }
+            ?.let(Uri::parse)
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+
+    fun soundTitle(context: Context, soundUri: String?): String {
+        val uri = soundUri
+            ?.takeIf { it.isNotBlank() }
+            ?.let(Uri::parse)
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+
+        return runCatching {
+            RingtoneManager.getRingtone(context, uri)?.getTitle(context)
+        }.getOrNull() ?: "기본 알람음"
     }
 
-    fun createChannel(context: Context): String {
-        val channelId = currentChannelId(context)
+    fun channelId(context: Context, item: ChecklistItem): String {
+        val key = soundUri(context, item).toString()
+        return CHANNEL_PREFIX + key.hashCode().toUInt().toString(16)
+    }
+
+    fun createChannel(context: Context, item: ChecklistItem): String {
+        val id = channelId(context, item)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = context.getSystemService(NotificationManager::class.java)
-            if (manager.getNotificationChannel(channelId) == null) {
-                val soundUri = ChecklistNotificationSettings.soundUri(context)
-                val vibration = ChecklistNotificationSettings.vibrationEnabled(context)
+            if (manager.getNotificationChannel(id) == null) {
                 val audioAttributes = AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_ALARM)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .build()
 
-                val channel = NotificationChannel(
-                    channelId,
-                    "체크리스트 지정시각 알림",
-                    NotificationManager.IMPORTANCE_HIGH
-                ).apply {
-                    description = "체크리스트 항목의 지정 시각 알림"
-                    setSound(soundUri, audioAttributes)
-                    enableVibration(vibration)
-                    if (vibration) {
+                manager.createNotificationChannel(
+                    NotificationChannel(
+                        id,
+                        "체크리스트 알람",
+                        NotificationManager.IMPORTANCE_HIGH
+                    ).apply {
+                        description = "체크리스트 항목의 지정 시각 알람"
+                        setSound(soundUri(context, item), audioAttributes)
+                        enableVibration(true)
                         vibrationPattern = longArrayOf(0, 300, 180, 300)
+                        lockscreenVisibility =
+                            android.app.Notification.VISIBILITY_PUBLIC
                     }
-                    lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
-                }
-                manager.createNotificationChannel(channel)
+                )
             }
         }
 
-        return channelId
+        return id
     }
 
     fun notificationPermissionGranted(context: Context): Boolean {
@@ -68,7 +85,7 @@ object ChecklistNotificationManager {
             PackageManager.PERMISSION_GRANTED
     }
 
-    fun notificationsEnabled(context: Context): Boolean {
+    fun notificationsEnabled(context: Context, item: ChecklistItem): Boolean {
         if (!notificationPermissionGranted(context)) return false
 
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -79,9 +96,8 @@ object ChecklistNotificationManager {
             return false
         }
 
-        val channelId = createChannel(context)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = manager.getNotificationChannel(channelId)
+            val channel = manager.getNotificationChannel(createChannel(context, item))
             if (channel?.importance == NotificationManager.IMPORTANCE_NONE) {
                 return false
             }
@@ -92,8 +108,8 @@ object ChecklistNotificationManager {
 
     fun exactAlarmAvailable(context: Context): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
-        val alarmManager = context.getSystemService(AlarmManager::class.java)
-        return alarmManager.canScheduleExactAlarms()
+        return context.getSystemService(AlarmManager::class.java)
+            .canScheduleExactAlarms()
     }
 
     fun scheduledEpochMillis(
@@ -105,7 +121,6 @@ object ChecklistNotificationManager {
         val now = Calendar.getInstance().apply {
             timeInMillis = nowMillis
         }
-
         val target = Calendar.getInstance().apply {
             timeInMillis = nowMillis
             set(Calendar.HOUR_OF_DAY, minutes / 60)
@@ -114,9 +129,7 @@ object ChecklistNotificationManager {
             set(Calendar.MILLISECOND, 0)
         }
 
-        return target.timeInMillis.takeIf {
-            it > now.timeInMillis
-        }
+        return target.timeInMillis.takeIf { it > now.timeInMillis }
     }
 
     fun isEligible(
@@ -128,19 +141,11 @@ object ChecklistNotificationManager {
             item.notificationEnabled &&
             item.scheduledTimeMinutes != null &&
             scheduledEpochMillis(item.scheduledTimeMinutes, nowMillis) != null &&
-            notificationsEnabled(context)
+            notificationsEnabled(context, item)
 
-    fun reconcile(
-        context: Context,
-        repository: CoreSuiteRepository
-    ) {
-        createChannel(context)
-
+    fun reconcile(context: Context, repository: CoreSuiteRepository) {
         repository.getChecklists().forEach { checklist ->
-            checklist.deletedItems.forEach {
-                cancel(context, it.id)
-            }
-
+            checklist.deletedItems.forEach { cancel(context, it.id) }
             checklist.items.forEach { item ->
                 if (isEligible(context, item)) {
                     schedule(context, checklist, item)
@@ -151,16 +156,8 @@ object ChecklistNotificationManager {
         }
     }
 
-    fun reconcileChecklist(
-        context: Context,
-        checklist: Checklist
-    ) {
-        createChannel(context)
-
-        checklist.deletedItems.forEach {
-            cancel(context, it.id)
-        }
-
+    fun reconcileChecklist(context: Context, checklist: Checklist) {
+        checklist.deletedItems.forEach { cancel(context, it.id) }
         checklist.items.forEach { item ->
             if (isEligible(context, item)) {
                 schedule(context, checklist, item)
@@ -175,36 +172,39 @@ object ChecklistNotificationManager {
         checklist: Checklist,
         item: ChecklistItem
     ): Boolean {
-        val time = item.scheduledTimeMinutes ?: return false
-        val triggerAt = scheduledEpochMillis(time) ?: run {
+        val configured = item.scheduledTimeMinutes ?: return false
+        val triggerAt = scheduledEpochMillis(configured) ?: run {
             cancel(context, item.id)
             return false
         }
 
         if (
-            !notificationsEnabled(context) ||
             item.status != ChecklistStatus.INCOMPLETE ||
-            !item.notificationEnabled
+            !item.notificationEnabled ||
+            !notificationsEnabled(context, item)
         ) {
             cancel(context, item.id)
             return false
         }
 
         val alarmManager = context.getSystemService(AlarmManager::class.java)
-        val pending = alarmPendingIntent(
-            context,
-            checklist.id,
-            item.id
-        )
 
+        // IMPORTANT:
+        // Previous implementation built the PendingIntent first and then cancel()
+        // cancelled that exact PendingIntent object before it was scheduled.
+        // Always cancel the old alarm FIRST, then create a fresh PendingIntent.
         cancel(context, item.id)
+
+        val pending = alarmPendingIntent(
+            context = context,
+            checklistId = checklist.id,
+            itemId = item.id
+        )
 
         if (
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             !alarmManager.canScheduleExactAlarms()
         ) {
-            // Do not crash when exact-alarm access is absent.
-            // A fallback alarm remains scheduled, but Android may deliver it late.
             alarmManager.setAndAllowWhileIdle(
                 AlarmManager.RTC_WAKEUP,
                 triggerAt,
@@ -229,15 +229,12 @@ object ChecklistNotificationManager {
 
     fun cancel(context: Context, itemId: String) {
         val alarmManager = context.getSystemService(AlarmManager::class.java)
-        val intent = Intent(
-            context,
-            ChecklistAlarmReceiver::class.java
-        ).setAction("com.seolhwa.armyrist.CHECKLIST_ALARM")
 
         val pending = PendingIntent.getBroadcast(
             context,
             requestCode(itemId),
-            intent,
+            Intent(context, ChecklistAlarmReceiver::class.java)
+                .setAction("com.seolhwa.armyrist.CHECKLIST_ALARM"),
             PendingIntent.FLAG_NO_CREATE or immutableFlag()
         )
 
@@ -250,10 +247,7 @@ object ChecklistNotificationManager {
             .cancel(requestCode(itemId))
     }
 
-    fun cancelChecklist(
-        context: Context,
-        checklist: Checklist
-    ) {
+    fun cancelChecklist(context: Context, checklist: Checklist) {
         (checklist.items + checklist.deletedItems).forEach {
             cancel(context, it.id)
         }
@@ -264,10 +258,7 @@ object ChecklistNotificationManager {
         checklistId: String,
         itemId: String
     ): PendingIntent {
-        val intent = Intent(
-            context,
-            ChecklistActivity::class.java
-        ).apply {
+        val intent = Intent(context, ChecklistActivity::class.java).apply {
             putExtra(EXTRA_CHECKLIST_ID, checklistId)
             putExtra(EXTRA_ITEM_ID, itemId)
             flags =
@@ -288,10 +279,7 @@ object ChecklistNotificationManager {
         checklistId: String,
         itemId: String
     ): PendingIntent {
-        val intent = Intent(
-            context,
-            ChecklistAlarmReceiver::class.java
-        ).apply {
+        val intent = Intent(context, ChecklistAlarmReceiver::class.java).apply {
             action = "com.seolhwa.armyrist.CHECKLIST_ALARM"
             putExtra(EXTRA_CHECKLIST_ID, checklistId)
             putExtra(EXTRA_ITEM_ID, itemId)
