@@ -5,11 +5,14 @@
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:label="실셈"
+        android:label="군 특화 도구"
         android:supportsRtl="true"
         android:theme="@style/Theme.Armyrist">
+
+        <activity android:name=".MainActivity" android:exported="false" />
+        <activity android:name=".ChecklistActivity" android:exported="false" />
         <activity
-            android:name=".MainActivity"
+            android:name=".HomeActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
