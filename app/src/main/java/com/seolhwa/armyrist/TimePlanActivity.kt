@@ -111,7 +111,8 @@ private fun TimePlanApp(
         showingResult -> {
             BackHandler { showingResult = false }
 
-            TimePlanResultScreen(
+            CommonShareScreen(
+                repo = repo,
                 result = generateTimePlanResultWithDurations(
                     plan = selected,
                     intervalLabel = { leftPointId ->
