@@ -304,6 +304,33 @@ private fun editDurationAllowMissingEndpoint(
     }
 }
 
+
+/**
+ * 구간 단위 경과시간 계산.
+ *
+ * 전체 TimePlan에 미입력 지점이 있어도 현재 구간의 양 끝 시각이
+ * 입력되어 있으면 해당 구간의 경과시간은 계속 표시한다.
+ */
+private fun displayedDuration(
+    points: List<TimePoint>,
+    leftIndex: Int
+): Int? {
+    val ordered = points.sortedBy { it.order }
+
+    if (leftIndex !in 0 until ordered.lastIndex) {
+        return null
+    }
+
+    val left = ordered[leftIndex].timeMinutes ?: return null
+    val right = ordered[leftIndex + 1].timeMinutes ?: return null
+
+    return if (right >= left) {
+        right - left
+    } else {
+        1440 - left + right
+    }
+}
+
 private fun isValidPartialOrCompleteTimeline(
     points: List<TimePoint>
 ): Boolean {
@@ -808,7 +835,7 @@ private fun TimePlanDetailScreen(
 
                     if (index < ordered.lastIndex) {
                         val duration =
-                            TimePlanRules.adjacentDuration(
+                            displayedDuration(
                                 ordered,
                                 index
                             )
@@ -988,7 +1015,7 @@ private fun TimePlanDetailScreen(
     editingDurationIndex?.let { index ->
         if (index in 0 until ordered.lastIndex) {
             val duration =
-                TimePlanRules.adjacentDuration(
+                displayedDuration(
                     ordered,
                     index
                 )
