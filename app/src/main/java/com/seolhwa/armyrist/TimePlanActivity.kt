@@ -354,42 +354,53 @@ private fun generateTimePlanResultWithDurations(
     intervalLabel: (String) -> String
 ): ToolResult {
     val ordered = plan.points.sortedBy { it.order }
-    val derived = TimePlanRules.derive(ordered)
-
-    // Partial plans keep the existing generator behavior.
-    if (derived == null) {
-        return TimePlanResultGenerator.generate(plan)
-    }
-
-    val lines = mutableListOf<String>()
-    lines += "[${plan.title}]"
-    lines += ""
+    val lines = mutableListOf(plan.title.trim())
 
     ordered.forEachIndexed { index, point ->
         val time = point.timeMinutes
+
         if (time != null) {
-            lines += "${TimePlanRules.formatClock(time)} ${point.name}"
+            lines +=
+                "${TimePlanRules.formatShareClock(time)} ${point.name}"
         }
 
-        if (index < ordered.lastIndex) {
-            val leftAbsolute = derived[index].absoluteMinute
-            val rightAbsolute = derived[index + 1].absoluteMinute
-            val duration = rightAbsolute - leftAbsolute
-            val label = intervalLabel(point.id).trim().ifEmpty { "경과" }
-
-            lines += "  ${label} ${formatDuration(duration)}"
+        if (index >= ordered.lastIndex) {
+            return@forEachIndexed
         }
+
+        val nextTime = ordered[index + 1].timeMinutes
+        if (time == null || nextTime == null) {
+            return@forEachIndexed
+        }
+
+        val duration =
+            if (nextTime >= time) {
+                nextTime - time
+            } else {
+                1440 - time + nextTime
+            }
+
+        val label = intervalLabel(point.id).trim()
+        val durationText = formatDuration(duration)
+
+        lines +=
+            if (label.isEmpty()) {
+                "- $durationText"
+            } else {
+                "- $durationText $label"
+            }
     }
 
-    if (plan.memo.isNotBlank()) {
+    val memo = plan.memo.trim()
+    if (memo.isNotEmpty()) {
         lines += ""
         lines += "[메모]"
-        lines += plan.memo
+        lines += memo
     }
 
     return ToolResult(
         title = plan.title,
-        body = lines.joinToString("\n")
+        body = lines.joinToString("\n").trim()
     )
 }
 

@@ -146,11 +146,30 @@ private fun ArmyristApp(
                     Screen.GROUPS -> GroupScreen(
                         sheet = sheet,
                         onBack = { screen = Screen.COUNTING },
-                        onAdd = { name, color ->
-                            if (repo.addGroup(sheet.id, name, color)) refresh()
+                        onAdd = { name, color, showAggregate ->
+                            if (
+                                repo.addGroup(
+                                    sheet.id,
+                                    name,
+                                    color,
+                                    showAggregate
+                                )
+                            ) refresh()
                         },
-                        onRename = { groupId, name, color ->
-                            if (repo.renameGroup(sheet.id, groupId, name, color)) refresh()
+                        onRename = {
+                            groupId,
+                            name,
+                            color,
+                            showAggregate ->
+                            if (
+                                repo.renameGroup(
+                                    sheet.id,
+                                    groupId,
+                                    name,
+                                    color,
+                                    showAggregate
+                                )
+                            ) refresh()
                         },
                         onDelete = {
                             repo.deleteGroup(sheet.id, it)
@@ -808,6 +827,8 @@ private fun AggregateSummary(sheet: CountingSheet) {
     val sections = mutableListOf<Pair<String, Map<String, Int>>>()
 
     sheet.groups.sortedBy { it.order }.forEach { group ->
+        if (!group.showAggregate) return@forEach
+
         val totals = DomainRules.aggregate(
             sheet.items.filter { it.groupId == group.id }
         )
@@ -1125,8 +1146,8 @@ private fun QuantityDialog(
 private fun GroupScreen(
     sheet: CountingSheet,
     onBack: () -> Unit,
-    onAdd: (String, String) -> Unit,
-    onRename: (String, String, String) -> Unit,
+    onAdd: (String, String, Boolean) -> Unit,
+    onRename: (String, String, String, Boolean) -> Unit,
     onDelete: (String) -> Unit
 ) {
     var create by remember { mutableStateOf(false) }
@@ -1186,11 +1207,23 @@ private fun GroupScreen(
                                     .background(parseColor(group.color), CircleShape)
                             )
                             Spacer(Modifier.width(10.dp))
-                            Text(
-                                group.name,
-                                Modifier.weight(1f),
-                                fontWeight = FontWeight.Bold
-                            )
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    group.name,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    if (group.showAggregate) {
+                                        "합계 표시"
+                                    } else {
+                                        "합계 숨김"
+                                    },
+                                    style =
+                                        MaterialTheme.typography.bodySmall,
+                                    color =
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                             TextButton(onClick = { rename = group }) {
                                 Text("편집")
                             }
@@ -1208,10 +1241,13 @@ private fun GroupScreen(
         GroupEditDialog(
             title = "그룹 추가",
             initialName = "",
-            initialColor = "#6750A4"
-        ) { name, color ->
+            initialColor = "#6750A4",
+            initialShowAggregate = true
+        ) { name, color, showAggregate ->
             create = false
-            if (name != null) onAdd(name, color)
+            if (name != null) {
+                onAdd(name, color, showAggregate)
+            }
         }
     }
 
@@ -1219,10 +1255,18 @@ private fun GroupScreen(
         GroupEditDialog(
             title = "그룹 편집",
             initialName = group.name,
-            initialColor = group.color
-        ) { name, color ->
+            initialColor = group.color,
+            initialShowAggregate = group.showAggregate
+        ) { name, color, showAggregate ->
             rename = null
-            if (name != null) onRename(group.id, name, color)
+            if (name != null) {
+                onRename(
+                    group.id,
+                    name,
+                    color,
+                    showAggregate
+                )
+            }
         }
     }
 
@@ -1516,14 +1560,20 @@ private fun GroupEditDialog(
     title: String,
     initialName: String,
     initialColor: String,
-    done: (String?, String) -> Unit
+    initialShowAggregate: Boolean,
+    done: (String?, String, Boolean) -> Unit
 ) {
     var name by remember { mutableStateOf(initialName) }
     var color by remember { mutableStateOf(initialColor) }
+    var showAggregate by remember {
+        mutableStateOf(initialShowAggregate)
+    }
     var error by remember { mutableStateOf("") }
 
     AlertDialog(
-        onDismissRequest = { done(null, color) },
+        onDismissRequest = {
+            done(null, color, showAggregate)
+        },
         title = { Text(title) },
         text = {
             Column {
@@ -1561,6 +1611,32 @@ private fun GroupEditDialog(
                     }
                 }
 
+                Spacer(Modifier.height(14.dp))
+
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "합계 표시",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            "그룹 일반 합계를 화면/결과에 표시합니다.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color =
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = showAggregate,
+                        onCheckedChange = {
+                            showAggregate = it
+                        }
+                    )
+                }
+
                 if (error.isNotBlank()) {
                     Text(error, color = MaterialTheme.colorScheme.error)
                 }
@@ -1572,7 +1648,11 @@ private fun GroupEditDialog(
                     if (name.trim().isEmpty()) {
                         error = "그룹명을 입력하세요."
                     } else {
-                        done(name.trim(), color)
+                        done(
+                            name.trim(),
+                            color,
+                            showAggregate
+                        )
                     }
                 }
             ) {
@@ -1580,7 +1660,11 @@ private fun GroupEditDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = { done(null, color) }) {
+            TextButton(
+                onClick = {
+                    done(null, color, showAggregate)
+                }
+            ) {
                 Text("취소")
             }
         }

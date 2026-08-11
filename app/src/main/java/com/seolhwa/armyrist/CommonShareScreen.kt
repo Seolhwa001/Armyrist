@@ -57,14 +57,36 @@ fun CommonShareScreen(
     val templates = remember { repo.getReportTemplates() }
     val default = templates.firstOrNull { it.isDefault }
     var selectedId by remember { mutableStateOf(default?.id ?: NONE_TEMPLATE) }
-    val selected = templates.firstOrNull { it.id == selectedId }
-    val finalText = remember(selectedId, result, templates) {
-        applyReportTemplate(
-            template = selected,
-            result = result,
-            userName = repo.getUserProfile().displayName
-        )
-    }
+    val selected =
+        templates.firstOrNull { it.id == selectedId }
+
+    // One report snapshot per explicit selection/result state.
+    // Preview, clipboard and Android Share all use this exact text.
+    val capturedAt =
+        remember(selectedId, result) {
+            Date()
+        }
+
+    val capturedUserName =
+        remember(selectedId, result) {
+            repo.getUserProfile().displayName
+        }
+
+    val finalText =
+        remember(
+            selectedId,
+            result,
+            templates,
+            capturedAt,
+            capturedUserName
+        ) {
+            applyReportTemplate(
+                template = selected,
+                result = result,
+                userName = capturedUserName,
+                now = capturedAt
+            )
+        }
 
     Scaffold(
         topBar = {
