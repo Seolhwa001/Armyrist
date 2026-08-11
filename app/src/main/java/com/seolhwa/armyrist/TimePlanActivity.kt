@@ -112,7 +112,15 @@ private fun TimePlanApp(
             BackHandler { showingResult = false }
 
             TimePlanResultScreen(
-                result = TimePlanResultGenerator.generate(selected),
+                result = generateTimePlanResultWithDurations(
+                    plan = selected,
+                    intervalLabel = { leftPointId ->
+                        intervalPrefs.getString(
+                            "${selected.id}:$leftPointId",
+                            "경과"
+                        ) ?: "경과"
+                    }
+                ),
                 onBack = { showingResult = false }
             )
         }
@@ -278,6 +286,51 @@ private fun isValidPartialOrCompleteTimeline(
             it.timeMinutes == null || it.timeMinutes in 0..1439
         }
     }
+}
+
+
+private fun generateTimePlanResultWithDurations(
+    plan: TimePlan,
+    intervalLabel: (String) -> String
+): ToolResult {
+    val ordered = plan.points.sortedBy { it.order }
+    val derived = TimePlanRules.derive(ordered)
+
+    // Partial plans keep the existing generator behavior.
+    if (derived == null) {
+        return TimePlanResultGenerator.generate(plan)
+    }
+
+    val lines = mutableListOf<String>()
+    lines += "[${plan.title}]"
+    lines += ""
+
+    ordered.forEachIndexed { index, point ->
+        val time = point.timeMinutes
+        if (time != null) {
+            lines += "${TimePlanRules.formatClock(time)} ${point.name}"
+        }
+
+        if (index < ordered.lastIndex) {
+            val leftAbsolute = derived.absoluteMinutes[index]
+            val rightAbsolute = derived.absoluteMinutes[index + 1]
+            val duration = rightAbsolute - leftAbsolute
+            val label = intervalLabel(point.id).trim().ifEmpty { "경과" }
+
+            lines += "  ${label} ${TimePlanRules.formatDuration(duration)}"
+        }
+    }
+
+    if (plan.memo.isNotBlank()) {
+        lines += ""
+        lines += "[메모]"
+        lines += plan.memo
+    }
+
+    return ToolResult(
+        title = plan.title,
+        body = lines.joinToString("\\n")
+    )
 }
 
 @Composable
