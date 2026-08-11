@@ -4,8 +4,6 @@ object ChecklistResultGenerator {
     fun generate(checklist: Checklist): ToolResult {
         val blocks = mutableListOf<String>()
 
-        blocks += checklist.title.trim()
-
         val ungrouped =
             checklist.items
                 .filter { it.groupId == null }
@@ -98,7 +96,7 @@ object ChecklistResultGenerator {
 object TimePlanResultGenerator {
     fun generate(plan: TimePlan): ToolResult {
         val ordered = plan.points.sortedBy { it.order }
-        val lines = mutableListOf(plan.title.trim())
+        val lines = mutableListOf<String>()
 
         ordered.forEach { point ->
             val time = point.timeMinutes ?: return@forEach
