@@ -126,7 +126,8 @@ class PortableTransferActivity : ComponentActivity() {
                                 )
                             }
                             Spacer(Modifier.height(14.dp))
-                            Button(
+                            ArmyristActionButton(
+                                text = "파일 생성",
                                 onClick = {
                                     if (encrypt && (password.isBlank() || password != confirm)) {
                                         Toast.makeText(

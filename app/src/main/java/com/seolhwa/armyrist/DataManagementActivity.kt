@@ -274,21 +274,15 @@ private fun DataManagementScreen(
                 }
 
                 Spacer(Modifier.height(12.dp))
-                Button(
+                ArmyristActionButton(
+                    text = "백업 생성",
                     onClick = {
-                        if (encrypt) {
-                            passwordDialog = true
-                        } else {
-                            onCreateBackup(false, "")
-                        }
+                        if (encrypt) passwordDialog = true
+                        else onCreateBackup(false, "")
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 54.dp),
-                    shape = ArmyristPanelShape
-                ) {
-                    Text("백업 생성")
-                }
+                    modifier = Modifier.fillMaxWidth(),
+                    primary = true
+                )
             }
 
             ArmyristPanel(
@@ -310,7 +304,8 @@ private fun DataManagementScreen(
                     color = ArmyristColors.SecondaryText
                 )
                 Spacer(Modifier.height(12.dp))
-                OutlinedButton(
+                ArmyristActionButton(
+                    text = "백업 파일 선택",
                     onClick = {
                         onChooseRestoreFile { bytes ->
                             restoreBytes = bytes
@@ -358,13 +353,8 @@ private fun DataManagementScreen(
                             }
                         }
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 54.dp),
-                    shape = ArmyristPanelShape
-                ) {
-                    Text("백업 파일 선택")
-                }
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             ArmyristPanel(
@@ -378,7 +368,8 @@ private fun DataManagementScreen(
                 Spacer(Modifier.height(8.dp))
                 Text("실셈·체크리스트·시간계획·보고 양식 .armyrist 파일을 새 문서로 추가합니다.")
                 Spacer(Modifier.height(12.dp))
-                OutlinedButton(
+                ArmyristActionButton(
+                    text = "Armyrist 데이터 파일 선택",
                     onClick = {
                         context.startActivity(
                             android.content.Intent(
@@ -392,11 +383,8 @@ private fun DataManagementScreen(
                             }
                         )
                     },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
-                    shape = ArmyristPanelShape
-                ) {
-                    Text("Armyrist 데이터 파일 선택")
-                }
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
