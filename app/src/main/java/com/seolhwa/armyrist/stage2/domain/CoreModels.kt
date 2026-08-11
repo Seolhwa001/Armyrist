@@ -19,6 +19,7 @@ data class Checklist(
     val memo: String = "",
     val groups: List<ChecklistGroup> = emptyList(),
     val items: List<ChecklistItem> = emptyList(),
+    val deletedItems: List<ChecklistItem> = emptyList(),
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )
