@@ -1219,13 +1219,6 @@ private fun ItemDialog(
                     label = { Text("미지정") }
                 )
 
-                TextButton(
-                    onClick = { done("__UNASSIGNED__") },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("미지정")
-                }
-
                 sheet.groups.sortedBy { it.order }.forEach { group ->
                     FilterChip(
                         selected = groupId == group.id,
@@ -1893,18 +1886,75 @@ private fun GroupPickerDialog(
 ) {
     AlertDialog(
         onDismissRequest = { done(null) },
-        title = { Text("그룹 지정") },
+        shape = ArmyristPanelShape,
+        containerColor = ArmyristColors.WorkSurface,
+        titleContentColor = ArmyristColors.PrimaryText,
+        textContentColor = ArmyristColors.PrimaryText,
+        title = {
+            Column {
+                Text(
+                    "그룹 지정",
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "지정할 그룹을 선택하세요.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ArmyristColors.SecondaryText
+                )
+            }
+        },
         text = {
-            if (sheet.groups.isEmpty()) {
-                Text("먼저 그룹을 생성하세요.")
-            } else {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+            Column(
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Surface(
+                    color = ArmyristColors.RaisedSurface,
+                    shape = ArmyristPanelShape,
+                    border = BorderStroke(
+                        1.dp,
+                        ArmyristColors.Border
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { done("__UNASSIGNED__") }
                 ) {
-                    sheet.groups.sortedBy { it.order }.forEach { group ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                horizontal = 14.dp,
+                                vertical = 14.dp
+                            ),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            Modifier
+                                .size(16.dp)
+                                .background(
+                                    ArmyristColors.Divider,
+                                    CircleShape
+                                )
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            "미지정",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                sheet.groups
+                    .sortedBy { it.order }
+                    .forEach { group ->
+                        val color = parseColor(group.color)
+
                         Surface(
-                            color = parseColor(group.color).copy(alpha = 0.12f),
-                            shape = MaterialTheme.shapes.small,
+                            color = color.copy(alpha = 0.13f),
+                            shape = ArmyristPanelShape,
+                            border = BorderStroke(
+                                1.dp,
+                                color.copy(alpha = 0.72f)
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { done(group.id) }
@@ -1912,13 +1962,20 @@ private fun GroupPickerDialog(
                             Row(
                                 Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 14.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .padding(
+                                        horizontal = 14.dp,
+                                        vertical = 14.dp
+                                    ),
+                                verticalAlignment =
+                                    Alignment.CenterVertically
                             ) {
                                 Box(
                                     Modifier
                                         .size(16.dp)
-                                        .background(parseColor(group.color), CircleShape)
+                                        .background(
+                                            color,
+                                            CircleShape
+                                        )
                                 )
                                 Spacer(Modifier.width(10.dp))
                                 Text(
@@ -1928,7 +1985,6 @@ private fun GroupPickerDialog(
                             }
                         }
                     }
-                }
             }
         },
         confirmButton = {},
