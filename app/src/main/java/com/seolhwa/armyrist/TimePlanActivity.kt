@@ -63,6 +63,14 @@ private fun TimePlanApp(
     repo: CoreSuiteRepository,
     onHome: () -> Unit
 ) {
+    val context = LocalContext.current
+    val intervalPrefs = remember {
+        context.getSharedPreferences(
+            "armyrist_timeplan_interval_labels",
+            Context.MODE_PRIVATE
+        )
+    }
+
     var selectedId by remember { mutableStateOf<String?>(null) }
     var showingResult by remember { mutableStateOf(false) }
     var revision by remember { mutableIntStateOf(0) }
@@ -86,8 +94,15 @@ private fun TimePlanApp(
                     refresh()
                 },
                 onOpen = { selectedId = it },
-                onDelete = {
-                    repo.deleteTimePlan(it)
+                onDelete = { planId ->
+                    repo.deleteTimePlan(planId)
+
+                    val editor = intervalPrefs.edit()
+                    intervalPrefs.all.keys
+                        .filter { key -> key.startsWith("$planId:") }
+                        .forEach(editor::remove)
+                    editor.apply()
+
                     refresh()
                 }
             )
@@ -212,7 +227,13 @@ private fun TimePlanApp(
                         }
                     }
                 },
-                onEditDuration = { leftPointId, duration ->
+                intervalLabel = { leftPointId ->
+                    intervalPrefs.getString(
+                        "${selected.id}:$leftPointId",
+                        "경과"
+                    ) ?: "경과"
+                },
+                onEditDuration = { leftPointId, duration, label ->
                     val candidate =
                         TimePlanRules.editDuration(
                             selected.points,
@@ -224,6 +245,14 @@ private fun TimePlanApp(
                         repo.updateTimePlan(selected.id) {
                             it.copy(points = candidate)
                         }
+
+                        intervalPrefs.edit()
+                            .putString(
+                                "${selected.id}:$leftPointId",
+                                label.trim().ifEmpty { "경과" }
+                            )
+                            .apply()
+
                         refresh()
                         true
                     } else {
@@ -458,9 +487,11 @@ private fun TimePlanDetailScreen(
     ) -> Boolean,
     onDeletePoint: (String) -> Unit,
     onMovePoint: (String, Int) -> Unit,
+    intervalLabel: (String) -> String,
     onEditDuration: (
         leftPointId: String,
-        durationMinutes: Int
+        durationMinutes: Int,
+        durationLabel: String
     ) -> Boolean
 ) {
     var titleEdit by remember {
@@ -568,6 +599,7 @@ private fun TimePlanDetailScreen(
                         index in 1 until ordered.lastIndex
 
                     Card(
+                        onClick = { editingPoint = point },
                         modifier = Modifier
                             .fillMaxWidth()
                             .zIndex(
@@ -677,14 +709,6 @@ private fun TimePlanDetailScreen(
                                 )
                             }
 
-                            TextButton(
-                                onClick = {
-                                    editingPoint = point
-                                }
-                            ) {
-                                Text("편집")
-                            }
-
                             if (intermediate) {
                                 TextButton(
                                     onClick = {
@@ -729,10 +753,11 @@ private fun TimePlanDetailScreen(
                                     Alignment.CenterVertically
                             ) {
                                 Text(
-                                    "경과",
+                                    intervalLabel(point.id),
                                     style =
                                         MaterialTheme.typography.labelMedium,
-                                    modifier = Modifier.width(54.dp)
+                                    modifier =
+                                        Modifier.widthIn(min = 54.dp)
                                 )
 
                                 Text(
@@ -884,14 +909,16 @@ private fun TimePlanDetailScreen(
         ) {
             DurationEditDialog(
                 duration = duration,
+                initialLabel = intervalLabel(ordered[index].id),
                 onDismiss = {
                     editingDurationIndex = null
                 },
-                onConfirm = { newDuration ->
+                onConfirm = { newDuration, newLabel ->
                     val success =
                         onEditDuration(
                             ordered[index].id,
-                            newDuration
+                            newDuration,
+                            newLabel
                         )
 
                     if (success) {
@@ -1135,13 +1162,18 @@ private fun TimePointEditDialog(
 @Composable
 private fun DurationEditDialog(
     duration: Int,
+    initialLabel: String,
     onDismiss: () -> Unit,
-    onConfirm: (Int) -> Boolean
+    onConfirm: (Int, String) -> Boolean
 ) {
     var raw by remember(duration) {
         mutableStateOf(
             formatDurationInput(duration)
         )
+    }
+
+    var label by remember(initialLabel) {
+        mutableStateOf(initialLabel)
     }
 
     var error by remember {
@@ -1158,6 +1190,21 @@ private fun DurationEditDialog(
                 verticalArrangement =
                     Arrangement.spacedBy(10.dp)
             ) {
+                OutlinedTextField(
+                    value = label,
+                    onValueChange = {
+                        label = it
+                        error = ""
+                    },
+                    label = {
+                        Text("구간 명칭")
+                    },
+                    placeholder = {
+                        Text("예: 이동, 준비, 대기")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 OutlinedTextField(
                     value = raw,
                     onValueChange = {
@@ -1206,7 +1253,10 @@ private fun DurationEditDialog(
                         return@TextButton
                     }
 
-                    if (!onConfirm(parsed)) {
+                    val normalizedLabel =
+                        label.trim().ifEmpty { "경과" }
+
+                    if (!onConfirm(parsed, normalizedLabel)) {
                         error =
                             "변경 후 계획이 24시간 범위를 벗어납니다."
                     }
