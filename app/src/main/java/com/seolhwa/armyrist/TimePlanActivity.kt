@@ -420,31 +420,11 @@ private fun TimePlanListScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = ArmyristColors.Header,
-                    titleContentColor = ArmyristColors.OnDark,
-                    navigationIconContentColor = ArmyristColors.OnDark,
-                    actionIconContentColor = ArmyristColors.OnDark
-                ),
-                title = {
-                    Column {
-                        Text(
-                            "시간계획",
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            "시각 · 경과시간 · 자동 저장",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                navigationIcon = {
-                    TextButton(onClick = onHome) {
-                        Text("‹ 홈")
-                    }
-                }
+            ArmyristTopBar(
+                title = "시간계획",
+                subtitle = "TIME PLAN · 시각 · 경과시간 · AUTO SAVE",
+                leadingLabel = "홈",
+                onLeading = onHome
             )
         },
         floatingActionButton = {
@@ -683,50 +663,11 @@ private fun TimePlanDetailScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = ArmyristColors.Header,
-                    titleContentColor = ArmyristColors.OnDark,
-                    navigationIconContentColor = ArmyristColors.OnDark,
-                    actionIconContentColor = ArmyristColors.OnDark
-                ),
-                title = {
-                    Column {
-                        Row(
-                            verticalAlignment =
-                                Alignment.CenterVertically
-                        ) {
-                            Text(
-                                plan.title,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        Text(
-                            "지점 ${ordered.size} · 자동 저장",
-                            style =
-                                MaterialTheme.typography.labelSmall,
-                            color =
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                navigationIcon = {
-                    OutlinedButton(
-                        onClick = onHome,
-                        shape = ArmyristPanelShape,
-                        border = BorderStroke(
-                            1.dp,
-                            ArmyristColors.OnDark.copy(alpha = 0.65f)
-                        ),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = ArmyristColors.OnDark
-                        ),
-                        contentPadding = PaddingValues(horizontal = 10.dp)
-                    ) {
-                        Text("홈")
-                    }
-                }
+            ArmyristTopBar(
+                title = plan.title,
+                subtitle = "TIME PLAN · 지점 ${ordered.size} · AUTO SAVE",
+                leadingLabel = "홈",
+                onLeading = onHome
             )
         }
     ) { padding ->

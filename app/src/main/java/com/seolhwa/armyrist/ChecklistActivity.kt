@@ -382,29 +382,11 @@ private fun ChecklistListScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = ArmyristColors.Header,
-                    titleContentColor = ArmyristColors.OnDark,
-                    navigationIconContentColor = ArmyristColors.OnDark,
-                    actionIconContentColor = ArmyristColors.OnDark
-                ),
-                title = {
-                    Column {
-                        Text(
-                            "체크리스트",
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            "CHECKLIST · 반복 점검 · AUTO SAVE",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                navigationIcon = {
-                    TextButton(onClick = onHome) { Text("‹ 홈") }
-                }
+            ArmyristTopBar(
+                title = "체크리스트",
+                subtitle = "CHECKLIST · 반복 점검 · AUTO SAVE",
+                leadingLabel = "홈",
+                onLeading = onHome
             )
         },
         floatingActionButton = {
@@ -587,41 +569,11 @@ private fun ChecklistDetailScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = ArmyristColors.Header,
-                    titleContentColor = ArmyristColors.OnDark,
-                    navigationIconContentColor = ArmyristColors.OnDark,
-                    actionIconContentColor = ArmyristColors.OnDark
-                ),
-                title = {
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(checklist.title, fontWeight = FontWeight.Bold)
-                        }
-                        Text(
-                            "항목 ${checklist.items.size} · 자동 저장",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                navigationIcon = {
-                    OutlinedButton(
-                        onClick = onHome,
-                        shape = ArmyristPanelShape,
-                        border = BorderStroke(
-                            1.dp,
-                            ArmyristColors.OnDark.copy(alpha = 0.65f)
-                        ),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = ArmyristColors.OnDark
-                        ),
-                        contentPadding = PaddingValues(horizontal = 10.dp)
-                    ) {
-                        Text("홈")
-                    }
-                }
+            ArmyristTopBar(
+                title = checklist.title,
+                subtitle = "CHECKLIST · 항목 ${checklist.items.size} · AUTO SAVE",
+                leadingLabel = "홈",
+                onLeading = onHome
             )
         }
     ) { padding ->

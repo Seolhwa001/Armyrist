@@ -259,38 +259,11 @@ private fun SheetListScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            "실셈",
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            "COUNTING / 현장 수량 기록",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = ArmyristColors.SecondaryText
-                        )
-                    }
-                },
-                navigationIcon = {
-                    Button(
-                        onClick = onHome,
-                        shape = ArmyristPanelShape,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = ArmyristColors.HeaderRaised,
-                            contentColor = ArmyristColors.OnDark
-                        ),
-                        contentPadding = PaddingValues(horizontal = 12.dp)
-                    ) {
-                        Text("홈")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = ArmyristColors.Header,
-                    titleContentColor = ArmyristColors.OnDark,
-                    navigationIconContentColor = ArmyristColors.OnDark
-                )
+            ArmyristTopBar(
+                title = "실셈",
+                subtitle = "COUNTING / 현장 수량 기록",
+                leadingLabel = "홈",
+                onLeading = onHome
             )
         },
         floatingActionButton = {
@@ -483,42 +456,11 @@ private fun CountingScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            sheet.title,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1
-                        )
-                        Text(
-                            "COUNTING · 항목 ${sheet.items.size} · AUTO SAVE",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = ArmyristColors.OnDark.copy(alpha = 0.78f)
-                        )
-                    }
-                },
-                navigationIcon = {
-                    OutlinedButton(
-                        onClick = onHome,
-                        shape = ArmyristPanelShape,
-                        border = BorderStroke(
-                            1.dp,
-                            ArmyristColors.OnDark.copy(alpha = 0.65f)
-                        ),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = ArmyristColors.OnDark
-                        ),
-                        contentPadding = PaddingValues(horizontal = 10.dp)
-                    ) {
-                        Text("홈")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = ArmyristColors.Header,
-                    titleContentColor = ArmyristColors.OnDark,
-                    navigationIconContentColor = ArmyristColors.OnDark
-                )
+            ArmyristTopBar(
+                title = sheet.title,
+                subtitle = "COUNTING · 항목 ${sheet.items.size} · AUTO SAVE",
+                leadingLabel = "홈",
+                onLeading = onHome
             )
         }
     ) { padding ->
@@ -1627,13 +1569,11 @@ private fun GroupScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("그룹 관리") },
-                navigationIcon = {
-                    TextButton(onClick = onBack) {
-                        Text("뒤로")
-                    }
-                }
+            ArmyristTopBar(
+                title = "그룹 관리",
+                subtitle = "COUNTING · GROUP",
+                leadingLabel = "뒤로",
+                onLeading = onBack
             )
         },
         floatingActionButton = {
@@ -1773,13 +1713,11 @@ private fun CalculationScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("그룹 계산") },
-                navigationIcon = {
-                    TextButton(onClick = onBack) {
-                        Text("뒤로")
-                    }
-                }
+            ArmyristTopBar(
+                title = "그룹 계산",
+                subtitle = "COUNTING · CALCULATION",
+                leadingLabel = "뒤로",
+                onLeading = onBack
             )
         },
         floatingActionButton = {

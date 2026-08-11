@@ -5,7 +5,6 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,8 +25,8 @@ class ReportTemplateActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val repo = (application as ArmyristApplication).coreSuiteRepository
         setContent {
-            ArmyristTheme {
-                Surface(Modifier.fillMaxSize(), color = ArmyristColors.AppBackground) {
+            MaterialTheme {
+                Surface(Modifier.fillMaxSize()) {
                     ReportTemplateApp(repo) { finish() }
                 }
             }
@@ -54,6 +53,7 @@ private fun ReportTemplateApp(repo: CoreSuiteRepository, onHome: () -> Unit) {
     if (editing != null || creating) {
         TemplateEditor(
             template = editing,
+            onHome = onHome,
             onBack = { editingId = null; creating = false },
             onSave = { name, body ->
                 val ok = if (editing == null) {
@@ -104,25 +104,14 @@ private fun TemplateList(
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("보고 양식 설정") },
-                navigationIcon = { TextButton(onClick = onHome) { Text("‹ 홈") } }
+            ArmyristTopBar(
+                title = "보고 양식",
+                subtitle = "REPORT TEMPLATE · AUTO SAVE",
+                leadingLabel = "홈",
+                onLeading = onHome
             )
         },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = onCreate,
-                modifier = Modifier.heightIn(min = 58.dp),
-                shape = ArmyristPanelShape,
-                containerColor = ArmyristColors.PrimaryControl,
-                contentColor = ArmyristColors.OnDark
-            ) {
-                Text(
-                    "+ 새 양식",
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
+        floatingActionButton = { FloatingActionButton(onClick = onCreate) { Text("+") } }
     ) { padding ->
         if (templates.isEmpty()) {
             Column(Modifier.padding(padding).padding(20.dp)) {
@@ -138,17 +127,7 @@ private fun TemplateList(
             ) {
                 items(templates, key = { it.id }) { template ->
                     Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onOpen(template.id) },
-                        shape = ArmyristPanelShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = ArmyristColors.RaisedSurface
-                        ),
-                        border = BorderStroke(
-                            1.dp,
-                            ArmyristColors.Border
-                        )
+                        modifier = Modifier.fillMaxWidth().clickable { onOpen(template.id) }
                     ) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -179,6 +158,7 @@ private fun TemplateList(
 @Composable
 private fun TemplateEditor(
     template: ReportTemplate?,
+    onHome: () -> Unit,
     onBack: () -> Unit,
     onSave: (String, String) -> Boolean
 ) {
@@ -213,10 +193,21 @@ private fun TemplateEditor(
         Modifier.fillMaxSize().padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            TextButton(onClick = onBack) { Text("‹ 목록") }
-            Text(if (template == null) "새 보고 양식" else "보고 양식 편집", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.width(48.dp))
+        ArmyristTopBar(
+            title = if (template == null) "새 보고 양식" else "보고 양식 편집",
+            subtitle = "REPORT TEMPLATE · EDIT",
+            leadingLabel = "홈",
+            onLeading = onHome
+        )
+        Button(
+            onClick = onBack,
+            shape = ArmyristPanelShape,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = ArmyristColors.HeaderRaised,
+                contentColor = ArmyristColors.OnDark
+            )
+        ) {
+            Text("목록", fontWeight = FontWeight.Bold)
         }
 
         OutlinedTextField(

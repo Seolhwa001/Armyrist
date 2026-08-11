@@ -209,29 +209,11 @@ private fun DataManagementScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = ArmyristColors.Header,
-                    titleContentColor = ArmyristColors.OnDark,
-                    navigationIconContentColor = ArmyristColors.OnDark
-                ),
-                title = {
-                    Column {
-                        Text(
-                            "데이터 관리",
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            "STAGE 3 · BACKUP / RESTORE",
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
-                },
-                navigationIcon = {
-                    TextButton(onClick = onBack) {
-                        Text("‹ 홈")
-                    }
-                }
+            ArmyristTopBar(
+                title = "데이터 관리",
+                subtitle = "DATA · BACKUP / RESTORE · OFFLINE",
+                leadingLabel = "홈",
+                onLeading = onBack
             )
         }
     ) { padding ->

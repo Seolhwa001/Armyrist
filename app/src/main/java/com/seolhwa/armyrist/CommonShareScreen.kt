@@ -93,7 +93,7 @@ fun CommonShareScreen(
         topBar = {
             TopAppBar(
                 title = { Text("결과") },
-                navigationIcon = { TextButton(onClick = onBack) { Text("‹ 뒤로") } }
+                navigationIcon = { TextButton(onClick = onBack) { Text("뒤로") } }
             )
         }
     ) { padding ->
