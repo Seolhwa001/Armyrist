@@ -111,8 +111,13 @@ private fun ChecklistApp(
                     if (repo.editChecklistItem(selected.id, itemId, name, note, groupId)) refresh()
                 },
                 onDeleteItem = {
-                    repo.deleteChecklistItem(selected.id, it)
-                    refresh()
+                    if (repo.trashChecklistItem(selected.id, it)) refresh()
+                },
+                onRestoreItem = {
+                    if (repo.restoreChecklistItem(selected.id, it)) refresh()
+                },
+                onPermanentlyDeleteItem = {
+                    if (repo.permanentlyDeleteChecklistItem(selected.id, it)) refresh()
                 },
                 onStatus = { itemId, status ->
                     if (repo.setChecklistStatus(selected.id, itemId, status)) refresh()
@@ -274,6 +279,8 @@ private fun ChecklistDetailScreen(
     onAddItem: (String, String, String?) -> Unit,
     onEditItem: (String, String, String, String?) -> Unit,
     onDeleteItem: (String) -> Unit,
+    onRestoreItem: (String) -> Unit,
+    onPermanentlyDeleteItem: (String) -> Unit,
     onStatus: (String, ChecklistStatus) -> Unit,
     onAddGroup: (String, String) -> Unit,
     onGroupColor: (String, String) -> Unit,
@@ -290,6 +297,9 @@ private fun ChecklistDetailScreen(
     var groupPicker by remember { mutableStateOf(false) }
     var memoEdit by remember { mutableStateOf(false) }
     var resetConfirm by remember { mutableStateOf(false) }
+    var deleteTarget by remember { mutableStateOf<ChecklistItem?>(null) }
+    var trashOpen by remember { mutableStateOf(false) }
+    var permanentDeleteTarget by remember { mutableStateOf<ChecklistItem?>(null) }
     var viewMode by remember { mutableStateOf(ChecklistViewMode.DETAIL) }
 
     var assignmentGroupId by remember { mutableStateOf<String?>(null) }
@@ -357,8 +367,14 @@ private fun ChecklistDetailScreen(
 
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
-                    horizontalArrangement = Arrangement.End
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (checklist.deletedItems.isNotEmpty()) {
+                        TextButton(onClick = { trashOpen = true }) {
+                            Text("삭제된 항목 ${checklist.deletedItems.size}")
+                        }
+                    }
+                    Spacer(Modifier.weight(1f))
                     SingleChoiceSegmentedButtonRow {
                         SegmentedButton(
                             selected = viewMode == ChecklistViewMode.DETAIL,
@@ -508,7 +524,7 @@ private fun ChecklistDetailScreen(
                                 assignmentMode = assignmentMode,
                                 onStatus = { onStatus(item.id, it) },
                                 onEdit = { editingItem = item },
-                                onDelete = { onDeleteItem(item.id) }
+                                onDelete = { deleteTarget = item }
                             )
                         }
                     }
@@ -609,6 +625,53 @@ private fun ChecklistDetailScreen(
             },
             dismissButton = {
                 TextButton(onClick = { resetConfirm = false }) { Text("취소") }
+            }
+        )
+    }
+
+    deleteTarget?.let { item ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("항목 삭제") },
+            text = {
+                Text("'${item.name}'을 삭제된 항목으로 이동합니다. 나중에 복구할 수 있습니다.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDeleteItem(item.id)
+                    deleteTarget = null
+                }) { Text("삭제") }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) { Text("취소") }
+            }
+        )
+    }
+
+    if (trashOpen) {
+        DeletedItemsDialog(
+            checklist = checklist,
+            onRestore = onRestoreItem,
+            onRequestPermanentDelete = { permanentDeleteTarget = it },
+            onDismiss = { trashOpen = false }
+        )
+    }
+
+    permanentDeleteTarget?.let { item ->
+        AlertDialog(
+            onDismissRequest = { permanentDeleteTarget = null },
+            title = { Text("영구 삭제") },
+            text = {
+                Text("'${item.name}'을 완전히 삭제합니다. 이 작업은 복구할 수 없습니다.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onPermanentlyDeleteItem(item.id)
+                    permanentDeleteTarget = null
+                }) { Text("영구 삭제") }
+            },
+            dismissButton = {
+                TextButton(onClick = { permanentDeleteTarget = null }) { Text("취소") }
             }
         )
     }
@@ -1063,6 +1126,71 @@ private fun GroupPickerDialog(
         confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("취소") }
+        }
+    )
+}
+
+@Composable
+private fun DeletedItemsDialog(
+    checklist: Checklist,
+    onRestore: (String) -> Unit,
+    onRequestPermanentDelete: (ChecklistItem) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("삭제된 항목") },
+        text = {
+            if (checklist.deletedItems.isEmpty()) {
+                Text("삭제된 항목이 없습니다.")
+            } else {
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 420.dp),
+                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    items(
+                        checklist.deletedItems.sortedByDescending { it.order },
+                        key = { it.id }
+                    ) { item ->
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(12.dp)) {
+                                Text(item.name, fontWeight = FontWeight.SemiBold)
+
+                                val groupName = item.groupId?.let { groupId ->
+                                    checklist.groups.firstOrNull { it.id == groupId }?.name
+                                }
+                                val contextText = buildList {
+                                    if (groupName != null) add(groupName)
+                                    if (item.note.isNotBlank()) add("비고: ${item.note}")
+                                }.joinToString(" · ")
+
+                                if (contextText.isNotBlank()) {
+                                    Text(
+                                        contextText,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    TextButton(onClick = { onRestore(item.id) }) {
+                                        Text("복구")
+                                    }
+                                    TextButton(onClick = { onRequestPermanentDelete(item) }) {
+                                        Text("영구 삭제")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("닫기") }
         }
     )
 }

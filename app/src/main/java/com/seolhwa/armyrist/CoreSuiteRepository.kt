@@ -52,6 +52,7 @@ class CoreSuiteRepository(context: Context) {
         require(next.title.trim().isNotEmpty())
         require(next.groups.all { it.name.trim().isNotEmpty() })
         require(next.items.all { it.name.trim().isNotEmpty() })
+        require(next.deletedItems.all { it.name.trim().isNotEmpty() })
 
         val groupIds = next.groups.map { it.id }.toSet()
         require(next.items.all {
@@ -150,18 +151,54 @@ class CoreSuiteRepository(context: Context) {
         } != null
 
     @Synchronized
-    fun deleteChecklistItem(checklistId: String, itemId: String) {
-        updateChecklist(checklistId) { current ->
+    fun trashChecklistItem(checklistId: String, itemId: String): Boolean {
+        val checklist = getChecklist(checklistId) ?: return false
+        val target = checklist.items.firstOrNull { it.id == itemId } ?: return false
+
+        return updateChecklist(checklistId) { current ->
             current.copy(
                 items = current.items
                     .filterNot { it.id == itemId }
                     .sortedBy { it.order }
                     .mapIndexed { index, item ->
                         item.copy(order = index)
-                    }
+                    },
+                deletedItems = current.deletedItems
+                    .filterNot { it.id == itemId } + target
             )
-        }
+        } != null
     }
+
+    @Synchronized
+    fun restoreChecklistItem(checklistId: String, itemId: String): Boolean {
+        val checklist = getChecklist(checklistId) ?: return false
+        val target = checklist.deletedItems.firstOrNull { it.id == itemId } ?: return false
+
+        val restoredGroupId = target.groupId?.takeIf { groupId ->
+            checklist.groups.any { it.id == groupId }
+        }
+
+        val active = checklist.items.sortedBy { it.order }.toMutableList()
+        val insertIndex = target.order.coerceIn(0, active.size)
+        active.add(insertIndex, target.copy(groupId = restoredGroupId))
+
+        return updateChecklist(checklistId) { current ->
+            current.copy(
+                items = active.mapIndexed { index, item ->
+                    item.copy(order = index)
+                },
+                deletedItems = current.deletedItems.filterNot { it.id == itemId }
+            )
+        } != null
+    }
+
+    @Synchronized
+    fun permanentlyDeleteChecklistItem(checklistId: String, itemId: String): Boolean =
+        updateChecklist(checklistId) { current ->
+            current.copy(
+                deletedItems = current.deletedItems.filterNot { it.id == itemId }
+            )
+        } != null
 
     @Synchronized
     fun moveChecklistItem(
@@ -526,10 +563,25 @@ class CoreSuiteRepository(context: Context) {
                     )
                 }
             })
+            .put("deletedItems", JSONArray().apply {
+                value.deletedItems.forEach { item ->
+                    put(
+                        JSONObject()
+                            .put("id", item.id)
+                            .put("checklistId", item.checklistId)
+                            .put("groupId", item.groupId ?: JSONObject.NULL)
+                            .put("order", item.order)
+                            .put("name", item.name)
+                            .put("status", item.status.name)
+                            .put("note", item.note)
+                    )
+                }
+            })
 
     private fun checklistFromJson(value: JSONObject): Checklist {
         val groups = value.optJSONArray("groups") ?: JSONArray()
         val items = value.optJSONArray("items") ?: JSONArray()
+        val deletedItems = value.optJSONArray("deletedItems") ?: JSONArray()
 
         return Checklist(
             id = value.getString("id"),
@@ -547,6 +599,21 @@ class CoreSuiteRepository(context: Context) {
             },
             items = List(items.length()) { index ->
                 val item = items.getJSONObject(index)
+                ChecklistItem(
+                    id = item.getString("id"),
+                    checklistId = item.getString("checklistId"),
+                    groupId = if (item.isNull("groupId")) null
+                    else item.getString("groupId"),
+                    order = item.getInt("order"),
+                    name = item.getString("name"),
+                    status = ChecklistStatus.valueOf(
+                        item.getString("status")
+                    ),
+                    note = item.optString("note", "")
+                )
+            },
+            deletedItems = List(deletedItems.length()) { index ->
+                val item = deletedItems.getJSONObject(index)
                 ChecklistItem(
                     id = item.getString("id"),
                     checklistId = item.getString("checklistId"),
