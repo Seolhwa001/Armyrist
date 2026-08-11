@@ -89,7 +89,8 @@ class CoreSuiteRepository(context: Context) {
         note: String = "",
         groupId: String? = null,
         notificationEnabled: Boolean = false,
-        scheduledTimeMinutes: Int? = null
+        scheduledTimeMinutes: Int? = null,
+        notificationSoundUri: String? = null
     ): Boolean {
         val normalized = name.trim().takeIf { it.isNotEmpty() } ?: return false
         val checklist = getChecklist(checklistId) ?: return false
@@ -106,7 +107,8 @@ class CoreSuiteRepository(context: Context) {
             name = normalized,
             note = note.trim(),
             notificationEnabled = notificationEnabled,
-            scheduledTimeMinutes = scheduledTimeMinutes
+            scheduledTimeMinutes = scheduledTimeMinutes,
+            notificationSoundUri = notificationSoundUri
         )
 
         return updateChecklist(checklistId) {
@@ -122,7 +124,8 @@ class CoreSuiteRepository(context: Context) {
         note: String,
         groupId: String?,
         notificationEnabled: Boolean = false,
-        scheduledTimeMinutes: Int? = null
+        scheduledTimeMinutes: Int? = null,
+        notificationSoundUri: String? = null
     ): Boolean {
         val normalized = name.trim().takeIf { it.isNotEmpty() } ?: return false
         val checklist = getChecklist(checklistId) ?: return false
@@ -140,13 +143,31 @@ class CoreSuiteRepository(context: Context) {
                             note = note.trim(),
                             groupId = groupId,
                             notificationEnabled = notificationEnabled,
-                            scheduledTimeMinutes = scheduledTimeMinutes
+                            scheduledTimeMinutes = scheduledTimeMinutes,
+                            notificationSoundUri = notificationSoundUri
                         )
                     } else it
                 }
             )
         } != null
     }
+
+    @Synchronized
+    fun setChecklistNotificationSoundForEnabledItems(
+        checklistId: String,
+        notificationSoundUri: String?
+    ): Boolean =
+        updateChecklist(checklistId) { current ->
+            current.copy(
+                items = current.items.map { item ->
+                    if (item.notificationEnabled) {
+                        item.copy(notificationSoundUri = notificationSoundUri)
+                    } else {
+                        item
+                    }
+                }
+            )
+        } != null
 
     @Synchronized
     fun setChecklistStatus(
@@ -574,6 +595,7 @@ class CoreSuiteRepository(context: Context) {
                             .put("note", item.note)
                             .put("notificationEnabled", item.notificationEnabled)
                             .put("scheduledTimeMinutes", item.scheduledTimeMinutes ?: JSONObject.NULL)
+                            .put("notificationSoundUri", item.notificationSoundUri ?: JSONObject.NULL)
                     )
                 }
             })
@@ -590,6 +612,7 @@ class CoreSuiteRepository(context: Context) {
                             .put("note", item.note)
                             .put("notificationEnabled", item.notificationEnabled)
                             .put("scheduledTimeMinutes", item.scheduledTimeMinutes ?: JSONObject.NULL)
+                            .put("notificationSoundUri", item.notificationSoundUri ?: JSONObject.NULL)
                     )
                 }
             })
@@ -628,7 +651,9 @@ class CoreSuiteRepository(context: Context) {
                     note = item.optString("note", ""),
                     notificationEnabled = item.optBoolean("notificationEnabled", false),
                     scheduledTimeMinutes = if (item.isNull("scheduledTimeMinutes")) null
-                    else item.optInt("scheduledTimeMinutes")
+                    else item.optInt("scheduledTimeMinutes"),
+                    notificationSoundUri = if (item.isNull("notificationSoundUri")) null
+                    else item.optString("notificationSoundUri")
                 )
             },
             deletedItems = List(deletedItems.length()) { index ->
@@ -646,7 +671,9 @@ class CoreSuiteRepository(context: Context) {
                     note = item.optString("note", ""),
                     notificationEnabled = item.optBoolean("notificationEnabled", false),
                     scheduledTimeMinutes = if (item.isNull("scheduledTimeMinutes")) null
-                    else item.optInt("scheduledTimeMinutes")
+                    else item.optInt("scheduledTimeMinutes"),
+                    notificationSoundUri = if (item.isNull("notificationSoundUri")) null
+                    else item.optString("notificationSoundUri")
                 )
             },
             createdAt = value.getLong("createdAt"),

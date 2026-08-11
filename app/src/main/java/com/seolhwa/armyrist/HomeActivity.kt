@@ -21,10 +21,11 @@ class HomeActivity : ComponentActivity() {
             MaterialTheme {
                 Surface(Modifier.fillMaxSize()) {
                     HomeScreen(
-                        onCounting = { startActivity(Intent(this, MainActivity::class.java)) },
-                        onChecklist = { startActivity(Intent(this, ChecklistActivity::class.java)) },
-                        onNotificationSettings = {
-                            startActivity(Intent(this, NotificationSettingsActivity::class.java))
+                        onCounting = {
+                            startActivity(Intent(this, MainActivity::class.java))
+                        },
+                        onChecklist = {
+                            startActivity(Intent(this, ChecklistActivity::class.java))
                         },
                         onPending = {
                             Toast.makeText(
@@ -44,7 +45,6 @@ class HomeActivity : ComponentActivity() {
 private fun HomeScreen(
     onCounting: () -> Unit,
     onChecklist: () -> Unit,
-    onNotificationSettings: () -> Unit,
     onPending: () -> Unit
 ) {
     Column(
@@ -64,11 +64,6 @@ private fun HomeScreen(
 
         Spacer(Modifier.height(8.dp))
         Text("공통 기능", style = MaterialTheme.typography.titleMedium)
-        HomeCard(
-            "체크리스트 알림 설정",
-            "정확한 알람 권한 · 알람음 · 진동",
-            onNotificationSettings
-        )
         HomeCard("보고 양식 설정", "결과 공유용 보고 양식 관리", onPending)
         HomeCard("내 정보", "보고 양식에 사용할 사용자 이름", onPending)
     }

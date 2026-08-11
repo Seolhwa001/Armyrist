@@ -11,12 +11,17 @@ import android.content.Context
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.app.AlarmManager
+import android.media.RingtoneManager
+import android.net.Uri
+import android.provider.Settings
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -48,6 +53,29 @@ import kotlin.math.roundToInt
 
 class ChecklistActivity : ComponentActivity() {
     private lateinit var coreRepository: CoreSuiteRepository
+    private var pendingSoundSelection: ((String) -> Unit)? = null
+
+    private val ringtonePicker =
+        registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            val uri = if (Build.VERSION.SDK_INT >= 33) {
+                result.data?.getParcelableExtra(
+                    RingtoneManager.EXTRA_RINGTONE_PICKED_URI,
+                    Uri::class.java
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                result.data?.getParcelableExtra(
+                    RingtoneManager.EXTRA_RINGTONE_PICKED_URI
+                )
+            }
+
+            if (uri != null) {
+                pendingSoundSelection?.invoke(uri.toString())
+            }
+            pendingSoundSelection = null
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,8 +90,11 @@ class ChecklistActivity : ComponentActivity() {
                         repo = coreRepository,
                         initialChecklistId = initialChecklistId,
                         onHome = { finish() },
+                        onPickNotificationSound = { existingUri, onPicked ->
+                            openNotificationSoundPicker(existingUri, onPicked)
+                        },
                         onRequestNotificationPermission = {
-                            requestNotificationPermissionIfNeeded()
+                            requestNotificationCapabilitiesIfNeeded()
                         },
                         onReconcileNotifications = {
                             ChecklistNotificationManager.reconcile(
@@ -104,7 +135,7 @@ class ChecklistActivity : ComponentActivity() {
         }
     }
 
-    private fun requestNotificationPermissionIfNeeded() {
+    private fun requestNotificationCapabilitiesIfNeeded() {
         if (
             Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
@@ -114,8 +145,62 @@ class ChecklistActivity : ComponentActivity() {
                 arrayOf(Manifest.permission.POST_NOTIFICATIONS),
                 4101
             )
+            return
+        }
+
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            !ChecklistNotificationManager.exactAlarmAvailable(this)
+        ) {
+            runCatching {
+                startActivity(
+                    Intent(
+                        Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                        Uri.parse("package:$packageName")
+                    )
+                )
+            }
         }
     }
+
+    private fun openNotificationSoundPicker(
+        existingUri: String?,
+        onPicked: (String) -> Unit
+    ) {
+        pendingSoundSelection = onPicked
+
+        val existing = existingUri
+            ?.takeIf { it.isNotBlank() }
+            ?.let(Uri::parse)
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+
+        ringtonePicker.launch(
+            Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                putExtra(
+                    RingtoneManager.EXTRA_RINGTONE_TYPE,
+                    RingtoneManager.TYPE_ALARM or
+                        RingtoneManager.TYPE_NOTIFICATION
+                )
+                putExtra(
+                    RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT,
+                    true
+                )
+                putExtra(
+                    RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT,
+                    false
+                )
+                putExtra(
+                    RingtoneManager.EXTRA_RINGTONE_EXISTING_URI,
+                    existing
+                )
+                putExtra(
+                    RingtoneManager.EXTRA_RINGTONE_TITLE,
+                    "체크리스트 알람음 선택"
+                )
+            }
+        )
+    }
+
 }
 
 private enum class ChecklistViewMode { DETAIL, COMPACT }
@@ -125,6 +210,7 @@ private fun ChecklistApp(
     repo: CoreSuiteRepository,
     initialChecklistId: String?,
     onHome: () -> Unit,
+    onPickNotificationSound: (String?, (String) -> Unit) -> Unit,
     onRequestNotificationPermission: () -> Unit,
     onReconcileNotifications: () -> Unit,
     onCancelItemNotification: (String) -> Unit,
@@ -177,7 +263,7 @@ private fun ChecklistApp(
                 onRename = {
                     if (repo.renameChecklist(selected.id, it)) refresh()
                 },
-                onAddItem = { name, note, groupId, notificationEnabled, scheduledTimeMinutes ->
+                onAddItem = { name, note, groupId, notificationEnabled, scheduledTimeMinutes, notificationSoundUri ->
                     if (
                         repo.addChecklistItem(
                             selected.id,
@@ -185,7 +271,8 @@ private fun ChecklistApp(
                             note,
                             groupId,
                             notificationEnabled,
-                            scheduledTimeMinutes
+                            scheduledTimeMinutes,
+                            notificationSoundUri
                         )
                     ) {
                         if (notificationEnabled) onRequestNotificationPermission()
@@ -193,7 +280,7 @@ private fun ChecklistApp(
                         refresh()
                     }
                 },
-                onEditItem = { itemId, name, note, groupId, notificationEnabled, scheduledTimeMinutes ->
+                onEditItem = { itemId, name, note, groupId, notificationEnabled, scheduledTimeMinutes, notificationSoundUri ->
                     if (
                         repo.editChecklistItem(
                             selected.id,
@@ -202,7 +289,8 @@ private fun ChecklistApp(
                             note,
                             groupId,
                             notificationEnabled,
-                            scheduledTimeMinutes
+                            scheduledTimeMinutes,
+                            notificationSoundUri
                         )
                     ) {
                         if (notificationEnabled) onRequestNotificationPermission()
@@ -248,6 +336,18 @@ private fun ChecklistApp(
                 },
                 onAssignGroup = { itemIds, groupId ->
                     if (repo.assignChecklistItemsToGroup(selected.id, itemIds, groupId)) refresh()
+                },
+                onPickNotificationSound = onPickNotificationSound,
+                onBulkNotificationSound = { soundUri ->
+                    if (
+                        repo.setChecklistNotificationSoundForEnabledItems(
+                            selected.id,
+                            soundUri
+                        )
+                    ) {
+                        onReconcileNotifications()
+                        refresh()
+                    }
                 },
                 onMemo = {
                     repo.setChecklistMemo(selected.id, it)
@@ -391,8 +491,8 @@ private fun ChecklistDetailScreen(
     onBack: () -> Unit,
     onResult: () -> Unit,
     onRename: (String) -> Unit,
-    onAddItem: (String, String, String?, Boolean, Int?) -> Unit,
-    onEditItem: (String, String, String, String?, Boolean, Int?) -> Unit,
+    onAddItem: (String, String, String?, Boolean, Int?, String?) -> Unit,
+    onEditItem: (String, String, String, String?, Boolean, Int?, String?) -> Unit,
     onDeleteItem: (String) -> Unit,
     onRestoreItem: (String) -> Unit,
     onPermanentlyDeleteItem: (String) -> Unit,
@@ -401,6 +501,8 @@ private fun ChecklistDetailScreen(
     onGroupColor: (String, String) -> Unit,
     onDeleteGroup: (String) -> Unit,
     onAssignGroup: (Set<String>, String?) -> Unit,
+    onPickNotificationSound: (String?, (String) -> Unit) -> Unit,
+    onBulkNotificationSound: (String?) -> Unit,
     onMemo: (String) -> Unit,
     onReset: () -> Unit,
     onMove: (String, Int) -> Unit
@@ -476,6 +578,23 @@ private fun ChecklistDetailScreen(
                 ) {
                     AssistChip(onClick = { groupManager = true }, label = { Text("그룹") })
                     AssistChip(onClick = { groupPicker = true }, label = { Text("그룹 지정") })
+                    AssistChip(
+                        onClick = {
+                            val enabledItems =
+                                checklist.items.filter { it.notificationEnabled }
+
+                            if (enabledItems.isEmpty()) {
+                                // Nothing to apply yet. Keep item flow simple.
+                            } else {
+                                onPickNotificationSound(
+                                    enabledItems.firstOrNull()?.notificationSoundUri
+                                ) { soundUri ->
+                                    onBulkNotificationSound(soundUri)
+                                }
+                            }
+                        },
+                        label = { Text("알람음 일괄") }
+                    )
                     AssistChip(onClick = { memoEdit = true }, label = { Text("메모") })
                     AssistChip(onClick = { resetConfirm = true }, label = { Text("초기화") })
                 }
@@ -684,29 +803,41 @@ private fun ChecklistDetailScreen(
     }
 
     if (addingItem) {
-        ItemEditDialog(null, checklist.groups, { addingItem = false }) {
-                name, note, groupId, notificationEnabled, scheduledTimeMinutes ->
+        ItemEditDialog(
+            item = null,
+            groups = checklist.groups,
+            onPickNotificationSound = onPickNotificationSound,
+            onDismiss = { addingItem = false }
+        ) {
+                name, note, groupId, notificationEnabled, scheduledTimeMinutes, notificationSoundUri ->
             onAddItem(
                 name,
                 note,
                 groupId,
                 notificationEnabled,
-                scheduledTimeMinutes
+                scheduledTimeMinutes,
+                notificationSoundUri
             )
             addingItem = false
         }
     }
 
     editingItem?.let { item ->
-        ItemEditDialog(item, checklist.groups, { editingItem = null }) {
-                name, note, groupId, notificationEnabled, scheduledTimeMinutes ->
+        ItemEditDialog(
+            item = item,
+            groups = checklist.groups,
+            onPickNotificationSound = onPickNotificationSound,
+            onDismiss = { editingItem = null }
+        ) {
+                name, note, groupId, notificationEnabled, scheduledTimeMinutes, notificationSoundUri ->
             onEditItem(
                 item.id,
                 name,
                 note,
                 groupId,
                 notificationEnabled,
-                scheduledTimeMinutes
+                scheduledTimeMinutes,
+                notificationSoundUri
             )
             editingItem = null
         }
@@ -1045,8 +1176,9 @@ private fun TextEditDialog(
 private fun ItemEditDialog(
     item: ChecklistItem?,
     groups: List<ChecklistGroup>,
+    onPickNotificationSound: (String?, (String) -> Unit) -> Unit,
     onDismiss: () -> Unit,
-    onConfirm: (String, String, String?, Boolean, Int?) -> Unit
+    onConfirm: (String, String, String?, Boolean, Int?, String?) -> Unit
 ) {
     var name by remember { mutableStateOf(item?.name ?: "") }
     var note by remember { mutableStateOf(item?.note ?: "") }
@@ -1059,7 +1191,11 @@ private fun ItemEditDialog(
             item?.scheduledTimeMinutes?.let(::formatChecklistTimeRaw) ?: ""
         )
     }
+    var notificationSoundUri by remember {
+        mutableStateOf(item?.notificationSoundUri)
+    }
     var error by remember { mutableStateOf("") }
+    val context = LocalContext.current
 
     val parsedTime = parseChecklistTime(timeRaw)
     val isPast = notificationEnabled &&
@@ -1161,6 +1297,43 @@ private fun ItemEditDialog(
                     }
                 }
 
+                if (notificationEnabled) {
+                    item {
+                        Card(Modifier.fillMaxWidth()) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        "알람음",
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        ChecklistNotificationManager.soundTitle(
+                                            context,
+                                            notificationSoundUri
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                TextButton(
+                                    onClick = {
+                                        onPickNotificationSound(
+                                            notificationSoundUri
+                                        ) { picked ->
+                                            notificationSoundUri = picked
+                                        }
+                                    }
+                                ) {
+                                    Text("선택")
+                                }
+                            }
+                        }
+                    }
+                }
+
                 if (error.isNotBlank()) {
                     item {
                         Text(
@@ -1187,7 +1360,8 @@ private fun ItemEditDialog(
                                 note.trim(),
                                 groupId,
                                 notificationEnabled,
-                                time
+                                time,
+                                notificationSoundUri
                             )
                         }
                     }
