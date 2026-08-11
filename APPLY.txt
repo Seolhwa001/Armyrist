@@ -1,0 +1,11 @@
+Armyrist App Icon Patch
+
+1. 이 ZIP의 app 폴더를 Armyrist 프로젝트 루트에 덮어씁니다.
+2. AndroidManifest.xml에서 다음 설정을 확인합니다:
+   android:icon="@mipmap/ic_launcher"
+   android:roundIcon="@mipmap/ic_launcher_round"
+3. 기존 프로젝트에 같은 이름의 launcher icon 파일이 있으면 이 패치 파일로 교체합니다.
+4. GitHub Actions 또는 Android Studio에서 다시 빌드합니다.
+
+원본: 사용자가 제공한 Armyrist 캐릭터 이미지.
+앱 기능/데이터 로직 변경 없음.
