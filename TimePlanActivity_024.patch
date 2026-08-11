@@ -1,0 +1,52 @@
+*** Begin Patch
+*** Update File: app/src/main/java/com/seolhwa/armyrist/TimePlanActivity.kt
+@@
+ private fun editDurationAllowMissingEndpoint(
+@@
+ }
++
++/**
++ * Partial-plan-safe interval display.
++ *
++ * A later blank TimePoint must not invalidate an earlier interval whose
++ * left/right clock values are already known.
++ */
++private fun displayedDuration(
++    points: List<TimePoint>,
++    leftIndex: Int
++): Int? {
++    val ordered = points.sortedBy { it.order }
++    if (leftIndex !in 0 until ordered.lastIndex) return null
++
++    val left = ordered[leftIndex].timeMinutes ?: return null
++    val right = ordered[leftIndex + 1].timeMinutes ?: return null
++
++    return if (right >= left) {
++        right - left
++    } else {
++        (1440 - left) + right
++    }
++}
+@@
+-                        val duration =
+-                            TimePlanRules.adjacentDuration(
+-                                ordered,
+-                                index
+-                            )
++                        val duration =
++                            displayedDuration(
++                                ordered,
++                                index
++                            )
+@@
+-            val duration =
+-                TimePlanRules.adjacentDuration(
+-                    ordered,
+-                    index
+-                )
++            val duration =
++                displayedDuration(
++                    ordered,
++                    index
++                )
+*** End Patch
