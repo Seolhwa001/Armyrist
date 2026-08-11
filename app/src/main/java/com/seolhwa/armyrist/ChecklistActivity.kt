@@ -675,8 +675,8 @@ private fun ChecklistDetailScreen(
                     Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    ArmyristUtilityButton(text = "그룹", onClick = { groupManager = true })
-                    ArmyristUtilityButton(text = "그룹 지정", onClick = { groupPicker = true })
+                    ChecklistUtilityButton(text = "그룹", onClick = { groupManager = true })
+                    ChecklistUtilityButton(text = "그룹 지정", onClick = { groupPicker = true })
                     AssistChip(
                         colors = AssistChipDefaults.assistChipColors(
                             containerColor = ArmyristColors.WorkSurface,
@@ -702,8 +702,8 @@ private fun ChecklistDetailScreen(
                         },
                         label = { Text("알람음 일괄") }
                     )
-                    ArmyristUtilityButton(text = "메모", onClick = { memoEdit = true })
-                    ArmyristUtilityButton(text = "초기화", onClick = { resetConfirm = true })
+                    ChecklistUtilityButton(text = "메모", onClick = { memoEdit = true })
+                    ChecklistUtilityButton(text = "초기화", onClick = { resetConfirm = true })
                 }
 
                 Row(
@@ -1113,6 +1113,32 @@ private fun ChecklistDetailScreen(
             dismissButton = {
                 TextButton(onClick = { permanentDeleteTarget = null }) { Text("취소") }
             }
+        )
+    }
+}
+
+@Composable
+private fun ChecklistUtilityButton(
+    text: String,
+    onClick: () -> Unit
+) {
+    OutlinedButton(
+        onClick = onClick,
+        shape = ArmyristPanelShape,
+        border = BorderStroke(
+            1.dp,
+            ArmyristColors.Border
+        ),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = ArmyristColors.WorkSurface,
+            contentColor = ArmyristColors.PrimaryText
+        ),
+        contentPadding =
+            PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge
         )
     }
 }
