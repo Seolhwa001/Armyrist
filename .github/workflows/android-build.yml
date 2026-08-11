@@ -29,17 +29,47 @@ jobs:
           cache-provider: basic
           validate-wrappers: false
 
-      - name: Install Android SDK 36
+      - name: Locate Android SDK manager
+        shell: bash
         run: |
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER=""
+
+          for candidate in \
+            "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+            "$SDK_ROOT/cmdline-tools/bin/sdkmanager" \
+            "$SDK_ROOT/tools/bin/sdkmanager"
+          do
+            if [ -x "$candidate" ]; then
+              SDKMANAGER="$candidate"
+              break
+            fi
+          done
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager not found under SDK root: $SDK_ROOT"
+            find "$SDK_ROOT" -type f -name sdkmanager 2>/dev/null | head -20 || true
+            exit 1
+          fi
+
+          echo "SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
+          echo "Using sdkmanager: $SDKMANAGER"
+
+      - name: Install Android SDK 36
+        shell: bash
+        run: |
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Generate official Gradle Wrapper
+        shell: bash
         run: |
           gradle wrapper --gradle-version 8.13 --distribution-type bin
           chmod +x gradlew
 
       - name: Commit generated Wrapper if missing or changed
+        shell: bash
         run: |
           if ! git diff --quiet -- gradlew gradlew.bat gradle/wrapper/gradle-wrapper.jar gradle/wrapper/gradle-wrapper.properties || \
              ! git ls-files --error-unmatch gradle/wrapper/gradle-wrapper.jar >/dev/null 2>&1; then
