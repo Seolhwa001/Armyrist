@@ -8,7 +8,10 @@ package com.seolhwa.armyrist
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -18,6 +21,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -33,23 +37,83 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.seolhwa.armyrist.notification.ChecklistNotificationManager
 import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
 import com.seolhwa.armyrist.stage2.domain.*
 import kotlin.math.roundToInt
 
 class ChecklistActivity : ComponentActivity() {
+    private lateinit var coreRepository: CoreSuiteRepository
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val repo = (application as ArmyristApplication).coreSuiteRepository
+        coreRepository = (application as ArmyristApplication).coreSuiteRepository
+        val initialChecklistId =
+            intent.getStringExtra(ChecklistNotificationManager.EXTRA_CHECKLIST_ID)
+
         setContent {
             MaterialTheme {
                 Surface(Modifier.fillMaxSize()) {
-                    ChecklistApp(repo = repo, onHome = { finish() })
+                    ChecklistApp(
+                        repo = coreRepository,
+                        initialChecklistId = initialChecklistId,
+                        onHome = { finish() },
+                        onRequestNotificationPermission = {
+                            requestNotificationPermissionIfNeeded()
+                        },
+                        onReconcileNotifications = {
+                            ChecklistNotificationManager.reconcile(
+                                this,
+                                coreRepository
+                            )
+                        },
+                        onCancelItemNotification = { itemId ->
+                            ChecklistNotificationManager.cancel(this, itemId)
+                        },
+                        onCancelChecklistNotifications = { checklist ->
+                            ChecklistNotificationManager.cancelChecklist(
+                                this,
+                                checklist
+                            )
+                        }
+                    )
                 }
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::coreRepository.isInitialized) {
+            ChecklistNotificationManager.reconcile(this, coreRepository)
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 4101 && ::coreRepository.isInitialized) {
+            ChecklistNotificationManager.reconcile(this, coreRepository)
+        }
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (
+            Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                4101
+            )
         }
     }
 }
@@ -59,9 +123,14 @@ private enum class ChecklistViewMode { DETAIL, COMPACT }
 @Composable
 private fun ChecklistApp(
     repo: CoreSuiteRepository,
-    onHome: () -> Unit
+    initialChecklistId: String?,
+    onHome: () -> Unit,
+    onRequestNotificationPermission: () -> Unit,
+    onReconcileNotifications: () -> Unit,
+    onCancelItemNotification: (String) -> Unit,
+    onCancelChecklistNotifications: (Checklist) -> Unit
 ) {
-    var selectedId by remember { mutableStateOf<String?>(null) }
+    var selectedId by remember { mutableStateOf(initialChecklistId) }
     var showingResult by remember { mutableStateOf(false) }
     var revision by remember { mutableIntStateOf(0) }
     @Suppress("UNUSED_VARIABLE") val observed = revision
@@ -81,8 +150,12 @@ private fun ChecklistApp(
                     refresh()
                 },
                 onOpen = { selectedId = it },
-                onDelete = {
-                    repo.deleteChecklist(it)
+                onDelete = { checklistId ->
+                    repo.getChecklist(checklistId)?.let {
+                        onCancelChecklistNotifications(it)
+                    }
+                    repo.deleteChecklist(checklistId)
+                    onReconcileNotifications()
                     refresh()
                 }
             )
@@ -104,23 +177,64 @@ private fun ChecklistApp(
                 onRename = {
                     if (repo.renameChecklist(selected.id, it)) refresh()
                 },
-                onAddItem = { name, note, groupId ->
-                    if (repo.addChecklistItem(selected.id, name, note, groupId)) refresh()
+                onAddItem = { name, note, groupId, notificationEnabled, scheduledTimeMinutes ->
+                    if (
+                        repo.addChecklistItem(
+                            selected.id,
+                            name,
+                            note,
+                            groupId,
+                            notificationEnabled,
+                            scheduledTimeMinutes
+                        )
+                    ) {
+                        if (notificationEnabled) onRequestNotificationPermission()
+                        onReconcileNotifications()
+                        refresh()
+                    }
                 },
-                onEditItem = { itemId, name, note, groupId ->
-                    if (repo.editChecklistItem(selected.id, itemId, name, note, groupId)) refresh()
+                onEditItem = { itemId, name, note, groupId, notificationEnabled, scheduledTimeMinutes ->
+                    if (
+                        repo.editChecklistItem(
+                            selected.id,
+                            itemId,
+                            name,
+                            note,
+                            groupId,
+                            notificationEnabled,
+                            scheduledTimeMinutes
+                        )
+                    ) {
+                        if (notificationEnabled) onRequestNotificationPermission()
+                        onReconcileNotifications()
+                        refresh()
+                    }
                 },
-                onDeleteItem = {
-                    if (repo.trashChecklistItem(selected.id, it)) refresh()
+                onDeleteItem = { itemId ->
+                    onCancelItemNotification(itemId)
+                    if (repo.trashChecklistItem(selected.id, itemId)) {
+                        onReconcileNotifications()
+                        refresh()
+                    }
                 },
                 onRestoreItem = {
-                    if (repo.restoreChecklistItem(selected.id, it)) refresh()
+                    if (repo.restoreChecklistItem(selected.id, it)) {
+                        onReconcileNotifications()
+                        refresh()
+                    }
                 },
-                onPermanentlyDeleteItem = {
-                    if (repo.permanentlyDeleteChecklistItem(selected.id, it)) refresh()
+                onPermanentlyDeleteItem = { itemId ->
+                    onCancelItemNotification(itemId)
+                    if (repo.permanentlyDeleteChecklistItem(selected.id, itemId)) {
+                        onReconcileNotifications()
+                        refresh()
+                    }
                 },
                 onStatus = { itemId, status ->
-                    if (repo.setChecklistStatus(selected.id, itemId, status)) refresh()
+                    if (repo.setChecklistStatus(selected.id, itemId, status)) {
+                        onReconcileNotifications()
+                        refresh()
+                    }
                 },
                 onAddGroup = { name, color ->
                     if (repo.addChecklistGroup(selected.id, name, color)) refresh()
@@ -141,6 +255,7 @@ private fun ChecklistApp(
                 },
                 onReset = {
                     repo.resetChecklistStatuses(selected.id)
+                    onReconcileNotifications()
                     refresh()
                 },
                 onMove = { itemId, delta ->
@@ -276,8 +391,8 @@ private fun ChecklistDetailScreen(
     onBack: () -> Unit,
     onResult: () -> Unit,
     onRename: (String) -> Unit,
-    onAddItem: (String, String, String?) -> Unit,
-    onEditItem: (String, String, String, String?) -> Unit,
+    onAddItem: (String, String, String?, Boolean, Int?) -> Unit,
+    onEditItem: (String, String, String, String?, Boolean, Int?) -> Unit,
     onDeleteItem: (String) -> Unit,
     onRestoreItem: (String) -> Unit,
     onPermanentlyDeleteItem: (String) -> Unit,
@@ -569,15 +684,30 @@ private fun ChecklistDetailScreen(
     }
 
     if (addingItem) {
-        ItemEditDialog(null, checklist.groups, { addingItem = false }) { name, note, groupId ->
-            onAddItem(name, note, groupId)
+        ItemEditDialog(null, checklist.groups, { addingItem = false }) {
+                name, note, groupId, notificationEnabled, scheduledTimeMinutes ->
+            onAddItem(
+                name,
+                note,
+                groupId,
+                notificationEnabled,
+                scheduledTimeMinutes
+            )
             addingItem = false
         }
     }
 
     editingItem?.let { item ->
-        ItemEditDialog(item, checklist.groups, { editingItem = null }) { name, note, groupId ->
-            onEditItem(item.id, name, note, groupId)
+        ItemEditDialog(item, checklist.groups, { editingItem = null }) {
+                name, note, groupId, notificationEnabled, scheduledTimeMinutes ->
+            onEditItem(
+                item.id,
+                name,
+                note,
+                groupId,
+                notificationEnabled,
+                scheduledTimeMinutes
+            )
             editingItem = null
         }
     }
@@ -719,6 +849,24 @@ private fun DetailChecklistRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                if (item.notificationEnabled && item.scheduledTimeMinutes != null) {
+                    val context = LocalContext.current
+                    val past = ChecklistNotificationManager.scheduledEpochMillis(
+                        item.scheduledTimeMinutes
+                    ) == null
+                    val deliveryUnavailable =
+                        !ChecklistNotificationManager.notificationsEnabled(context)
+
+                    Text(
+                        buildString {
+                            append("알림 ${formatChecklistTime(item.scheduledTimeMinutes)}")
+                            if (past) append(" · 지난 시각")
+                            else if (deliveryUnavailable) append(" · 현재 알림 사용 불가")
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
             if (!assignmentMode) {
                 TextButton(onClick = onEdit) { Text("편집") }
@@ -747,7 +895,16 @@ private fun CompactChecklistRow(
         Text("${index + 1}.", fontWeight = FontWeight.Bold, modifier = Modifier.width(32.dp))
         Column(Modifier.weight(1f)) {
             Text(item.name, fontWeight = FontWeight.SemiBold, maxLines = 1)
-            Text(groupName, style = MaterialTheme.typography.labelSmall)
+            Text(
+                buildString {
+                    append(groupName)
+                    if (item.notificationEnabled && item.scheduledTimeMinutes != null) {
+                        append(" · ")
+                        append(formatChecklistTime(item.scheduledTimeMinutes))
+                    }
+                },
+                style = MaterialTheme.typography.labelSmall
+            )
         }
         CompactStatusButton(
             text = when (item.status) {
@@ -889,32 +1046,127 @@ private fun ItemEditDialog(
     item: ChecklistItem?,
     groups: List<ChecklistGroup>,
     onDismiss: () -> Unit,
-    onConfirm: (String, String, String?) -> Unit
+    onConfirm: (String, String, String?, Boolean, Int?) -> Unit
 ) {
     var name by remember { mutableStateOf(item?.name ?: "") }
     var note by remember { mutableStateOf(item?.note ?: "") }
     var groupId by remember { mutableStateOf(item?.groupId) }
+    var notificationEnabled by remember {
+        mutableStateOf(item?.notificationEnabled ?: false)
+    }
+    var timeRaw by remember {
+        mutableStateOf(
+            item?.scheduledTimeMinutes?.let(::formatChecklistTimeRaw) ?: ""
+        )
+    }
+    var error by remember { mutableStateOf("") }
+
+    val parsedTime = parseChecklistTime(timeRaw)
+    val isPast = notificationEnabled &&
+        parsedTime != null &&
+        ChecklistNotificationManager.scheduledEpochMillis(parsedTime) == null
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (item == null) "항목 추가" else "항목 편집") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(name, { name = it }, label = { Text("항목명") })
-                OutlinedTextField(note, { note = it }, label = { Text("비고") })
-
-                Text("그룹")
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    FilterChip(
-                        selected = groupId == null,
-                        onClick = { groupId = null },
-                        label = { Text("미지정") }
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 520.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                item {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("항목명") },
+                        modifier = Modifier.fillMaxWidth()
                     )
-                    groups.sortedBy { it.order }.forEach { group ->
+                }
+                item {
+                    OutlinedTextField(
+                        value = note,
+                        onValueChange = { note = it },
+                        label = { Text("비고") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    Text("그룹")
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                         FilterChip(
-                            selected = groupId == group.id,
-                            onClick = { groupId = group.id },
-                            label = { Text(group.name) }
+                            selected = groupId == null,
+                            onClick = { groupId = null },
+                            label = { Text("미지정") }
+                        )
+                        groups.sortedBy { it.order }.forEach { group ->
+                            FilterChip(
+                                selected = groupId == group.id,
+                                onClick = { groupId = group.id },
+                                label = { Text(group.name) }
+                            )
+                        }
+                    }
+                }
+                item {
+                    HorizontalDivider()
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("알림", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                if (notificationEnabled) "지정 시각 알림 사용" else "알림 사용 안 함",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = notificationEnabled,
+                            onCheckedChange = {
+                                notificationEnabled = it
+                                error = ""
+                            }
+                        )
+                    }
+                }
+                if (notificationEnabled) {
+                    item {
+                        OutlinedTextField(
+                            value = timeRaw,
+                            onValueChange = {
+                                timeRaw = it.take(5)
+                                error = ""
+                            },
+                            label = { Text("예정시각") },
+                            supportingText = {
+                                Text("HHMM 입력 · 예: 1530")
+                            },
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Number
+                            ),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    if (isPast) {
+                        item {
+                            Text(
+                                "지난 시각입니다. 알림이 예약되지 않습니다.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
+
+                if (error.isNotBlank()) {
+                    item {
+                        Text(
+                            error,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
                         )
                     }
                 }
@@ -923,7 +1175,23 @@ private fun ItemEditDialog(
         confirmButton = {
             TextButton(
                 enabled = name.trim().isNotEmpty(),
-                onClick = { onConfirm(name.trim(), note.trim(), groupId) }
+                onClick = {
+                    val time = parseChecklistTime(timeRaw)
+                    when {
+                        notificationEnabled && time == null -> {
+                            error = "알림을 사용하려면 올바른 시각을 입력하세요."
+                        }
+                        else -> {
+                            onConfirm(
+                                name.trim(),
+                                note.trim(),
+                                groupId,
+                                notificationEnabled,
+                                time
+                            )
+                        }
+                    }
+                }
             ) { Text("확인") }
         },
         dismissButton = {
@@ -931,6 +1199,21 @@ private fun ItemEditDialog(
         }
     )
 }
+
+private fun parseChecklistTime(raw: String): Int? {
+    val normalized = raw.trim().replace(":", "")
+    if (normalized.length != 4 || normalized.any { !it.isDigit() }) return null
+    val hour = normalized.substring(0, 2).toIntOrNull() ?: return null
+    val minute = normalized.substring(2, 4).toIntOrNull() ?: return null
+    if (hour !in 0..23 || minute !in 0..59) return null
+    return hour * 60 + minute
+}
+
+private fun formatChecklistTime(minutes: Int): String =
+    "%02d:%02d".format(minutes / 60, minutes % 60)
+
+private fun formatChecklistTimeRaw(minutes: Int): String =
+    "%02d%02d".format(minutes / 60, minutes % 60)
 
 private val GROUP_COLORS = listOf(
     "#6750A4", "#2E7D32", "#1565C0", "#C62828",

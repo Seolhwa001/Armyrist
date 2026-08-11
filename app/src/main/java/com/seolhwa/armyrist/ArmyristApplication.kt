@@ -2,6 +2,7 @@ package com.seolhwa.armyrist
 
 import android.app.Application
 import com.seolhwa.armyrist.data.CountingRepository
+import com.seolhwa.armyrist.notification.ChecklistNotificationManager
 import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
 
 class ArmyristApplication : Application() {
@@ -14,10 +15,10 @@ class ArmyristApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        // Stage 1 repository is intentionally preserved exactly as the existing source of truth.
         repository = CountingRepository(this)
-
-        // Stage 2 domains use a separate local store so Stage 1 data is never destructively migrated.
         coreSuiteRepository = CoreSuiteRepository(this)
+
+        ChecklistNotificationManager.createChannel(this)
+        ChecklistNotificationManager.reconcile(this, coreSuiteRepository)
     }
 }

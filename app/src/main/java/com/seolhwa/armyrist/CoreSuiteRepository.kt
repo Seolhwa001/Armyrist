@@ -53,6 +53,10 @@ class CoreSuiteRepository(context: Context) {
         require(next.groups.all { it.name.trim().isNotEmpty() })
         require(next.items.all { it.name.trim().isNotEmpty() })
         require(next.deletedItems.all { it.name.trim().isNotEmpty() })
+        require(next.items.all { item ->
+            !item.notificationEnabled ||
+                (item.scheduledTimeMinutes != null && item.scheduledTimeMinutes in 0..1439)
+        })
 
         val groupIds = next.groups.map { it.id }.toSet()
         require(next.items.all {
@@ -83,7 +87,9 @@ class CoreSuiteRepository(context: Context) {
         checklistId: String,
         name: String,
         note: String = "",
-        groupId: String? = null
+        groupId: String? = null,
+        notificationEnabled: Boolean = false,
+        scheduledTimeMinutes: Int? = null
     ): Boolean {
         val normalized = name.trim().takeIf { it.isNotEmpty() } ?: return false
         val checklist = getChecklist(checklistId) ?: return false
@@ -98,7 +104,9 @@ class CoreSuiteRepository(context: Context) {
             groupId = groupId,
             order = order,
             name = normalized,
-            note = note.trim()
+            note = note.trim(),
+            notificationEnabled = notificationEnabled,
+            scheduledTimeMinutes = scheduledTimeMinutes
         )
 
         return updateChecklist(checklistId) {
@@ -112,7 +120,9 @@ class CoreSuiteRepository(context: Context) {
         itemId: String,
         name: String,
         note: String,
-        groupId: String?
+        groupId: String?,
+        notificationEnabled: Boolean = false,
+        scheduledTimeMinutes: Int? = null
     ): Boolean {
         val normalized = name.trim().takeIf { it.isNotEmpty() } ?: return false
         val checklist = getChecklist(checklistId) ?: return false
@@ -128,7 +138,9 @@ class CoreSuiteRepository(context: Context) {
                         it.copy(
                             name = normalized,
                             note = note.trim(),
-                            groupId = groupId
+                            groupId = groupId,
+                            notificationEnabled = notificationEnabled,
+                            scheduledTimeMinutes = scheduledTimeMinutes
                         )
                     } else it
                 }
@@ -560,6 +572,8 @@ class CoreSuiteRepository(context: Context) {
                             .put("name", item.name)
                             .put("status", item.status.name)
                             .put("note", item.note)
+                            .put("notificationEnabled", item.notificationEnabled)
+                            .put("scheduledTimeMinutes", item.scheduledTimeMinutes ?: JSONObject.NULL)
                     )
                 }
             })
@@ -574,6 +588,8 @@ class CoreSuiteRepository(context: Context) {
                             .put("name", item.name)
                             .put("status", item.status.name)
                             .put("note", item.note)
+                            .put("notificationEnabled", item.notificationEnabled)
+                            .put("scheduledTimeMinutes", item.scheduledTimeMinutes ?: JSONObject.NULL)
                     )
                 }
             })
@@ -609,7 +625,10 @@ class CoreSuiteRepository(context: Context) {
                     status = ChecklistStatus.valueOf(
                         item.getString("status")
                     ),
-                    note = item.optString("note", "")
+                    note = item.optString("note", ""),
+                    notificationEnabled = item.optBoolean("notificationEnabled", false),
+                    scheduledTimeMinutes = if (item.isNull("scheduledTimeMinutes")) null
+                    else item.optInt("scheduledTimeMinutes")
                 )
             },
             deletedItems = List(deletedItems.length()) { index ->
@@ -624,7 +643,10 @@ class CoreSuiteRepository(context: Context) {
                     status = ChecklistStatus.valueOf(
                         item.getString("status")
                     ),
-                    note = item.optString("note", "")
+                    note = item.optString("note", ""),
+                    notificationEnabled = item.optBoolean("notificationEnabled", false),
+                    scheduledTimeMinutes = if (item.isNull("scheduledTimeMinutes")) null
+                    else item.optInt("scheduledTimeMinutes")
                 )
             },
             createdAt = value.getLong("createdAt"),
