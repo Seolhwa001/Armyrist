@@ -157,9 +157,9 @@ class PortableTransferActivity : ComponentActivity() {
                                         }
                                     }
                                 },
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
-                                shape = ArmyristPanelShape
-                            ) { Text("파일 생성", fontWeight = FontWeight.Bold) }
+                                modifier = Modifier.fillMaxWidth(),
+                                primary = true
+                            )
                         }
                     }
                 }
