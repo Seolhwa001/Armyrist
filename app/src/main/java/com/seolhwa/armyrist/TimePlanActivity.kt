@@ -312,12 +312,12 @@ private fun generateTimePlanResultWithDurations(
         }
 
         if (index < ordered.lastIndex) {
-            val leftAbsolute = derived.absoluteMinutes[index]
-            val rightAbsolute = derived.absoluteMinutes[index + 1]
+            val leftAbsolute = derived[index].absoluteMinute
+            val rightAbsolute = derived[index + 1].absoluteMinute
             val duration = rightAbsolute - leftAbsolute
             val label = intervalLabel(point.id).trim().ifEmpty { "경과" }
 
-            lines += "  ${label} ${TimePlanRules.formatDuration(duration)}"
+            lines += "  ${label} ${formatDuration(duration)}"
         }
     }
 
@@ -329,7 +329,7 @@ private fun generateTimePlanResultWithDurations(
 
     return ToolResult(
         title = plan.title,
-        body = lines.joinToString("\\n")
+        body = lines.joinToString("\n")
     )
 }
 
