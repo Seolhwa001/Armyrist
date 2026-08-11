@@ -301,7 +301,6 @@ object ArmyristPortableDataManager {
         backup: ValidatedBackup
     ): PortableResult<Unit> {
         return runCatching {
-            // Re-validate before any mutation.
             val counting = JSONObject(backup.countingSnapshot)
             val core = JSONObject(backup.coreSnapshot)
             validateCountingSnapshot(counting)
@@ -321,18 +320,9 @@ object ArmyristPortableDataManager {
                 readStringMap(context, TIMEPLAN_LABEL_PREFS)
 
             val oldObject = JSONObject()
-                .put(
-                    "counting",
-                    oldCounting ?: JSONObject.NULL
-                )
-                .put(
-                    "core",
-                    oldCore ?: JSONObject.NULL
-                )
-                .put(
-                    "intervalLabels",
-                    JSONObject(oldLabels as Map<*, *>)
-                )
+                .put("counting", oldCounting ?: JSONObject.NULL)
+                .put("core", oldCore ?: JSONObject.NULL)
+                .put("intervalLabels", JSONObject(oldLabels as Map<*, *>))
 
             val journal = JSONObject()
                 .put("status", "PREPARED")
@@ -356,10 +346,7 @@ object ArmyristPortableDataManager {
                         COUNTING_PREFS,
                         Context.MODE_PRIVATE
                     ).edit()
-                        .putString(
-                            COUNTING_KEY,
-                            backup.countingSnapshot
-                        )
+                        .putString(COUNTING_KEY, backup.countingSnapshot)
                         .commit()
                 )
 
@@ -368,10 +355,7 @@ object ArmyristPortableDataManager {
                         CORE_PREFS,
                         Context.MODE_PRIVATE
                     ).edit()
-                        .putString(
-                            CORE_KEY,
-                            backup.coreSnapshot
-                        )
+                        .putString(CORE_KEY, backup.coreSnapshot)
                         .commit()
                 )
 
@@ -388,9 +372,7 @@ object ArmyristPortableDataManager {
                 success = true
             } finally {
                 if (success) {
-                    journalPrefs.edit()
-                        .remove(JOURNAL_KEY)
-                        .commit()
+                    journalPrefs.edit().remove(JOURNAL_KEY).commit()
                 } else {
                     recoverInterruptedRestore(context)
                 }
@@ -412,7 +394,7 @@ object ArmyristPortableDataManager {
         payloadBytes: ByteArray,
         password: CharArray?
     ): ByteArray {
-        val encrypted = !password.isNullOrEmpty()
+        val encrypted = password != null && password.isNotEmpty()
 
         val encryptionMetadata: JSONObject
         val outputPayload: ByteArray
@@ -421,17 +403,9 @@ object ArmyristPortableDataManager {
         if (encrypted) {
             val salt = ByteArray(16).also(secureRandom::nextBytes)
             val iv = ByteArray(12).also(secureRandom::nextBytes)
-            val key = deriveKey(
-                password = password!!,
-                salt = salt,
-                iterations = KDF_ITERATIONS
-            )
+            val key = deriveKey(password = password!!, salt = salt, iterations = KDF_ITERATIONS)
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(
-                Cipher.ENCRYPT_MODE,
-                key,
-                GCMParameterSpec(GCM_TAG_BITS, iv)
-            )
+            cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, iv))
             outputPayload = cipher.doFinal(payloadBytes)
             payloadHash = null
 
@@ -440,50 +414,24 @@ object ArmyristPortableDataManager {
                 .put("algorithm", "AES-256-GCM")
                 .put("kdf", "PBKDF2-HMAC-SHA256")
                 .put("kdfIterations", KDF_ITERATIONS)
-                .put(
-                    "salt",
-                    Base64.encodeToString(
-                        salt,
-                        Base64.NO_WRAP
-                    )
-                )
-                .put(
-                    "iv",
-                    Base64.encodeToString(
-                        iv,
-                        Base64.NO_WRAP
-                    )
-                )
+                .put("salt", Base64.encodeToString(salt, Base64.NO_WRAP))
+                .put("iv", Base64.encodeToString(iv, Base64.NO_WRAP))
         } else {
             outputPayload = payloadBytes
             payloadHash = sha256Hex(payloadBytes)
-            encryptionMetadata = JSONObject()
-                .put("enabled", false)
+            encryptionMetadata = JSONObject().put("enabled", false)
         }
 
         val outer = JSONObject()
             .put("formatIdentifier", FORMAT_IDENTIFIER)
             .put("formatVersion", FORMAT_VERSION)
             .put("dataType", dataType.name)
-            .put(
-                "createdAt",
-                OffsetDateTime.now().format(
-                    DateTimeFormatter.ISO_OFFSET_DATE_TIME
-                )
-            )
+            .put("createdAt", OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
             .put("encryption", encryptionMetadata)
             .put("payloadEncoding", "BASE64")
-            .put(
-                "payload",
-                Base64.encodeToString(
-                    outputPayload,
-                    Base64.NO_WRAP
-                )
-            )
+            .put("payload", Base64.encodeToString(outputPayload, Base64.NO_WRAP))
 
-        if (payloadHash != null) {
-            outer.put("payloadHash", payloadHash)
-        }
+        if (payloadHash != null) outer.put("payloadHash", payloadHash)
 
         return outer.toString().toByteArray(Charsets.UTF_8)
     }
@@ -493,38 +441,21 @@ object ArmyristPortableDataManager {
         password: CharArray,
         encryption: JSONObject
     ): ByteArray {
-        require(
-            encryption.getString("algorithm") ==
-                "AES-256-GCM"
-        )
-        require(
-            encryption.getString("kdf") ==
-                "PBKDF2-HMAC-SHA256"
-        )
+        require(encryption.getString("algorithm") == "AES-256-GCM")
+        require(encryption.getString("kdf") == "PBKDF2-HMAC-SHA256")
 
-        val iterations =
-            encryption.getInt("kdfIterations")
+        val iterations = encryption.getInt("kdfIterations")
         require(iterations > 0)
 
-        val salt = Base64.decode(
-            encryption.getString("salt"),
-            Base64.NO_WRAP
-        )
-        val iv = Base64.decode(
-            encryption.getString("iv"),
-            Base64.NO_WRAP
-        )
+        val salt = Base64.decode(encryption.getString("salt"), Base64.NO_WRAP)
+        val iv = Base64.decode(encryption.getString("iv"), Base64.NO_WRAP)
 
         require(salt.size >= 16)
         require(iv.isNotEmpty())
 
         val key = deriveKey(password, salt, iterations)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(
-            Cipher.DECRYPT_MODE,
-            key,
-            GCMParameterSpec(GCM_TAG_BITS, iv)
-        )
+        cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, iv))
         return cipher.doFinal(ciphertext)
     }
 
@@ -533,41 +464,20 @@ object ArmyristPortableDataManager {
         salt: ByteArray,
         iterations: Int
     ): SecretKeySpec {
-        val factory = SecretKeyFactory.getInstance(
-            "PBKDF2WithHmacSHA256"
-        )
-        val spec = PBEKeySpec(
-            password,
-            salt,
-            iterations,
-            KEY_BITS
-        )
+        val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+        val spec = PBEKeySpec(password, salt, iterations, KEY_BITS)
         return try {
-            SecretKeySpec(
-                factory.generateSecret(spec).encoded,
-                "AES"
-            )
+            SecretKeySpec(factory.generateSecret(spec).encoded, "AES")
         } finally {
             spec.clearPassword()
         }
     }
 
     private fun validateOuterMetadata(outer: JSONObject) {
-        require(
-            outer.getString("formatIdentifier") ==
-                FORMAT_IDENTIFIER
-        )
-        require(
-            outer.getInt("formatVersion") ==
-                FORMAT_VERSION
-        )
-        ArmyristPortableDataType.valueOf(
-            outer.getString("dataType")
-        )
-        require(
-            outer.getString("payloadEncoding") ==
-                "BASE64"
-        )
+        require(outer.getString("formatIdentifier") == FORMAT_IDENTIFIER)
+        require(outer.getInt("formatVersion") == FORMAT_VERSION)
+        ArmyristPortableDataType.valueOf(outer.getString("dataType"))
+        require(outer.getString("payloadEncoding") == "BASE64")
         require(outer.has("createdAt"))
         require(outer.has("encryption"))
         require(outer.has("payload"))
@@ -575,231 +485,139 @@ object ArmyristPortableDataManager {
 
     private fun validateCountingSnapshot(root: JSONObject) {
         val sheets = root.optJSONArray("sheets") ?: JSONArray()
-
         for (i in 0 until sheets.length()) {
             val sheet = sheets.getJSONObject(i)
-            require(
-                sheet.optString("title").trim().isNotEmpty()
-            )
+            require(sheet.optString("title").trim().isNotEmpty())
 
-            val groups =
-                sheet.optJSONArray("groups") ?: JSONArray()
+            val groups = sheet.optJSONArray("groups") ?: JSONArray()
             val groupIds = mutableSetOf<String>()
             for (g in 0 until groups.length()) {
                 val group = groups.getJSONObject(g)
                 val id = group.getString("id")
                 require(id.isNotBlank())
-                require(
-                    group.optString("name").trim().isNotEmpty()
-                )
+                require(group.optString("name").trim().isNotEmpty())
                 groupIds += id
             }
 
-            val items =
-                sheet.optJSONArray("items") ?: JSONArray()
+            val items = sheet.optJSONArray("items") ?: JSONArray()
             for (j in 0 until items.length()) {
                 val item = items.getJSONObject(j)
                 require(item.getInt("quantity") >= 0)
-                require(
-                    item.optString("name").trim().isNotEmpty()
-                )
-                require(
-                    item.optString("unit").trim().isNotEmpty()
-                )
+                require(item.optString("name").trim().isNotEmpty())
+                require(item.optString("unit").trim().isNotEmpty())
                 if (!item.isNull("groupId")) {
-                    require(
-                        item.getString("groupId") in groupIds
-                    )
+                    require(item.getString("groupId") in groupIds)
                 }
             }
 
-            val calculations =
-                sheet.optJSONArray("calculations") ?: JSONArray()
+            val calculations = sheet.optJSONArray("calculations") ?: JSONArray()
             for (c in 0 until calculations.length()) {
                 val calc = calculations.getJSONObject(c)
-                require(
-                    calc.getString("leftGroupId") in groupIds
-                )
-                require(
-                    calc.getString("rightGroupId") in groupIds
-                )
-                require(
-                    calc.getString("operator") in
-                        setOf("ADD", "SUBTRACT")
-                )
+                require(calc.getString("leftGroupId") in groupIds)
+                require(calc.getString("rightGroupId") in groupIds)
+                require(calc.getString("operator") in setOf("ADD", "SUBTRACT"))
             }
         }
     }
 
     private fun validateCoreSnapshot(root: JSONObject) {
-        val checklists =
-            root.optJSONArray("checklists") ?: JSONArray()
+        val checklists = root.optJSONArray("checklists") ?: JSONArray()
         for (i in 0 until checklists.length()) {
             val checklist = checklists.getJSONObject(i)
-            require(
-                checklist.optString("title").trim().isNotEmpty()
-            )
+            require(checklist.optString("title").trim().isNotEmpty())
 
-            val groups =
-                checklist.optJSONArray("groups") ?: JSONArray()
+            val groups = checklist.optJSONArray("groups") ?: JSONArray()
             val groupIds = mutableSetOf<String>()
             for (g in 0 until groups.length()) {
                 val group = groups.getJSONObject(g)
-                require(
-                    group.optString("name").trim().isNotEmpty()
-                )
+                require(group.optString("name").trim().isNotEmpty())
                 groupIds += group.getString("id")
             }
 
-            val items =
-                checklist.optJSONArray("items") ?: JSONArray()
-            validateChecklistItems(items, groupIds)
-
-            val deleted =
-                checklist.optJSONArray("deletedItems") ?: JSONArray()
-            validateChecklistItems(deleted, groupIds)
+            validateChecklistItems(checklist.optJSONArray("items") ?: JSONArray(), groupIds)
+            validateChecklistItems(checklist.optJSONArray("deletedItems") ?: JSONArray(), groupIds)
         }
 
-        val timePlans =
-            root.optJSONArray("timePlans") ?: JSONArray()
+        val timePlans = root.optJSONArray("timePlans") ?: JSONArray()
         for (i in 0 until timePlans.length()) {
             val plan = timePlans.getJSONObject(i)
-            require(
-                plan.optString("title").trim().isNotEmpty()
-            )
-            val points =
-                plan.optJSONArray("points") ?: JSONArray()
+            require(plan.optString("title").trim().isNotEmpty())
+            val points = plan.optJSONArray("points") ?: JSONArray()
             require(points.length() >= 2)
             for (p in 0 until points.length()) {
                 val point = points.getJSONObject(p)
-                require(
-                    point.optString("name").trim().isNotEmpty()
-                )
+                require(point.optString("name").trim().isNotEmpty())
                 if (!point.isNull("timeMinutes")) {
-                    require(
-                        point.getInt("timeMinutes") in 0..1439
-                    )
+                    require(point.getInt("timeMinutes") in 0..1439)
                 }
             }
         }
 
-        val templates =
-            root.optJSONArray("reportTemplates") ?: JSONArray()
+        val templates = root.optJSONArray("reportTemplates") ?: JSONArray()
         var defaultCount = 0
         for (i in 0 until templates.length()) {
             val template = templates.getJSONObject(i)
-            require(
-                template.optString("name").trim().isNotEmpty()
-            )
-            if (template.optBoolean("isDefault", false)) {
-                defaultCount++
-            }
+            require(template.optString("name").trim().isNotEmpty())
+            if (template.optBoolean("isDefault", false)) defaultCount++
         }
         require(defaultCount <= 1)
     }
 
-    private fun validateChecklistItems(
-        items: JSONArray,
-        groupIds: Set<String>
-    ) {
-        val allowed = setOf(
-            "INCOMPLETE",
-            "COMPLETE",
-            "NOT_APPLICABLE"
-        )
+    private fun validateChecklistItems(items: JSONArray, groupIds: Set<String>) {
+        val allowed = setOf("INCOMPLETE", "COMPLETE", "NOT_APPLICABLE")
         for (i in 0 until items.length()) {
             val item = items.getJSONObject(i)
-            require(
-                item.optString("name").trim().isNotEmpty()
-            )
+            require(item.optString("name").trim().isNotEmpty())
             require(item.getString("status") in allowed)
 
             if (!item.isNull("groupId")) {
-                require(
-                    item.getString("groupId") in groupIds
-                )
+                require(item.getString("groupId") in groupIds)
             }
 
-            val enabled =
-                item.optBoolean("notificationEnabled", false)
+            val enabled = item.optBoolean("notificationEnabled", false)
             if (enabled) {
-                require(
-                    !item.isNull("scheduledTimeMinutes")
-                )
-                require(
-                    item.getInt("scheduledTimeMinutes") in 0..1439
-                )
+                require(!item.isNull("scheduledTimeMinutes"))
+                require(item.getInt("scheduledTimeMinutes") in 0..1439)
             } else if (!item.isNull("scheduledTimeMinutes")) {
-                require(
-                    item.getInt("scheduledTimeMinutes") in 0..1439
-                )
+                require(item.getInt("scheduledTimeMinutes") in 0..1439)
             }
         }
     }
 
     private fun readCountingRoot(context: Context): JSONObject {
-        val raw = context.getSharedPreferences(
-            COUNTING_PREFS,
-            Context.MODE_PRIVATE
-        ).getString(COUNTING_KEY, null)
+        val raw = context.getSharedPreferences(COUNTING_PREFS, Context.MODE_PRIVATE)
+            .getString(COUNTING_KEY, null)
 
         return if (raw.isNullOrBlank()) {
-            JSONObject()
-                .put("version", 2)
-                .put("sheets", JSONArray())
-        } else {
-            JSONObject(raw)
-        }
+            JSONObject().put("version", 2).put("sheets", JSONArray())
+        } else JSONObject(raw)
     }
 
     private fun readCoreRoot(context: Context): JSONObject {
-        val raw = context.getSharedPreferences(
-            CORE_PREFS,
-            Context.MODE_PRIVATE
-        ).getString(CORE_KEY, null)
+        val raw = context.getSharedPreferences(CORE_PREFS, Context.MODE_PRIVATE)
+            .getString(CORE_KEY, null)
 
         return if (raw.isNullOrBlank()) {
             JSONObject()
                 .put("version", 1)
                 .put("checklists", JSONArray())
                 .put("timePlans", JSONArray())
-                .put(
-                    "userProfile",
-                    JSONObject().put("displayName", "")
-                )
+                .put("userProfile", JSONObject().put("displayName", ""))
                 .put("reportTemplates", JSONArray())
-        } else {
-            JSONObject(raw)
-        }
+        } else JSONObject(raw)
     }
 
-    private fun readStringMap(
-        context: Context,
-        prefsName: String
-    ): Map<String, String> {
-        val all = context.getSharedPreferences(
-            prefsName,
-            Context.MODE_PRIVATE
-        ).all
-
+    private fun readStringMap(context: Context, prefsName: String): Map<String, String> {
+        val all = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE).all
         val result = linkedMapOf<String, String>()
         all.forEach { (key, value) ->
-            if (value is String) {
-                result[key] = value
-            }
+            if (value is String) result[key] = value
         }
         return result
     }
 
-    private fun restoreStringMap(
-        context: Context,
-        prefsName: String,
-        source: JSONObject
-    ) {
-        val prefs = context.getSharedPreferences(
-            prefsName,
-            Context.MODE_PRIVATE
-        )
+    private fun restoreStringMap(context: Context, prefsName: String, source: JSONObject) {
+        val prefs = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val editor = prefs.edit().clear()
         source.keys().forEach { key ->
             editor.putString(key, source.optString(key, ""))
@@ -813,16 +631,8 @@ object ArmyristPortableDataManager {
         key: String,
         value: String?
     ) {
-        val editor = context.getSharedPreferences(
-            prefsName,
-            Context.MODE_PRIVATE
-        ).edit()
-
-        if (value == null) {
-            editor.remove(key)
-        } else {
-            editor.putString(key, value)
-        }
+        val editor = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE).edit()
+        if (value == null) editor.remove(key) else editor.putString(key, value)
         require(editor.commit())
     }
 
@@ -832,8 +642,7 @@ object ArmyristPortableDataManager {
     }
 
     private fun sha256Hex(bytes: ByteArray): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-            .digest(bytes)
+        val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
         return digest.joinToString("") { "%02x".format(it) }
     }
 }
