@@ -449,9 +449,16 @@ private fun TimePlanListScreen(
         floatingActionButton = {
             if (plans.isNotEmpty()) {
                 ExtendedFloatingActionButton(
-                    onClick = onCreate
+                    onClick = onCreate,
+                    modifier = Modifier.heightIn(min = 58.dp),
+                    shape = ArmyristPanelShape,
+                    containerColor = ArmyristColors.PrimaryControl,
+                    contentColor = ArmyristColors.OnDark
                 ) {
-                    Text("+ 새 시간계획")
+                    Text(
+                        "+ 새 시간계획",
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
@@ -865,7 +872,7 @@ private fun TimePlanDetailScreen(
                                         if (point.timeMinutes == null)
                                             MaterialTheme.colorScheme.error
                                         else
-                                            MaterialTheme.colorScheme.primary
+                                            ArmyristColors.PrimaryControl
                                 )
                             }
 
@@ -895,9 +902,7 @@ private fun TimePlanDetailScreen(
                                 }
                             },
                             color =
-                                MaterialTheme.colorScheme
-                                    .secondaryContainer
-                                    .copy(alpha = 0.45f),
+                                ArmyristColors.SecondaryControl,
                             shape =
                                 MaterialTheme.shapes.medium,
                             modifier = Modifier
@@ -940,7 +945,7 @@ private fun TimePlanDetailScreen(
                                         style =
                                             MaterialTheme.typography.labelMedium,
                                         color =
-                                            MaterialTheme.colorScheme.primary
+                                            ArmyristColors.PrimaryControl
                                     )
                                 }
                             }
@@ -953,7 +958,16 @@ private fun TimePlanDetailScreen(
                         onClick = onAddPoint,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 52.dp)
+                            .heightIn(min = 52.dp),
+                        shape = ArmyristPanelShape,
+                        border = BorderStroke(
+                            1.dp,
+                            ArmyristColors.PrimaryControl
+                        ),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = ArmyristColors.WorkSurface,
+                            contentColor = ArmyristColors.PrimaryText
+                        )
                     ) {
                         Text("+ 중도 지점 추가")
                     }
@@ -964,7 +978,15 @@ private fun TimePlanDetailScreen(
                         onClick = {
                             memoEdit = true
                         },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = ArmyristPanelShape,
+                        colors = CardDefaults.cardColors(
+                            containerColor = ArmyristColors.RaisedSurface
+                        ),
+                        border = BorderStroke(
+                            1.dp,
+                            ArmyristColors.Border
+                        )
                     ) {
                         Column(
                             Modifier.padding(14.dp)
@@ -982,7 +1004,7 @@ private fun TimePlanDetailScreen(
                                 Text(
                                     "편집",
                                     color =
-                                        MaterialTheme.colorScheme.primary
+                                        ArmyristColors.PrimaryControl
                                 )
                             }
 

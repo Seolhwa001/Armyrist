@@ -303,9 +303,17 @@ private fun SheetListScreen(
                             onClick = onCreate,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 52.dp)
+                                .heightIn(min = 54.dp),
+                            shape = ArmyristPanelShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = ArmyristColors.PrimaryControl,
+                                contentColor = ArmyristColors.OnDark
+                            )
                         ) {
-                            Text("새 실셈 만들기")
+                            Text(
+                                "새 실셈 만들기",
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }

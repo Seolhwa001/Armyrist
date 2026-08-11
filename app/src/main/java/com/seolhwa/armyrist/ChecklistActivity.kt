@@ -409,8 +409,17 @@ private fun ChecklistListScreen(
         },
         floatingActionButton = {
             if (checklists.isNotEmpty()) {
-                ExtendedFloatingActionButton(onClick = onCreate) {
-                    Text("+ 새 체크리스트")
+                ExtendedFloatingActionButton(
+                    onClick = onCreate,
+                    modifier = Modifier.heightIn(min = 58.dp),
+                    shape = ArmyristPanelShape,
+                    containerColor = ArmyristColors.PrimaryControl,
+                    contentColor = ArmyristColors.OnDark
+                ) {
+                    Text(
+                        "+ 새 체크리스트",
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
@@ -650,23 +659,80 @@ private fun ChecklistDetailScreen(
                         }
                     }
                     Spacer(Modifier.weight(1f))
-                    SingleChoiceSegmentedButtonRow {
-                        SegmentedButton(
-                            selected = viewMode == ChecklistViewMode.DETAIL,
-                            onClick = { viewMode = ChecklistViewMode.DETAIL },
-                            shape = SegmentedButtonDefaults.itemShape(0, 2)
-                        ) { Text("자세히") }
-                        SegmentedButton(
-                            selected = viewMode == ChecklistViewMode.COMPACT,
-                            onClick = { viewMode = ChecklistViewMode.COMPACT },
-                            shape = SegmentedButtonDefaults.itemShape(1, 2)
-                        ) { Text("간략히") }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        val detailSelected =
+                            viewMode == ChecklistViewMode.DETAIL
+                        val compactSelected =
+                            viewMode == ChecklistViewMode.COMPACT
+
+                        OutlinedButton(
+                            onClick = {
+                                viewMode = ChecklistViewMode.DETAIL
+                            },
+                            shape = ArmyristPanelShape,
+                            border = BorderStroke(
+                                1.dp,
+                                if (detailSelected) {
+                                    ArmyristColors.PrimaryControl
+                                } else {
+                                    ArmyristColors.Border
+                                }
+                            ),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor =
+                                    if (detailSelected) {
+                                        ArmyristColors.SecondaryControl
+                                    } else {
+                                        ArmyristColors.WorkSurface
+                                    },
+                                contentColor = ArmyristColors.PrimaryText
+                            ),
+                            contentPadding = PaddingValues(
+                                horizontal = 12.dp,
+                                vertical = 6.dp
+                            )
+                        ) {
+                            Text("자세히")
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                viewMode = ChecklistViewMode.COMPACT
+                            },
+                            shape = ArmyristPanelShape,
+                            border = BorderStroke(
+                                1.dp,
+                                if (compactSelected) {
+                                    ArmyristColors.PrimaryControl
+                                } else {
+                                    ArmyristColors.Border
+                                }
+                            ),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor =
+                                    if (compactSelected) {
+                                        ArmyristColors.SecondaryControl
+                                    } else {
+                                        ArmyristColors.WorkSurface
+                                    },
+                                contentColor = ArmyristColors.PrimaryText
+                            ),
+                            contentPadding = PaddingValues(
+                                horizontal = 12.dp,
+                                vertical = 6.dp
+                            )
+                        ) {
+                            Text("간략히")
+                        }
                     }
                 }
             } else {
                 Surface(
-                    color = assignmentGroup?.let { parseColor(it.color).copy(alpha = 0.14f) }
-                        ?: MaterialTheme.colorScheme.secondaryContainer,
+                    color = assignmentGroup?.let {
+                        parseColor(it.color).copy(alpha = 0.14f)
+                    } ?: ArmyristColors.SecondaryControl,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
