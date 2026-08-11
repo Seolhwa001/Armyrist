@@ -7,14 +7,21 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -77,13 +84,14 @@ private fun ArmyristApp(repo: CountingRepository) {
                     onIncrement = { repo.increment(sheet.id, it); refresh() },
                     onDecrement = { repo.decrement(sheet.id, it); refresh() },
                     onQuantity = { itemId, q -> if (repo.setQuantity(sheet.id, itemId, q)) refresh() },
-                    onMove = { itemId, d -> repo.moveItem(sheet.id, itemId, d); refresh() }
+                    onMove = { itemId, d -> repo.moveItem(sheet.id, itemId, d); refresh() },
+                    onAssignGroup = { ids, gid -> if (repo.assignItemsToGroup(sheet.id, ids, gid)) refresh() }
                 )
                 Screen.GROUPS -> GroupScreen(
                     sheet = sheet,
                     onBack = { screen = Screen.COUNTING },
-                    onAdd = { if (repo.addGroup(sheet.id, it)) refresh() },
-                    onRename = { gid, n -> if (repo.renameGroup(sheet.id, gid, n)) refresh() },
+                    onAdd = { n, c -> if (repo.addGroup(sheet.id, n, c)) refresh() },
+                    onRename = { gid, n, c -> if (repo.renameGroup(sheet.id, gid, n, c)) refresh() },
                     onDelete = { repo.deleteGroup(sheet.id, it); refresh() }
                 )
                 Screen.CALCULATIONS -> CalculationScreen(
@@ -228,7 +236,8 @@ private fun CountingScreen(
     onIncrement: (String) -> Unit,
     onDecrement: (String) -> Unit,
     onQuantity: (String, Int) -> Unit,
-    onMove: (String, Int) -> Unit
+    onMove: (String, Int) -> Unit,
+    onAssignGroup: (Set<String>, String?) -> Unit
 ) {
     var itemEditor by remember { mutableStateOf<CountingItem?>(null) }
     var creating by remember { mutableStateOf(false) }
@@ -237,13 +246,19 @@ private fun CountingScreen(
     var titleEdit by remember { mutableStateOf(false) }
     var memoEdit by remember { mutableStateOf(false) }
     var menuTarget by remember { mutableStateOf<CountingItem?>(null) }
+    var groupAssign by remember { mutableStateOf(false) }
+
+    BackHandler { onBack() }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Column {
-                        Text(sheet.title, fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(sheet.title, fontWeight = FontWeight.Bold)
+                            TextButton(onClick = { titleEdit = true }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("✎") }
+                        }
                         Text(
                             "항목 ${sheet.items.size} · 자동 저장",
                             style = MaterialTheme.typography.labelSmall,
@@ -269,9 +284,9 @@ private fun CountingScreen(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 AssistChip(onClick = onGroups, label = { Text("그룹") })
+                AssistChip(onClick = { groupAssign = true }, label = { Text("그룹 지정") })
                 AssistChip(onClick = onCalculations, label = { Text("계산") })
                 AssistChip(onClick = { memoEdit = true }, label = { Text("메모") })
-                AssistChip(onClick = { titleEdit = true }, label = { Text("제목") })
             }
 
             HorizontalDivider()
@@ -295,7 +310,7 @@ private fun CountingScreen(
                     contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 96.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    items(sheet.items.sortedBy { it.order }, key = { it.id }) { item ->
+                    itemsIndexed(sheet.items.sortedBy { it.order }, key = { _, item -> item.id }) { index, item ->
                         val group = sheet.groups.firstOrNull { it.id == item.groupId }?.name ?: "미지정"
 
                         Card(
@@ -306,6 +321,12 @@ private fun CountingScreen(
                                 Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                                val groupColor = sheet.groups.firstOrNull { it.id == item.groupId }?.color
+                                if (groupColor != null) {
+                                    Box(Modifier.width(5.dp).height(46.dp).background(parseColor(groupColor), CircleShape))
+                                    Spacer(Modifier.width(8.dp))
+                                }
+                                Text("${index + 1}.", fontWeight = FontWeight.Bold, modifier = Modifier.width(34.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(
                                         item.name,
@@ -417,6 +438,13 @@ private fun CountingScreen(
         ConfirmDialog("항목 삭제", "'${item.name}' 항목만 삭제합니다.") {
             deleteTarget = null
             if (it) onDeleteItem(item.id)
+        }
+    }
+
+    if (groupAssign) {
+        GroupAssignmentDialog(sheet) { ids, gid ->
+            groupAssign = false
+            if (ids != null) onAssignGroup(ids, gid)
         }
     }
 
@@ -650,13 +678,15 @@ private fun QuantityDialog(
 private fun GroupScreen(
     sheet: CountingSheet,
     onBack: () -> Unit,
-    onAdd: (String) -> Unit,
-    onRename: (String, String) -> Unit,
+    onAdd: (String, String) -> Unit,
+    onRename: (String, String, String) -> Unit,
     onDelete: (String) -> Unit
 ) {
     var create by remember { mutableStateOf(false) }
     var rename by remember { mutableStateOf<CountingGroup?>(null) }
     var delete by remember { mutableStateOf<CountingGroup?>(null) }
+
+    BackHandler { onBack() }
 
     Scaffold(
         topBar = {
@@ -687,6 +717,8 @@ private fun GroupScreen(
                             Modifier.fillMaxWidth().padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Box(Modifier.size(18.dp).background(parseColor(g.color), CircleShape))
+                            Spacer(Modifier.width(10.dp))
                             Text(g.name, Modifier.weight(1f), fontWeight = FontWeight.Bold)
                             TextButton(onClick = { rename = g }) { Text("이름 변경") }
                             TextButton(onClick = { delete = g }) { Text("삭제") }
@@ -698,16 +730,16 @@ private fun GroupScreen(
     }
 
     if (create) {
-        TextInputDialog("그룹 추가", "", "그룹명을 입력하세요.") {
+        GroupEditDialog("그룹 추가", "", "#6750A4") { name, color ->
             create = false
-            if (it != null && it.trim().isNotEmpty()) onAdd(it)
+            if (name != null) onAdd(name, color)
         }
     }
 
     rename?.let { g ->
-        TextInputDialog("그룹 이름 변경", g.name, "그룹명을 입력하세요.") {
+        GroupEditDialog("그룹 편집", g.name, g.color) { name, color ->
             rename = null
-            if (it != null && it.trim().isNotEmpty()) onRename(g.id, it)
+            if (name != null) onRename(g.id, name, color)
         }
     }
 
@@ -983,6 +1015,53 @@ private fun ResultScreen(
             }
         }
     }
+}
+
+
+private val GROUP_COLORS = listOf("#6750A4", "#006C4C", "#9C4238", "#0061A4", "#7D5260", "#6B5E00", "#725188", "#3F6374")
+
+private fun parseColor(hex: String): Color = runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrDefault(Color(0xFF6750A4))
+
+@Composable
+private fun GroupEditDialog(title: String, initialName: String, initialColor: String, done: (String?, String) -> Unit) {
+    var name by remember { mutableStateOf(initialName) }
+    var color by remember { mutableStateOf(initialColor) }
+    var error by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = { done(null, color) }, title = { Text(title) },
+        text = { Column { OutlinedTextField(name, { name = it }, label = { Text("그룹명") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(14.dp)); Text("그룹 색상")
+            Spacer(Modifier.height(8.dp)); Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { GROUP_COLORS.take(4).forEach { c -> ColorDot(c, color == c) { color = c } } }
+            Spacer(Modifier.height(8.dp)); Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { GROUP_COLORS.drop(4).forEach { c -> ColorDot(c, color == c) { color = c } } }
+            if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
+        } },
+        confirmButton = { TextButton(onClick = { if (name.trim().isEmpty()) error = "그룹명을 입력하세요." else done(name.trim(), color) }) { Text("확인") } },
+        dismissButton = { TextButton(onClick = { done(null, color) }) { Text("취소") } }
+    )
+}
+
+@Composable private fun ColorDot(color: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(modifier = Modifier.size(if (selected) 38.dp else 34.dp).clickable(onClick = onClick), shape = CircleShape, color = parseColor(color), tonalElevation = if (selected) 6.dp else 0.dp) { if (selected) Box(contentAlignment = Alignment.Center) { Text("✓", color = Color.White) } }
+}
+
+@Composable
+private fun GroupAssignmentDialog(sheet: CountingSheet, done: (Set<String>?, String?) -> Unit) {
+    var groupId by remember { mutableStateOf<String?>(sheet.groups.firstOrNull()?.id) }
+    var selected by remember { mutableStateOf(setOf<String>()) }
+    AlertDialog(
+        onDismissRequest = { done(null, null) },
+        title = { Text("그룹 지정") },
+        text = { Column {
+            if (sheet.groups.isEmpty()) Text("먼저 그룹을 생성하세요.") else {
+                Text("1. 배치할 그룹 선택", fontWeight = FontWeight.Bold)
+                sheet.groups.sortedBy { it.order }.forEach { g -> Row(Modifier.fillMaxWidth().clickable { groupId = g.id }.padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) { RadioButton(groupId == g.id, { groupId = g.id }); Box(Modifier.size(14.dp).background(parseColor(g.color), CircleShape)); Spacer(Modifier.width(8.dp)); Text(g.name) } }
+                HorizontalDivider(); Spacer(Modifier.height(8.dp)); Text("2. 항목 선택", fontWeight = FontWeight.Bold)
+                LazyColumn(Modifier.heightIn(max = 320.dp)) { items(sheet.items.sortedBy { it.order }) { item -> val checked = item.id in selected; Row(Modifier.fillMaxWidth().clickable { selected = if (checked) selected - item.id else selected + item.id }.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) { Checkbox(checked, { v -> selected = if (v) selected + item.id else selected - item.id }); Text("${item.order + 1}. ${item.name}") } } }
+            }
+        } },
+        confirmButton = { TextButton(enabled = groupId != null && selected.isNotEmpty(), onClick = { done(selected, groupId) }) { Text("확인") } },
+        dismissButton = { TextButton(onClick = { done(null, null) }) { Text("취소") } }
+    )
 }
 
 @Composable
