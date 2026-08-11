@@ -31,8 +31,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.zIndex
 import com.seolhwa.armyrist.data.CountingRepository
 import com.seolhwa.armyrist.domain.*
+import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -199,6 +202,12 @@ private fun SheetListScreen(
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                },
+                navigationIcon = {
+                    val activity = LocalContext.current as? ComponentActivity
+                    TextButton(onClick = { activity?.finish() }) {
+                        Text("‹ 홈")
                     }
                 }
             )
@@ -495,6 +504,12 @@ private fun CountingScreen(
                     var dragAccumulatedY by remember(item.id) {
                         mutableFloatStateOf(0f)
                     }
+                    var dragVisualY by remember(item.id) {
+                        mutableFloatStateOf(0f)
+                    }
+                    var isDragging by remember(item.id) {
+                        mutableStateOf(false)
+                    }
 
                     val baseColor = currentGroup
                         ?.let { parseColor(it.color).copy(alpha = 0.12f) }
@@ -511,31 +526,42 @@ private fun CountingScreen(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
+                            .zIndex(if (isDragging) 1f else 0f)
+                            .offset { IntOffset(0, dragVisualY.roundToInt()) }
                             .pointerInput(item.id, assignmentMode) {
                                 if (!assignmentMode) {
                                     detectDragGesturesAfterLongPress(
                                         onDragStart = {
                                             dragAccumulatedY = 0f
+                                            dragVisualY = 0f
+                                            isDragging = true
                                             hapticFeedback.performHapticFeedback(
                                                 HapticFeedbackType.LongPress
                                             )
                                         },
                                         onDragCancel = {
                                             dragAccumulatedY = 0f
+                                            dragVisualY = 0f
+                                            isDragging = false
                                         },
                                         onDragEnd = {
                                             dragAccumulatedY = 0f
+                                            dragVisualY = 0f
+                                            isDragging = false
                                         },
                                         onDrag = { change, dragAmount ->
                                             change.consume()
                                             dragAccumulatedY += dragAmount.y
+                                            dragVisualY += dragAmount.y
 
                                             if (dragAccumulatedY >= dragThresholdPx) {
                                                 onMove(item.id, 1)
-                                                dragAccumulatedY = 0f
+                                                dragAccumulatedY -= dragThresholdPx
+                                                dragVisualY -= dragThresholdPx
                                             } else if (dragAccumulatedY <= -dragThresholdPx) {
                                                 onMove(item.id, -1)
-                                                dragAccumulatedY = 0f
+                                                dragAccumulatedY += dragThresholdPx
+                                                dragVisualY += dragThresholdPx
                                             }
                                         }
                                     )

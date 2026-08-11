@@ -190,7 +190,11 @@ class CoreSuiteRepository(context: Context) {
     }
 
     @Synchronized
-    fun addChecklistGroup(checklistId: String, name: String, color: String = "#6750A4"): Boolean {
+    fun addChecklistGroup(
+        checklistId: String,
+        name: String,
+        color: String = "#6750A4"
+    ): Boolean {
         val normalized = name.trim().takeIf { it.isNotEmpty() } ?: return false
         val checklist = getChecklist(checklistId) ?: return false
         val order = (checklist.groups.maxOfOrNull { it.order } ?: -1) + 1
@@ -203,6 +207,39 @@ class CoreSuiteRepository(context: Context) {
                     order = order,
                     color = color
                 )
+            )
+        } != null
+    }
+
+    @Synchronized
+    fun setChecklistGroupColor(
+        checklistId: String,
+        groupId: String,
+        color: String
+    ): Boolean =
+        updateChecklist(checklistId) { current ->
+            current.copy(
+                groups = current.groups.map {
+                    if (it.id == groupId) it.copy(color = color) else it
+                }
+            )
+        } != null
+
+    @Synchronized
+    fun assignChecklistItemsToGroup(
+        checklistId: String,
+        itemIds: Set<String>,
+        groupId: String?
+    ): Boolean {
+        val checklist = getChecklist(checklistId) ?: return false
+        if (groupId != null && checklist.groups.none { it.id == groupId }) return false
+        if (itemIds.isEmpty()) return true
+
+        return updateChecklist(checklistId) { current ->
+            current.copy(
+                items = current.items.map { item ->
+                    if (item.id in itemIds) item.copy(groupId = groupId) else item
+                }
             )
         } != null
     }
@@ -223,14 +260,6 @@ class CoreSuiteRepository(context: Context) {
             )
         } != null
     }
-
-    @Synchronized
-    fun setChecklistGroupColor(checklistId: String, groupId: String, color: String): Boolean =
-        updateChecklist(checklistId) { current ->
-            current.copy(groups = current.groups.map {
-                if (it.id == groupId) it.copy(color = color) else it
-            })
-        } != null
 
     @Synchronized
     fun deleteChecklistGroup(checklistId: String, groupId: String) {
