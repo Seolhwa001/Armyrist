@@ -42,6 +42,7 @@ private fun ArmyristApp(repo: CountingRepository) {
     var screen by remember { mutableStateOf(Screen.SHEETS) }
     var selectedSheetId by remember { mutableStateOf<String?>(null) }
     var revision by remember { mutableIntStateOf(0) }
+    val observedRevision = revision
     fun refresh() { revision++ }
 
     when (screen) {
