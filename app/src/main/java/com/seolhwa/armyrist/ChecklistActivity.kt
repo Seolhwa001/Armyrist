@@ -986,7 +986,7 @@ private fun DetailChecklistRow(
                         item.scheduledTimeMinutes
                     ) == null
                     val deliveryUnavailable =
-                        !ChecklistNotificationManager.notificationsEnabled(context)
+                        !ChecklistNotificationManager.notificationsEnabled(context, item)
 
                     Text(
                         buildString {

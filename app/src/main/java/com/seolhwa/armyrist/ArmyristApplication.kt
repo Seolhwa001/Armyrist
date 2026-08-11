@@ -18,7 +18,8 @@ class ArmyristApplication : Application() {
         repository = CountingRepository(this)
         coreSuiteRepository = CoreSuiteRepository(this)
 
-        ChecklistNotificationManager.createChannel(this)
+        // Channels are now item-sound specific and are created per ChecklistItem.
+        // Reconciliation creates the required channels and schedules eligible alarms.
         ChecklistNotificationManager.reconcile(this, coreSuiteRepository)
     }
 }
