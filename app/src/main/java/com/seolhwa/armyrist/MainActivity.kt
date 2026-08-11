@@ -9,6 +9,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -42,8 +43,11 @@ class MainActivity : ComponentActivity() {
         val coreSuiteRepository = app.coreSuiteRepository
 
         setContent {
-            MaterialTheme {
-                Surface(Modifier.fillMaxSize()) {
+            ArmyristTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = ArmyristColors.AppBackground
+                ) {
                     ArmyristApp(
                         repo = repository,
                         coreRepo = coreSuiteRepository
@@ -225,14 +229,27 @@ private fun SheetListScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("실셈", fontWeight = FontWeight.Bold)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            ArmyristToolNumber("01")
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                "실셈",
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                         Text(
-                            "현장 수량 기록",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            "COUNTING / 현장 수량 기록",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ArmyristColors.SecondaryText
                         )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = ArmyristColors.AppBackground,
+                    titleContentColor = ArmyristColors.PrimaryText
+                )
             )
         },
         floatingActionButton = {
@@ -251,7 +268,17 @@ private fun SheetListScreen(
                     .padding(24.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Card(Modifier.fillMaxWidth()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = ArmyristPanelShape,
+                    colors = CardDefaults.cardColors(
+                        containerColor = ArmyristColors.Panel
+                    ),
+                    border = BorderStroke(
+                        1.dp,
+                        ArmyristColors.Border
+                    )
+                ) {
                     Column(
                         Modifier.padding(28.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
@@ -290,7 +317,15 @@ private fun SheetListScreen(
                 items(sheets, key = { it.id }) { sheet ->
                     Card(
                         onClick = { onOpen(sheet.id) },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = ArmyristPanelShape,
+                        colors = CardDefaults.cardColors(
+                            containerColor = ArmyristColors.RaisedPanel
+                        ),
+                        border = BorderStroke(
+                            1.dp,
+                            ArmyristColors.Border
+                        )
                     ) {
                         Row(
                             Modifier
@@ -389,19 +424,28 @@ private fun CountingScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(sheet.title, fontWeight = FontWeight.Bold)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            ArmyristToolNumber("01")
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                sheet.title,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
                             TextButton(
                                 onClick = { titleEdit = true },
-                                contentPadding = PaddingValues(horizontal = 8.dp)
+                                contentPadding =
+                                    PaddingValues(horizontal = 6.dp)
                             ) {
-                                Text("✎")
+                                Text("편집")
                             }
                         }
                         Text(
-                            "항목 ${sheet.items.size} · 자동 저장",
+                            "COUNTING · 항목 ${sheet.items.size} · AUTO SAVE",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = ArmyristColors.SecondaryText
                         )
                     }
                 },
@@ -411,10 +455,22 @@ private fun CountingScreen(
                     }
                 },
                 actions = {
-                    TextButton(onClick = onResult) {
+                    Button(
+                        onClick = onResult,
+                        shape = ArmyristPanelShape,
+                        contentPadding =
+                            PaddingValues(horizontal = 14.dp)
+                    ) {
                         Text("결과")
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = ArmyristColors.AppBackground,
+                    titleContentColor = ArmyristColors.PrimaryText,
+                    navigationIconContentColor =
+                        ArmyristColors.SecondaryText,
+                    actionIconContentColor = ArmyristColors.Accent
+                )
             )
         }
     ) { padding ->
@@ -433,10 +489,22 @@ private fun CountingScreen(
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    AssistChip(onClick = onGroups, label = { Text("그룹") })
-                    AssistChip(onClick = { groupPickerOpen = true }, label = { Text("그룹 지정") })
-                    AssistChip(onClick = onCalculations, label = { Text("계산") })
-                    AssistChip(onClick = { memoEdit = true }, label = { Text("메모") })
+                    ArmyristUtilityButton(
+                        text = "그룹",
+                        onClick = onGroups
+                    )
+                    ArmyristUtilityButton(
+                        text = "그룹 지정",
+                        onClick = { groupPickerOpen = true }
+                    )
+                    ArmyristUtilityButton(
+                        text = "계산",
+                        onClick = onCalculations
+                    )
+                    ArmyristUtilityButton(
+                        text = "메모",
+                        onClick = { memoEdit = true }
+                    )
                 }
             } else {
                 val targetGroup = sheet.groups.firstOrNull { it.id == assignmentGroupId }
@@ -538,7 +606,21 @@ private fun CountingScreen(
 
                     Card(
                         colors = CardDefaults.cardColors(
-                            containerColor = if (selected) selectedColor else baseColor
+                            containerColor =
+                                if (selected) {
+                                    selectedColor
+                                } else {
+                                    baseColor
+                                }
+                        ),
+                        shape = ArmyristPanelShape,
+                        border = BorderStroke(
+                            1.dp,
+                            if (selected) {
+                                ArmyristColors.Accent
+                            } else {
+                                ArmyristColors.Border
+                            }
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -612,35 +694,59 @@ private fun CountingScreen(
                             }
 
                             if (!assignmentMode) {
-                                FilledTonalButton(
+                                OutlinedButton(
                                     onClick = { onDecrement(item.id) },
                                     modifier = Modifier.sizeIn(
-                                        minWidth = 52.dp,
-                                        minHeight = 52.dp
+                                        minWidth = 54.dp,
+                                        minHeight = 54.dp
+                                    ),
+                                    shape = ArmyristPanelShape,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        ArmyristColors.Border
                                     ),
                                     contentPadding = PaddingValues(0.dp)
                                 ) {
                                     Text("−", style = MaterialTheme.typography.titleLarge)
                                 }
 
-                                TextButton(
+                                Button(
                                     onClick = { quantityTarget = item },
                                     modifier = Modifier
-                                        .widthIn(min = 68.dp)
-                                        .heightIn(min = 52.dp)
+                                        .widthIn(min = 72.dp)
+                                        .heightIn(min = 54.dp),
+                                    shape = ArmyristPanelShape,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor =
+                                            ArmyristColors.OliveMuted,
+                                        contentColor =
+                                            ArmyristColors.PrimaryText
+                                    ),
+                                    contentPadding = PaddingValues(
+                                        horizontal = 8.dp
+                                    )
                                 ) {
                                     Text(
                                         item.quantity.toString(),
-                                        style = MaterialTheme.typography.headlineMedium,
+                                        style =
+                                            MaterialTheme.typography
+                                                .headlineMedium,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
 
-                                FilledTonalButton(
+                                Button(
                                     onClick = { onIncrement(item.id) },
                                     modifier = Modifier.sizeIn(
-                                        minWidth = 52.dp,
-                                        minHeight = 52.dp
+                                        minWidth = 54.dp,
+                                        minHeight = 54.dp
+                                    ),
+                                    shape = ArmyristPanelShape,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor =
+                                            ArmyristColors.Olive,
+                                        contentColor =
+                                            ArmyristColors.PrimaryText
                                     ),
                                     contentPadding = PaddingValues(0.dp)
                                 ) {
@@ -706,7 +812,12 @@ private fun CountingScreen(
                         onClick = { creating = true },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 52.dp)
+                            .heightIn(min = 54.dp),
+                        shape = ArmyristPanelShape,
+                        border = BorderStroke(
+                            1.dp,
+                            ArmyristColors.Accent
+                        )
                     ) {
                         Text("+ 새 항목 추가")
                     }
@@ -715,7 +826,15 @@ private fun CountingScreen(
                 item {
                     Card(
                         onClick = { memoEdit = true },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = ArmyristPanelShape,
+                        colors = CardDefaults.cardColors(
+                            containerColor = ArmyristColors.Panel
+                        ),
+                        border = BorderStroke(
+                            1.dp,
+                            ArmyristColors.Border
+                        )
                     ) {
                         Column(Modifier.padding(14.dp)) {
                             Row(
@@ -823,6 +942,28 @@ private fun CountingScreen(
 }
 
 @Composable
+private fun ArmyristUtilityButton(
+    text: String,
+    onClick: () -> Unit
+) {
+    OutlinedButton(
+        onClick = onClick,
+        shape = ArmyristPanelShape,
+        border = BorderStroke(
+            1.dp,
+            ArmyristColors.Border
+        ),
+        contentPadding =
+            PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge
+        )
+    }
+}
+
+@Composable
 private fun AggregateSummary(sheet: CountingSheet) {
     val sections = mutableListOf<Pair<String, Map<String, Int>>>()
 
@@ -866,7 +1007,11 @@ private fun AggregateSummary(sheet: CountingSheet) {
                     Surface(
                         color = group?.let { parseColor(it.color).copy(alpha = 0.10f) }
                             ?: MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                        shape = MaterialTheme.shapes.small,
+                        shape = ArmyristPanelShape,
+                        border = BorderStroke(
+                            1.dp,
+                            ArmyristColors.Border
+                        ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
