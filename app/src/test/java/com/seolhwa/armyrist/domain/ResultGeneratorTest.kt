@@ -5,7 +5,7 @@ import org.junit.Test
 
 class ResultGeneratorTest {
     @Test
-    fun resultContainsCurrentStateAndOmitsEmptySections() {
+    fun resultBodyOmitsAutomaticTitleAndEmptySections() {
         val sheetId = "s"
         val group = CountingGroup(
             id = "g",
@@ -39,8 +39,7 @@ class ResultGeneratorTest {
 
         val result = ResultGenerator.generate(sheet)
 
-        assertTrue(result.startsWith("창고 실셈"))
-        assertFalse(result.contains("[창고 실셈]"))
+        assertFalse(result.contains("창고 실셈"))
         assertTrue(result.contains("[A]"))
         assertTrue(result.contains("- 탄약상자 : 11개"))
         assertTrue(result.contains("- 물 : 4병"))
