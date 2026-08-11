@@ -50,7 +50,8 @@ class MainActivity : ComponentActivity() {
                 ) {
                     ArmyristApp(
                         repo = repository,
-                        coreRepo = coreSuiteRepository
+                        coreRepo = coreSuiteRepository,
+                        onHome = { finish() }
                     )
                 }
             }
@@ -63,7 +64,8 @@ private enum class Screen { SHEETS, COUNTING, GROUPS, CALCULATIONS, RESULT }
 @Composable
 private fun ArmyristApp(
     repo: CountingRepository,
-    coreRepo: CoreSuiteRepository
+    coreRepo: CoreSuiteRepository,
+    onHome: () -> Unit
 ) {
     var screen by remember { mutableStateOf(Screen.SHEETS) }
     var selectedSheetId by remember { mutableStateOf<String?>(null) }
@@ -78,6 +80,7 @@ private fun ArmyristApp(
     when (screen) {
         Screen.SHEETS -> SheetListScreen(
             sheets = repo.getSheets(),
+            onHome = onHome,
             onCreate = {
                 selectedSheetId = repo.createSheet().id
                 refresh()
@@ -106,6 +109,7 @@ private fun ArmyristApp(
                 when (screen) {
                     Screen.COUNTING -> CountingScreen(
                         sheet = sheet,
+                        onHome = onHome,
                         onBack = { screen = Screen.SHEETS },
                         onGroups = { screen = Screen.GROUPS },
                         onCalculations = { screen = Screen.CALCULATIONS },
@@ -216,6 +220,7 @@ private fun ArmyristApp(
 @Composable
 private fun SheetListScreen(
     sheets: List<CountingSheet>,
+    onHome: () -> Unit,
     onCreate: () -> Unit,
     onOpen: (String) -> Unit,
     onRename: (String, String) -> Unit,
@@ -229,16 +234,10 @@ private fun SheetListScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            ArmyristToolNumber("01")
-                            Spacer(Modifier.width(10.dp))
-                            Text(
-                                "실셈",
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                        Text(
+                            "실셈",
+                            fontWeight = FontWeight.Bold
+                        )
                         Text(
                             "COUNTING / 현장 수량 기록",
                             style = MaterialTheme.typography.labelSmall,
@@ -246,9 +245,23 @@ private fun SheetListScreen(
                         )
                     }
                 },
+                navigationIcon = {
+                    Button(
+                        onClick = onHome,
+                        shape = ArmyristPanelShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ArmyristColors.HeaderRaised,
+                            contentColor = ArmyristColors.OnDark
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp)
+                    ) {
+                        Text("홈")
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = ArmyristColors.Header,
-                    titleContentColor = ArmyristColors.OnDark
+                    titleContentColor = ArmyristColors.OnDark,
+                    navigationIconContentColor = ArmyristColors.OnDark
                 )
             )
         },
@@ -398,6 +411,7 @@ private fun SheetListScreen(
 @Composable
 private fun CountingScreen(
     sheet: CountingSheet,
+    onHome: () -> Unit,
     onBack: () -> Unit,
     onGroups: () -> Unit,
     onCalculations: () -> Unit,
@@ -441,52 +455,38 @@ private fun CountingScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            ArmyristToolNumber("01")
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                sheet.title,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1
-                            )
-                            TextButton(
-                                onClick = { titleEdit = true },
-                                contentPadding =
-                                    PaddingValues(horizontal = 6.dp)
-                            ) {
-                                Text("편집")
-                            }
-                        }
+                        Text(
+                            sheet.title,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
                         Text(
                             "COUNTING · 항목 ${sheet.items.size} · AUTO SAVE",
                             style = MaterialTheme.typography.labelSmall,
-                            color = ArmyristColors.SecondaryText
+                            color = ArmyristColors.OnDark.copy(alpha = 0.78f)
                         )
                     }
                 },
                 navigationIcon = {
-                    TextButton(onClick = onBack) {
-                        Text("‹ 목록")
-                    }
-                },
-                actions = {
-                    Button(
-                        onClick = onResult,
+                    OutlinedButton(
+                        onClick = onBack,
                         shape = ArmyristPanelShape,
-                        contentPadding =
-                            PaddingValues(horizontal = 14.dp)
+                        border = BorderStroke(
+                            1.dp,
+                            ArmyristColors.OnDark.copy(alpha = 0.65f)
+                        ),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = ArmyristColors.OnDark
+                        ),
+                        contentPadding = PaddingValues(horizontal = 10.dp)
                     ) {
-                        Text("결과")
+                        Text("목록")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = ArmyristColors.Header,
                     titleContentColor = ArmyristColors.OnDark,
-                    navigationIconContentColor =
-                        ArmyristColors.OnDark,
-                    actionIconContentColor = ArmyristColors.OnDark
+                    navigationIconContentColor = ArmyristColors.OnDark
                 )
             )
         }
@@ -496,6 +496,53 @@ private fun CountingScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onHome,
+                    modifier = Modifier.weight(1f),
+                    shape = ArmyristPanelShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ArmyristColors.HeaderRaised,
+                        contentColor = ArmyristColors.OnDark
+                    )
+                ) {
+                    Text("홈", fontWeight = FontWeight.Bold)
+                }
+
+                OutlinedButton(
+                    onClick = { titleEdit = true },
+                    modifier = Modifier.weight(1f),
+                    shape = ArmyristPanelShape,
+                    border = BorderStroke(
+                        1.dp,
+                        ArmyristColors.PrimaryControl
+                    ),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = ArmyristColors.WorkSurface,
+                        contentColor = ArmyristColors.PrimaryText
+                    )
+                ) {
+                    Text("제목 수정", fontWeight = FontWeight.Bold)
+                }
+
+                Button(
+                    onClick = onResult,
+                    modifier = Modifier.weight(1f),
+                    shape = ArmyristPanelShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ArmyristColors.PrimaryControl,
+                        contentColor = ArmyristColors.OnDark
+                    )
+                ) {
+                    Text("전달", fontWeight = FontWeight.Bold)
+                }
+            }
+
             AggregateSummary(sheet)
             CalculationSummary(sheet)
 
@@ -1817,7 +1864,7 @@ private fun GroupEditDialog(
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            "그룹 일반 합계를 화면/결과에 표시합니다.",
+                            "그룹 일반 합계를 화면/전달문에 표시합니다.",
                             style = MaterialTheme.typography.bodySmall,
                             color =
                                 MaterialTheme.colorScheme.onSurfaceVariant

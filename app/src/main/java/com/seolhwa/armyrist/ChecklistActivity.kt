@@ -390,11 +390,10 @@ private fun ChecklistListScreen(
                 ),
                 title = {
                     Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            ArmyristToolNumber("02")
-                            Spacer(Modifier.width(10.dp))
-                            Text("체크리스트", fontWeight = FontWeight.Bold)
-                        }
+                        Text(
+                            "체크리스트",
+                            fontWeight = FontWeight.Bold
+                        )
                         Text(
                             "CHECKLIST · 반복 점검 · AUTO SAVE",
                             style = MaterialTheme.typography.labelMedium,
@@ -597,10 +596,23 @@ private fun ChecklistDetailScreen(
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(checklist.title, fontWeight = FontWeight.Bold)
-                            TextButton(
+                            OutlinedButton(
                                 onClick = { titleEdit = true },
-                                contentPadding = PaddingValues(horizontal = 8.dp)
-                            ) { Text("✎") }
+                                shape = ArmyristPanelShape,
+                                border = BorderStroke(
+                                    1.dp,
+                                    ArmyristColors.OnDark.copy(alpha = 0.65f)
+                                ),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = ArmyristColors.OnDark
+                                ),
+                                contentPadding = PaddingValues(
+                                    horizontal = 10.dp,
+                                    vertical = 4.dp
+                                )
+                            ) {
+                                Text("제목 수정")
+                            }
                         }
                         Text(
                             "항목 ${checklist.items.size} · 자동 저장",
@@ -613,7 +625,17 @@ private fun ChecklistDetailScreen(
                     TextButton(onClick = onBack) { Text("‹ 목록") }
                 },
                 actions = {
-                    TextButton(onClick = onResult) { Text("결과") }
+                    Button(
+                        onClick = onResult,
+                        shape = ArmyristPanelShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ArmyristColors.PrimaryControl,
+                            contentColor = ArmyristColors.OnDark
+                        ),
+                        contentPadding = PaddingValues(horizontal = 14.dp)
+                    ) {
+                        Text("전달", fontWeight = FontWeight.Bold)
+                    }
                 }
             )
         }

@@ -699,16 +699,24 @@ private fun TimePlanDetailScreen(
                                 fontWeight = FontWeight.Bold
                             )
 
-                            TextButton(
+                            OutlinedButton(
                                 onClick = {
                                     titleEdit = true
                                 },
-                                contentPadding =
-                                    PaddingValues(
-                                        horizontal = 8.dp
-                                    )
+                                shape = ArmyristPanelShape,
+                                border = BorderStroke(
+                                    1.dp,
+                                    ArmyristColors.OnDark.copy(alpha = 0.65f)
+                                ),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = ArmyristColors.OnDark
+                                ),
+                                contentPadding = PaddingValues(
+                                    horizontal = 10.dp,
+                                    vertical = 4.dp
+                                )
                             ) {
-                                Text("✎")
+                                Text("제목 수정")
                             }
                         }
 
@@ -727,8 +735,16 @@ private fun TimePlanDetailScreen(
                     }
                 },
                 actions = {
-                    TextButton(onClick = onResult) {
-                        Text("결과")
+                    Button(
+                        onClick = onResult,
+                        shape = ArmyristPanelShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ArmyristColors.PrimaryControl,
+                            contentColor = ArmyristColors.OnDark
+                        ),
+                        contentPadding = PaddingValues(horizontal = 14.dp)
+                    ) {
+                        Text("전달", fontWeight = FontWeight.Bold)
                     }
                 }
             )
@@ -767,6 +783,15 @@ private fun TimePlanDetailScreen(
 
                     Card(
                         onClick = { editingPoint = point },
+                        shape = ArmyristPanelShape,
+                        colors = CardDefaults.cardColors(
+                            containerColor = ArmyristColors.RaisedSurface,
+                            contentColor = ArmyristColors.PrimaryText
+                        ),
+                        border = BorderStroke(
+                            1.dp,
+                            ArmyristColors.Border
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
                             .zIndex(
@@ -862,18 +887,46 @@ private fun TimePlanDetailScreen(
                                         FontWeight.SemiBold
                                 )
 
-                                Text(
-                                    point.timeMinutes?.let {
-                                        TimePlanRules.formatClock(it)
-                                    } ?: "시각 미입력",
-                                    style =
-                                        MaterialTheme.typography.bodyMedium,
+                                Spacer(Modifier.height(4.dp))
+
+                                Surface(
                                     color =
-                                        if (point.timeMinutes == null)
+                                        if (point.timeMinutes == null) {
                                             MaterialTheme.colorScheme.error
-                                        else
+                                                .copy(alpha = 0.10f)
+                                        } else {
+                                            ArmyristColors.SecondaryControl
+                                        },
+                                    shape = ArmyristPanelShape,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (point.timeMinutes == null) {
+                                            MaterialTheme.colorScheme.error
+                                                .copy(alpha = 0.55f)
+                                        } else {
                                             ArmyristColors.PrimaryControl
-                                )
+                                        }
+                                    )
+                                ) {
+                                    Text(
+                                        point.timeMinutes?.let {
+                                            TimePlanRules.formatClock(it)
+                                        } ?: "시각 미입력",
+                                        modifier = Modifier.padding(
+                                            horizontal = 12.dp,
+                                            vertical = 7.dp
+                                        ),
+                                        style =
+                                            MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color =
+                                            if (point.timeMinutes == null) {
+                                                MaterialTheme.colorScheme.error
+                                            } else {
+                                                ArmyristColors.PrimaryText
+                                            }
+                                    )
+                                }
                             }
 
                             if (intermediate) {
@@ -901,10 +954,12 @@ private fun TimePlanDetailScreen(
                                     editingDurationIndex = index
                                 }
                             },
-                            color =
-                                ArmyristColors.SecondaryControl,
-                            shape =
-                                MaterialTheme.shapes.medium,
+                            color = ArmyristColors.WorkSurface,
+                            shape = ArmyristPanelShape,
+                            border = BorderStroke(
+                                1.dp,
+                                ArmyristColors.Divider
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 20.dp)
@@ -933,10 +988,11 @@ private fun TimePlanDetailScreen(
                                     } else {
                                         "앞 지점 시각 입력 필요"
                                     },
-                                    fontWeight =
-                                        FontWeight.SemiBold,
-                                    modifier =
-                                        Modifier.weight(1f)
+                                    style =
+                                        MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ArmyristColors.PrimaryText,
+                                    modifier = Modifier.weight(1f)
                                 )
 
                                 if (point.timeMinutes != null) {
@@ -1159,9 +1215,7 @@ private fun TimePlanStatusCard(
     val derived = TimePlanRules.derive(ordered)
 
     Surface(
-        color =
-            MaterialTheme.colorScheme.surfaceVariant
-                .copy(alpha = 0.30f),
+        color = ArmyristColors.WorkSurface,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -1518,7 +1572,7 @@ private fun TimePlanResultScreen(
                     actionIconContentColor = ArmyristColors.OnDark
                 ),
                 title = {
-                    Text("결과 미리보기")
+                    Text("전달 미리보기")
                 },
                 navigationIcon = {
                     TextButton(onClick = onBack) {
@@ -1565,7 +1619,7 @@ private fun TimePlanResultScreen(
 
                         clipboard.setPrimaryClip(
                             ClipData.newPlainText(
-                                "시간계획 결과",
+                                "시간계획 전달",
                                 result.body
                             )
                         )

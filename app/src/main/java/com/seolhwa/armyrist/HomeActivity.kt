@@ -104,25 +104,21 @@ private fun HomeScreen(
         ArmyristSectionLabel("업무 도구")
 
         HomeToolPanel(
-            number = "01",
             title = "실셈",
             subtitle = "수량 기록 · 그룹 집계 · 결과 공유",
             onClick = onCounting
         )
         HomeToolPanel(
-            number = "02",
             title = "체크리스트",
             subtitle = "반복 점검 · 상태 관리 · 진행 현황",
             onClick = onChecklist
         )
         HomeToolPanel(
-            number = "03",
             title = "시간계획",
             subtitle = "시각 · 경과시간 · 중도 지점 관리",
             onClick = onTimePlan
         )
         HomeToolPanel(
-            number = "04",
             title = "보고 양식",
             subtitle = "공통 결과 전달 양식 관리",
             onClick = onReportTemplate
@@ -197,7 +193,6 @@ private fun HomeScreen(
 
 @Composable
 private fun HomeToolPanel(
-    number: String,
     title: String,
     subtitle: String,
     onClick: () -> Unit
@@ -216,10 +211,6 @@ private fun HomeToolPanel(
                 .padding(horizontal = 12.dp, vertical = 13.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            ArmyristToolNumber(number)
-
-            Spacer(Modifier.width(12.dp))
-
             Column(Modifier.weight(1f)) {
                 Text(
                     title,
