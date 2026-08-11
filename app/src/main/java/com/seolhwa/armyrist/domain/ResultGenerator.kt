@@ -4,8 +4,6 @@ object ResultGenerator {
     fun generate(sheet: CountingSheet): String {
         val blocks = mutableListOf<String>()
 
-        blocks += sheet.title.trim()
-
         val ungrouped =
             sheet.items
                 .filter { it.groupId == null }
