@@ -29,7 +29,8 @@ data class CountingGroup(
     val sheetId: String,
     val name: String,
     val order: Int,
-    val color: String = "#6750A4"
+    val color: String = "#6750A4",
+    val showAggregate: Boolean = true
 )
 
 enum class CalculationOperator { ADD, SUBTRACT }
