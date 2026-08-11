@@ -514,6 +514,22 @@ private fun CountingScreen(
                 ) {
                     Text("전달", fontWeight = FontWeight.Bold)
                 }
+                OutlinedButton(
+                    onClick = {
+                        context.startActivity(
+                            Intent(context, PortableTransferActivity::class.java).apply {
+                                putExtra(PortableTransferActivity.EXTRA_MODE, PortableTransferActivity.MODE_EXPORT)
+                                putExtra(PortableTransferActivity.EXTRA_TYPE, ArmyristPortableDataType.COUNTING.name)
+                                putExtra(PortableTransferActivity.EXTRA_ROOT_ID, sheet.id)
+                            }
+                        )
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = ArmyristPanelShape
+                ) {
+                    Text("데이터", fontWeight = FontWeight.Bold)
+                }
+
             }
 
             AggregateSummary(sheet)

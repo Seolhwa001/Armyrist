@@ -367,11 +367,37 @@ private fun DataManagementScreen(
                 }
             }
 
-            Text(
-                "개별 업무 데이터의 내보내기/가져오기는 다음 Stage 3 통합 패치에서 연결됩니다.",
-                style = MaterialTheme.typography.bodySmall,
-                color = ArmyristColors.SecondaryText
-            )
+            ArmyristPanel(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    "개별 데이터 가져오기",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(8.dp))
+                Text("실셈·체크리스트·시간계획·보고 양식 .armyrist 파일을 새 문서로 추가합니다.")
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = {
+                        context.startActivity(
+                            android.content.Intent(
+                                context,
+                                PortableTransferActivity::class.java
+                            ).apply {
+                                putExtra(
+                                    PortableTransferActivity.EXTRA_MODE,
+                                    PortableTransferActivity.MODE_IMPORT
+                                )
+                            }
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
+                    shape = ArmyristPanelShape
+                ) {
+                    Text("Armyrist 데이터 파일 선택")
+                }
+            }
         }
     }
 
