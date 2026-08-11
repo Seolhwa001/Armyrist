@@ -23,28 +23,31 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.zIndex
 import com.seolhwa.armyrist.data.CountingRepository
+import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
+import com.seolhwa.armyrist.stage2.domain.ToolResult
 import com.seolhwa.armyrist.domain.*
-import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val repository = (application as ArmyristApplication).repository
+        val app = application as ArmyristApplication
+        val repository = app.repository
+        val coreSuiteRepository = app.coreSuiteRepository
+
         setContent {
             MaterialTheme {
                 Surface(Modifier.fillMaxSize()) {
-                    ArmyristApp(repository)
+                    ArmyristApp(
+                        repo = repository,
+                        coreRepo = coreSuiteRepository
+                    )
                 }
             }
         }
@@ -54,7 +57,10 @@ class MainActivity : ComponentActivity() {
 private enum class Screen { SHEETS, COUNTING, GROUPS, CALCULATIONS, RESULT }
 
 @Composable
-private fun ArmyristApp(repo: CountingRepository) {
+private fun ArmyristApp(
+    repo: CountingRepository,
+    coreRepo: CoreSuiteRepository
+) {
     var screen by remember { mutableStateOf(Screen.SHEETS) }
     var selectedSheetId by remember { mutableStateOf<String?>(null) }
     var revision by remember { mutableIntStateOf(0) }
@@ -167,8 +173,12 @@ private fun ArmyristApp(repo: CountingRepository) {
                         }
                     )
 
-                    Screen.RESULT -> ResultScreen(
-                        sheet = sheet,
+                    Screen.RESULT -> CommonShareScreen(
+                        repo = coreRepo,
+                        result = ToolResult(
+                            title = sheet.title,
+                            body = ResultGenerator.generate(sheet)
+                        ),
                         onBack = { screen = Screen.COUNTING }
                     )
 
@@ -202,12 +212,6 @@ private fun SheetListScreen(
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    }
-                },
-                navigationIcon = {
-                    val activity = LocalContext.current as? ComponentActivity
-                    TextButton(onClick = { activity?.finish() }) {
-                        Text("‹ 홈")
                     }
                 }
             )
@@ -351,7 +355,6 @@ private fun CountingScreen(
     var assignmentSelected by remember { mutableStateOf(setOf<String>()) }
 
     val dragThresholdPx = with(LocalDensity.current) { 44.dp.toPx() }
-    val hapticFeedback = LocalHapticFeedback.current
 
     BackHandler {
         if (assignmentGroupId != null) {
@@ -504,12 +507,6 @@ private fun CountingScreen(
                     var dragAccumulatedY by remember(item.id) {
                         mutableFloatStateOf(0f)
                     }
-                    var dragVisualY by remember(item.id) {
-                        mutableFloatStateOf(0f)
-                    }
-                    var isDragging by remember(item.id) {
-                        mutableStateOf(false)
-                    }
 
                     val baseColor = currentGroup
                         ?.let { parseColor(it.color).copy(alpha = 0.12f) }
@@ -526,42 +523,28 @@ private fun CountingScreen(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .zIndex(if (isDragging) 1f else 0f)
-                            .offset { IntOffset(0, dragVisualY.roundToInt()) }
                             .pointerInput(item.id, assignmentMode) {
                                 if (!assignmentMode) {
                                     detectDragGesturesAfterLongPress(
                                         onDragStart = {
                                             dragAccumulatedY = 0f
-                                            dragVisualY = 0f
-                                            isDragging = true
-                                            hapticFeedback.performHapticFeedback(
-                                                HapticFeedbackType.LongPress
-                                            )
                                         },
                                         onDragCancel = {
                                             dragAccumulatedY = 0f
-                                            dragVisualY = 0f
-                                            isDragging = false
                                         },
                                         onDragEnd = {
                                             dragAccumulatedY = 0f
-                                            dragVisualY = 0f
-                                            isDragging = false
                                         },
                                         onDrag = { change, dragAmount ->
                                             change.consume()
                                             dragAccumulatedY += dragAmount.y
-                                            dragVisualY += dragAmount.y
 
                                             if (dragAccumulatedY >= dragThresholdPx) {
                                                 onMove(item.id, 1)
-                                                dragAccumulatedY -= dragThresholdPx
-                                                dragVisualY -= dragThresholdPx
+                                                dragAccumulatedY = 0f
                                             } else if (dragAccumulatedY <= -dragThresholdPx) {
                                                 onMove(item.id, -1)
-                                                dragAccumulatedY += dragThresholdPx
-                                                dragVisualY += dragThresholdPx
+                                                dragAccumulatedY = 0f
                                             }
                                         }
                                     )
@@ -1509,94 +1492,6 @@ private fun CalculationDialog(
             }
         }
     )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ResultScreen(
-    sheet: CountingSheet,
-    onBack: () -> Unit
-) {
-    val context = LocalContext.current
-    val result = remember(sheet) {
-        ResultGenerator.generate(sheet)
-    }
-
-    BackHandler { onBack() }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("결과 미리보기") },
-                navigationIcon = {
-                    TextButton(onClick = onBack) {
-                        Text("뒤로")
-                    }
-                }
-            )
-        }
-    ) { padding ->
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(12.dp)
-        ) {
-            Surface(
-                tonalElevation = 2.dp,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-            ) {
-                LazyColumn(Modifier.padding(12.dp)) {
-                    item {
-                        Text(result)
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = {
-                        val clipboard = context.getSystemService(
-                            Context.CLIPBOARD_SERVICE
-                        ) as ClipboardManager
-                        clipboard.setPrimaryClip(
-                            ClipData.newPlainText("실셈 결과", result)
-                        )
-                        Toast.makeText(
-                            context,
-                            "복사되었습니다.",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("복사")
-                }
-
-                Button(
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, result)
-                        }
-                        context.startActivity(
-                            Intent.createChooser(intent, "실셈 결과 공유")
-                        )
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("공유")
-                }
-            }
-        }
-    }
 }
 
 private val GROUP_COLORS = listOf(

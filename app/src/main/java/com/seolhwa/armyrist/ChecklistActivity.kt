@@ -249,7 +249,8 @@ private fun ChecklistApp(
 
         showingResult -> {
             BackHandler { showingResult = false }
-            ChecklistResultScreen(
+            CommonShareScreen(
+                repo = repo,
                 result = ChecklistResultGenerator.generate(selected),
                 onBack = { showingResult = false }
             )
@@ -1650,69 +1651,6 @@ private fun DeletedItemsDialog(
             TextButton(onClick = onDismiss) { Text("닫기") }
         }
     )
-}
-
-@Composable
-private fun ChecklistResultScreen(
-    result: ToolResult,
-    onBack: () -> Unit
-) {
-    val context = LocalContext.current
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("결과 미리보기") },
-                navigationIcon = {
-                    TextButton(onClick = onBack) { Text("‹ 체크리스트") }
-                }
-            )
-        }
-    ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).padding(12.dp)
-        ) {
-            Surface(
-                tonalElevation = 2.dp,
-                modifier = Modifier.weight(1f).fillMaxWidth()
-            ) {
-                LazyColumn(Modifier.padding(12.dp)) {
-                    item { Text(result.body) }
-                }
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = {
-                        val clipboard = context.getSystemService(
-                            Context.CLIPBOARD_SERVICE
-                        ) as ClipboardManager
-                        clipboard.setPrimaryClip(
-                            ClipData.newPlainText("체크리스트 결과", result.body)
-                        )
-                        Toast.makeText(context, "복사되었습니다.", Toast.LENGTH_SHORT).show()
-                    },
-                    modifier = Modifier.weight(1f)
-                ) { Text("복사") }
-
-                Button(
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, result.body)
-                        }
-                        context.startActivity(Intent.createChooser(intent, "공유"))
-                    },
-                    modifier = Modifier.weight(1f)
-                ) { Text("공유") }
-            }
-        }
-    }
 }
 
 private fun parseColor(hex: String): Color =
