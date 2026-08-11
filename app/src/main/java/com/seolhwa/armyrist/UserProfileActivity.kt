@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -17,8 +18,8 @@ class UserProfileActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val repo = (application as ArmyristApplication).coreSuiteRepository
         setContent {
-            MaterialTheme {
-                Surface(Modifier.fillMaxSize()) {
+            ArmyristTheme {
+                Surface(Modifier.fillMaxSize(), color = ArmyristColors.AppBackground) {
                     UserProfileScreen(repo = repo, onBack = { finish() })
                 }
             }

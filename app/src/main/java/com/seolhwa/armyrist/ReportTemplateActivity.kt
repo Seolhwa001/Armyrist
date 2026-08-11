@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,8 +26,8 @@ class ReportTemplateActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val repo = (application as ArmyristApplication).coreSuiteRepository
         setContent {
-            MaterialTheme {
-                Surface(Modifier.fillMaxSize()) {
+            ArmyristTheme {
+                Surface(Modifier.fillMaxSize(), color = ArmyristColors.AppBackground) {
                     ReportTemplateApp(repo) { finish() }
                 }
             }

@@ -22,6 +22,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -84,8 +85,8 @@ class ChecklistActivity : ComponentActivity() {
             intent.getStringExtra(ChecklistNotificationManager.EXTRA_CHECKLIST_ID)
 
         setContent {
-            MaterialTheme {
-                Surface(Modifier.fillMaxSize()) {
+            ArmyristTheme {
+                Surface(Modifier.fillMaxSize(), color = ArmyristColors.AppBackground) {
                     ChecklistApp(
                         repo = coreRepository,
                         initialChecklistId = initialChecklistId,
@@ -383,9 +384,13 @@ private fun ChecklistListScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("체크리스트", fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            ArmyristToolNumber("02")
+                            Spacer(Modifier.width(10.dp))
+                            Text("체크리스트", fontWeight = FontWeight.Bold)
+                        }
                         Text(
-                            "반복 점검 · 자동 저장",
+                            "CHECKLIST · 반복 점검 · AUTO SAVE",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -688,12 +693,18 @@ private fun ChecklistDetailScreen(
                         selected -> assignmentGroup?.let {
                             parseColor(it.color).copy(alpha = 0.26f)
                         } ?: MaterialTheme.colorScheme.secondaryContainer
-                        group != null -> parseColor(group.color).copy(alpha = 0.12f)
-                        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f)
+                        group != null -> parseColor(group.color).copy(alpha = 0.13f)
+                        else -> ArmyristColors.RaisedSurface
                     }
 
                     Card(
                         colors = CardDefaults.cardColors(containerColor = cardColor),
+                        shape = ArmyristPanelShape,
+                        border = BorderStroke(
+                            1.dp,
+                            group?.let { parseColor(it.color).copy(alpha = 0.72f) }
+                                ?: ArmyristColors.Divider
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
                             .zIndex(if (dragging) 1f else 0f)
@@ -770,7 +781,9 @@ private fun ChecklistDetailScreen(
                 item {
                     OutlinedButton(
                         onClick = { addingItem = true },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                        shape = ArmyristPanelShape,
+                        border = BorderStroke(1.dp, ArmyristColors.PrimaryControl)
                     ) { Text("+ 새 항목 추가") }
                 }
 

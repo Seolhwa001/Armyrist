@@ -13,6 +13,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -46,8 +47,8 @@ class TimePlanActivity : ComponentActivity() {
         val repo = (application as ArmyristApplication).coreSuiteRepository
 
         setContent {
-            MaterialTheme {
-                Surface(Modifier.fillMaxSize()) {
+            ArmyristTheme {
+                Surface(Modifier.fillMaxSize(), color = ArmyristColors.AppBackground) {
                     TimePlanApp(
                         repo = repo,
                         onHome = { finish() }
@@ -354,7 +355,7 @@ private fun generateTimePlanResultWithDurations(
     intervalLabel: (String) -> String
 ): ToolResult {
     val ordered = plan.points.sortedBy { it.order }
-    val lines = mutableListOf<String>()
+    val lines = mutableListOf(plan.title.trim())
 
     ordered.forEachIndexed { index, point ->
         val time = point.timeMinutes
