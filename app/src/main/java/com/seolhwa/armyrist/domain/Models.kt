@@ -28,7 +28,8 @@ data class CountingGroup(
     val id: String = UUID.randomUUID().toString(),
     val sheetId: String,
     val name: String,
-    val order: Int
+    val order: Int,
+    val color: String = "#6750A4"
 )
 
 enum class CalculationOperator { ADD, SUBTRACT }
