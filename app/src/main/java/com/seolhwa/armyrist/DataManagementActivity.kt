@@ -178,6 +178,7 @@ class DataManagementActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DataManagementScreen(
     onBack: () -> Unit,
@@ -204,7 +205,7 @@ private fun DataManagementScreen(
         mutableStateOf(false)
     }
 
-    BackHandler(onBack)
+    BackHandler(onBack = onBack)
 
     Scaffold(
         topBar = {
