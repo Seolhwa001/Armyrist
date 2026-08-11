@@ -9,21 +9,23 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -36,7 +38,9 @@ class MainActivity : ComponentActivity() {
         val repository = (application as ArmyristApplication).repository
         setContent {
             MaterialTheme {
-                Surface(Modifier.fillMaxSize()) { ArmyristApp(repository) }
+                Surface(Modifier.fillMaxSize()) {
+                    ArmyristApp(repository)
+                }
             }
         }
     }
@@ -49,8 +53,12 @@ private fun ArmyristApp(repo: CountingRepository) {
     var screen by remember { mutableStateOf(Screen.SHEETS) }
     var selectedSheetId by remember { mutableStateOf<String?>(null) }
     var revision by remember { mutableIntStateOf(0) }
+    @Suppress("UNUSED_VARIABLE")
     val observedRevision = revision
-    fun refresh() { revision++ }
+
+    fun refresh() {
+        revision++
+    }
 
     when (screen) {
         Screen.SHEETS -> SheetListScreen(
@@ -60,49 +68,107 @@ private fun ArmyristApp(repo: CountingRepository) {
                 refresh()
                 screen = Screen.COUNTING
             },
-            onOpen = { selectedSheetId = it; screen = Screen.COUNTING },
-            onRename = { id, title -> if (repo.renameSheet(id, title)) refresh() },
-            onDelete = { repo.deleteSheet(it); refresh() }
+            onOpen = {
+                selectedSheetId = it
+                screen = Screen.COUNTING
+            },
+            onRename = { id, title ->
+                if (repo.renameSheet(id, title)) refresh()
+            },
+            onDelete = {
+                repo.deleteSheet(it)
+                refresh()
+            }
         )
+
         else -> {
             val id = selectedSheetId
-            val sheet = if (id != null) repo.getSheet(id) else null
+            val sheet = id?.let(repo::getSheet)
+
             if (sheet == null) {
                 screen = Screen.SHEETS
-            } else when (screen) {
-                Screen.COUNTING -> CountingScreen(
-                    sheet = sheet,
-                    onBack = { screen = Screen.SHEETS },
-                    onGroups = { screen = Screen.GROUPS },
-                    onCalculations = { screen = Screen.CALCULATIONS },
-                    onResult = { screen = Screen.RESULT },
-                    onRename = { if (repo.renameSheet(sheet.id, it)) refresh() },
-                    onMemo = { repo.setMemo(sheet.id, it); refresh() },
-                    onAddItem = { n, q, u, note, g -> if (repo.addItem(sheet.id, n, q, u, note, g)) refresh() },
-                    onEditItem = { itemId, n, u, note, g -> if (repo.editItem(sheet.id, itemId, n, u, note, g)) refresh() },
-                    onDeleteItem = { repo.deleteItem(sheet.id, it); refresh() },
-                    onIncrement = { repo.increment(sheet.id, it); refresh() },
-                    onDecrement = { repo.decrement(sheet.id, it); refresh() },
-                    onQuantity = { itemId, q -> if (repo.setQuantity(sheet.id, itemId, q)) refresh() },
-                    onMove = { itemId, d -> repo.moveItem(sheet.id, itemId, d); refresh() },
-                    onAssignGroup = { ids, gid -> if (repo.assignItemsToGroup(sheet.id, ids, gid)) refresh() }
-                )
-                Screen.GROUPS -> GroupScreen(
-                    sheet = sheet,
-                    onBack = { screen = Screen.COUNTING },
-                    onAdd = { n, c -> if (repo.addGroup(sheet.id, n, c)) refresh() },
-                    onRename = { gid, n, c -> if (repo.renameGroup(sheet.id, gid, n, c)) refresh() },
-                    onDelete = { repo.deleteGroup(sheet.id, it); refresh() }
-                )
-                Screen.CALCULATIONS -> CalculationScreen(
-                    sheet = sheet,
-                    onBack = { screen = Screen.COUNTING },
-                    onAdd = { l, op, r, n -> if (repo.addCalculation(sheet.id, l, op, r, n)) refresh() },
-                    onEdit = { cid, l, op, r, n -> if (repo.editCalculation(sheet.id, cid, l, op, r, n)) refresh() },
-                    onDelete = { repo.deleteCalculation(sheet.id, it); refresh() }
-                )
-                Screen.RESULT -> ResultScreen(sheet = sheet, onBack = { screen = Screen.COUNTING })
-                else -> Unit
+            } else {
+                when (screen) {
+                    Screen.COUNTING -> CountingScreen(
+                        sheet = sheet,
+                        onBack = { screen = Screen.SHEETS },
+                        onGroups = { screen = Screen.GROUPS },
+                        onCalculations = { screen = Screen.CALCULATIONS },
+                        onResult = { screen = Screen.RESULT },
+                        onRename = {
+                            if (repo.renameSheet(sheet.id, it)) refresh()
+                        },
+                        onMemo = {
+                            repo.setMemo(sheet.id, it)
+                            refresh()
+                        },
+                        onAddItem = { name, quantity, unit, note, groupId ->
+                            if (repo.addItem(sheet.id, name, quantity, unit, note, groupId)) refresh()
+                        },
+                        onEditItem = { itemId, name, unit, note, groupId ->
+                            if (repo.editItem(sheet.id, itemId, name, unit, note, groupId)) refresh()
+                        },
+                        onDeleteItem = {
+                            repo.deleteItem(sheet.id, it)
+                            refresh()
+                        },
+                        onIncrement = {
+                            repo.increment(sheet.id, it)
+                            refresh()
+                        },
+                        onDecrement = {
+                            repo.decrement(sheet.id, it)
+                            refresh()
+                        },
+                        onQuantity = { itemId, quantity ->
+                            if (repo.setQuantity(sheet.id, itemId, quantity)) refresh()
+                        },
+                        onMove = { itemId, delta ->
+                            repo.moveItem(sheet.id, itemId, delta)
+                            refresh()
+                        },
+                        onAssignGroup = { itemIds, groupId ->
+                            if (repo.assignItemsToGroup(sheet.id, itemIds, groupId)) refresh()
+                        }
+                    )
+
+                    Screen.GROUPS -> GroupScreen(
+                        sheet = sheet,
+                        onBack = { screen = Screen.COUNTING },
+                        onAdd = { name, color ->
+                            if (repo.addGroup(sheet.id, name, color)) refresh()
+                        },
+                        onRename = { groupId, name, color ->
+                            if (repo.renameGroup(sheet.id, groupId, name, color)) refresh()
+                        },
+                        onDelete = {
+                            repo.deleteGroup(sheet.id, it)
+                            refresh()
+                        }
+                    )
+
+                    Screen.CALCULATIONS -> CalculationScreen(
+                        sheet = sheet,
+                        onBack = { screen = Screen.COUNTING },
+                        onAdd = { left, operator, right, name ->
+                            if (repo.addCalculation(sheet.id, left, operator, right, name)) refresh()
+                        },
+                        onEdit = { calcId, left, operator, right, name ->
+                            if (repo.editCalculation(sheet.id, calcId, left, operator, right, name)) refresh()
+                        },
+                        onDelete = {
+                            repo.deleteCalculation(sheet.id, it)
+                            refresh()
+                        }
+                    )
+
+                    Screen.RESULT -> ResultScreen(
+                        sheet = sheet,
+                        onBack = { screen = Screen.COUNTING }
+                    )
+
+                    Screen.SHEETS -> Unit
+                }
             }
         }
     }
@@ -117,8 +183,8 @@ private fun SheetListScreen(
     onRename: (String, String) -> Unit,
     onDelete: (String) -> Unit
 ) {
-    var rename by remember { mutableStateOf<CountingSheet?>(null) }
-    var delete by remember { mutableStateOf<CountingSheet?>(null) }
+    var renameTarget by remember { mutableStateOf<CountingSheet?>(null) }
+    var deleteTarget by remember { mutableStateOf<CountingSheet?>(null) }
 
     Scaffold(
         topBar = {
@@ -145,7 +211,10 @@ private fun SheetListScreen(
     ) { padding ->
         if (sheets.isEmpty()) {
             Box(
-                Modifier.fillMaxSize().padding(padding).padding(24.dp),
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(24.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Card(Modifier.fillMaxWidth()) {
@@ -162,7 +231,9 @@ private fun SheetListScreen(
                         Spacer(Modifier.height(20.dp))
                         Button(
                             onClick = onCreate,
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 52.dp)
                         ) {
                             Text("새 실셈 만들기")
                         }
@@ -171,8 +242,15 @@ private fun SheetListScreen(
             }
         } else {
             LazyColumn(
-                Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 96.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentPadding = PaddingValues(
+                    start = 12.dp,
+                    end = 12.dp,
+                    top = 8.dp,
+                    bottom = 96.dp
+                ),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(sheets, key = { it.id }) { sheet ->
@@ -181,7 +259,9 @@ private fun SheetListScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(Modifier.weight(1f)) {
@@ -197,8 +277,8 @@ private fun SheetListScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            TextButton(onClick = { rename = sheet }) { Text("이름") }
-                            TextButton(onClick = { delete = sheet }) { Text("삭제") }
+                            TextButton(onClick = { renameTarget = sheet }) { Text("이름") }
+                            TextButton(onClick = { deleteTarget = sheet }) { Text("삭제") }
                         }
                     }
                 }
@@ -206,15 +286,23 @@ private fun SheetListScreen(
         }
     }
 
-    rename?.let { target ->
-        TextInputDialog("실셈표 이름 변경", target.title, "이름을 입력하세요.") {
-            rename = null
+    renameTarget?.let { target ->
+        TextInputDialog(
+            title = "실셈표 이름 변경",
+            initial = target.title,
+            helper = "이름을 입력하세요."
+        ) {
+            renameTarget = null
             if (it != null) onRename(target.id, it)
         }
     }
-    delete?.let { target ->
-        ConfirmDialog("실셈표 삭제", "'${target.title}'와 모든 항목/그룹/계산을 삭제합니다.") {
-            delete = null
+
+    deleteTarget?.let { target ->
+        ConfirmDialog(
+            title = "실셈표 삭제",
+            message = "'${target.title}'와 모든 항목/그룹/계산을 삭제합니다."
+        ) {
+            deleteTarget = null
             if (it) onDelete(target.id)
         }
     }
@@ -246,9 +334,21 @@ private fun CountingScreen(
     var titleEdit by remember { mutableStateOf(false) }
     var memoEdit by remember { mutableStateOf(false) }
     var menuTarget by remember { mutableStateOf<CountingItem?>(null) }
-    var groupAssign by remember { mutableStateOf(false) }
 
-    BackHandler { onBack() }
+    var groupPickerOpen by remember { mutableStateOf(false) }
+    var assignmentGroupId by remember { mutableStateOf<String?>(null) }
+    var assignmentSelected by remember { mutableStateOf(setOf<String>()) }
+
+    val dragThresholdPx = with(LocalDensity.current) { 44.dp.toPx() }
+
+    BackHandler {
+        if (assignmentGroupId != null) {
+            assignmentGroupId = null
+            assignmentSelected = emptySet()
+        } else {
+            onBack()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -257,7 +357,12 @@ private fun CountingScreen(
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(sheet.title, fontWeight = FontWeight.Bold)
-                            TextButton(onClick = { titleEdit = true }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("✎") }
+                            TextButton(
+                                onClick = { titleEdit = true },
+                                contentPadding = PaddingValues(horizontal = 8.dp)
+                            ) {
+                                Text("✎")
+                            }
                         }
                         Text(
                             "항목 ${sheet.items.size} · 자동 저장",
@@ -266,83 +371,219 @@ private fun CountingScreen(
                         )
                     }
                 },
-                navigationIcon = { TextButton(onClick = onBack) { Text("‹ 목록") } },
-                actions = { TextButton(onClick = onResult) { Text("결과") } }
+                navigationIcon = {
+                    TextButton(onClick = onBack) {
+                        Text("‹ 목록")
+                    }
+                },
+                actions = {
+                    TextButton(onClick = onResult) {
+                        Text("결과")
+                    }
+                }
             )
-        },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(onClick = { creating = true }) {
-                Text("+ 항목")
-            }
         }
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
             AggregateSummary(sheet)
+            CalculationSummary(sheet)
 
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                AssistChip(onClick = onGroups, label = { Text("그룹") })
-                AssistChip(onClick = { groupAssign = true }, label = { Text("그룹 지정") })
-                AssistChip(onClick = onCalculations, label = { Text("계산") })
-                AssistChip(onClick = { memoEdit = true }, label = { Text("메모") })
+            if (assignmentGroupId == null) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    AssistChip(onClick = onGroups, label = { Text("그룹") })
+                    AssistChip(onClick = { groupPickerOpen = true }, label = { Text("그룹 지정") })
+                    AssistChip(onClick = onCalculations, label = { Text("계산") })
+                    AssistChip(onClick = { memoEdit = true }, label = { Text("메모") })
+                }
+            } else {
+                val targetGroup = sheet.groups.firstOrNull { it.id == assignmentGroupId }
+
+                Surface(
+                    color = targetGroup?.let { parseColor(it.color).copy(alpha = 0.14f) }
+                        ?: MaterialTheme.colorScheme.secondaryContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "${targetGroup?.name ?: "그룹"} 지정 중",
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "항목을 터치해 선택 · ${assignmentSelected.size}개",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        TextButton(
+                            onClick = {
+                                assignmentGroupId = null
+                                assignmentSelected = emptySet()
+                            }
+                        ) {
+                            Text("취소")
+                        }
+                        Button(
+                            enabled = assignmentSelected.isNotEmpty(),
+                            onClick = {
+                                onAssignGroup(assignmentSelected, assignmentGroupId)
+                                assignmentGroupId = null
+                                assignmentSelected = emptySet()
+                            }
+                        ) {
+                            Text("확인")
+                        }
+                    }
+                }
             }
 
             HorizontalDivider()
 
-            if (sheet.items.isEmpty()) {
-                Box(
-                    Modifier.fillMaxSize().padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("항목이 없습니다", style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            "아래 + 항목 버튼으로 첫 항목을 추가하세요.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = 8.dp,
+                    end = 8.dp,
+                    top = 6.dp,
+                    bottom = 24.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (sheet.items.isEmpty()) {
+                    item {
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 28.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("항목이 없습니다", style = MaterialTheme.typography.titleMedium)
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "아래 새 항목 추가 버튼으로 시작하세요.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
-            } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 96.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    itemsIndexed(sheet.items.sortedBy { it.order }, key = { _, item -> item.id }) { index, item ->
-                        val group = sheet.groups.firstOrNull { it.id == item.groupId }?.name ?: "미지정"
 
-                        Card(
-                            onClick = { itemEditor = item },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                val groupColor = sheet.groups.firstOrNull { it.id == item.groupId }?.color
-                                if (groupColor != null) {
-                                    Box(Modifier.width(5.dp).height(46.dp).background(parseColor(groupColor), CircleShape))
-                                    Spacer(Modifier.width(8.dp))
-                                }
-                                Text("${index + 1}.", fontWeight = FontWeight.Bold, modifier = Modifier.width(34.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        item.name,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.SemiBold
+                itemsIndexed(
+                    sheet.items.sortedBy { it.order },
+                    key = { _, item -> item.id }
+                ) { index, item ->
+                    val currentGroup = sheet.groups.firstOrNull { it.id == item.groupId }
+                    val groupName = currentGroup?.name ?: "미지정"
+                    val assignmentMode = assignmentGroupId != null
+                    val selected = item.id in assignmentSelected
+
+                    var dragAccumulatedY by remember(item.id) {
+                        mutableFloatStateOf(0f)
+                    }
+
+                    val baseColor = currentGroup
+                        ?.let { parseColor(it.color).copy(alpha = 0.12f) }
+                        ?: MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f)
+
+                    val selectedColor = sheet.groups
+                        .firstOrNull { it.id == assignmentGroupId }
+                        ?.let { parseColor(it.color).copy(alpha = 0.26f) }
+                        ?: MaterialTheme.colorScheme.secondaryContainer
+
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (selected) selectedColor else baseColor
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .pointerInput(item.id, assignmentMode) {
+                                if (!assignmentMode) {
+                                    detectDragGesturesAfterLongPress(
+                                        onDragStart = {
+                                            dragAccumulatedY = 0f
+                                        },
+                                        onDragCancel = {
+                                            dragAccumulatedY = 0f
+                                        },
+                                        onDragEnd = {
+                                            dragAccumulatedY = 0f
+                                        },
+                                        onDrag = { change, dragAmount ->
+                                            change.consume()
+                                            dragAccumulatedY += dragAmount.y
+
+                                            if (dragAccumulatedY >= dragThresholdPx) {
+                                                onMove(item.id, 1)
+                                                dragAccumulatedY = 0f
+                                            } else if (dragAccumulatedY <= -dragThresholdPx) {
+                                                onMove(item.id, -1)
+                                                dragAccumulatedY = 0f
+                                            }
+                                        }
                                     )
+                                }
+                            }
+                            .clickable {
+                                if (assignmentMode) {
+                                    assignmentSelected =
+                                        if (selected) assignmentSelected - item.id
+                                        else assignmentSelected + item.id
+                                } else {
+                                    itemEditor = item
+                                }
+                            }
+                    ) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                if (selected) "✓" else "${index + 1}.",
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.width(34.dp)
+                            )
+
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    item.name,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    "${item.unit} · $groupName",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (item.note.isNotBlank()) {
                                     Text(
-                                        "${item.unit} · $group" + if (item.note.isNotBlank()) " · 비고 있음" else "",
+                                        "비고: ${item.note}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
+                            }
 
+                            if (!assignmentMode) {
                                 FilledTonalButton(
                                     onClick = { onDecrement(item.id) },
-                                    modifier = Modifier.sizeIn(minWidth = 52.dp, minHeight = 52.dp),
+                                    modifier = Modifier.sizeIn(
+                                        minWidth = 52.dp,
+                                        minHeight = 52.dp
+                                    ),
                                     contentPadding = PaddingValues(0.dp)
                                 ) {
                                     Text("−", style = MaterialTheme.typography.titleLarge)
@@ -350,7 +591,9 @@ private fun CountingScreen(
 
                                 TextButton(
                                     onClick = { quantityTarget = item },
-                                    modifier = Modifier.widthIn(min = 68.dp).heightIn(min = 52.dp)
+                                    modifier = Modifier
+                                        .widthIn(min = 68.dp)
+                                        .heightIn(min = 52.dp)
                                 ) {
                                     Text(
                                         item.quantity.toString(),
@@ -361,7 +604,10 @@ private fun CountingScreen(
 
                                 FilledTonalButton(
                                     onClick = { onIncrement(item.id) },
-                                    modifier = Modifier.sizeIn(minWidth = 52.dp, minHeight = 52.dp),
+                                    modifier = Modifier.sizeIn(
+                                        minWidth = 52.dp,
+                                        minHeight = 52.dp
+                                    ),
                                     contentPadding = PaddingValues(0.dp)
                                 ) {
                                     Text("+", style = MaterialTheme.typography.titleLarge)
@@ -371,7 +617,9 @@ private fun CountingScreen(
                                     TextButton(
                                         onClick = { menuTarget = item },
                                         modifier = Modifier.widthIn(min = 44.dp)
-                                    ) { Text("⋮") }
+                                    ) {
+                                        Text("⋮")
+                                    }
 
                                     DropdownMenu(
                                         expanded = menuTarget?.id == item.id,
@@ -407,7 +655,62 @@ private fun CountingScreen(
                                         )
                                     }
                                 }
+                            } else {
+                                Text(
+                                    item.quantity.toString(),
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 12.dp)
+                                )
                             }
+                        }
+                    }
+                }
+
+                item {
+                    OutlinedButton(
+                        onClick = { creating = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 52.dp)
+                    ) {
+                        Text("+ 새 항목 추가")
+                    }
+                }
+
+                item {
+                    Card(
+                        onClick = { memoEdit = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(Modifier.padding(14.dp)) {
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "메모",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    "편집",
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                sheet.memo.ifBlank {
+                                    "메모가 없습니다. 눌러서 입력하세요."
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (sheet.memo.isBlank()) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                }
+                            )
                         }
                     }
                 }
@@ -415,41 +718,57 @@ private fun CountingScreen(
         }
     }
 
-    if (creating) ItemDialog(sheet, null) { data ->
-        creating = false
-        data?.let { onAddItem(it.name, it.quantity, it.unit, it.note, it.groupId) }
+    if (creating) {
+        ItemDialog(sheet, null) { data ->
+            creating = false
+            data?.let {
+                onAddItem(it.name, it.quantity, it.unit, it.note, it.groupId)
+            }
+        }
     }
 
     itemEditor?.let { item ->
         ItemDialog(sheet, item) { data ->
             itemEditor = null
-            data?.let { onEditItem(item.id, it.name, it.unit, it.note, it.groupId) }
+            data?.let {
+                onEditItem(item.id, it.name, it.unit, it.note, it.groupId)
+            }
         }
     }
 
     quantityTarget?.let { item ->
-        QuantityDialog(item.quantity) { q ->
+        QuantityDialog(item.quantity) { quantity ->
             quantityTarget = null
-            if (q != null) onQuantity(item.id, q)
+            if (quantity != null) onQuantity(item.id, quantity)
         }
     }
 
     deleteTarget?.let { item ->
-        ConfirmDialog("항목 삭제", "'${item.name}' 항목만 삭제합니다.") {
+        ConfirmDialog(
+            title = "항목 삭제",
+            message = "'${item.name}' 항목만 삭제합니다."
+        ) {
             deleteTarget = null
             if (it) onDeleteItem(item.id)
         }
     }
 
-    if (groupAssign) {
-        GroupAssignmentDialog(sheet) { ids, gid ->
-            groupAssign = false
-            if (ids != null) onAssignGroup(ids, gid)
+    if (groupPickerOpen) {
+        GroupPickerDialog(sheet) { groupId ->
+            groupPickerOpen = false
+            if (groupId != null) {
+                assignmentGroupId = groupId
+                assignmentSelected = emptySet()
+            }
         }
     }
 
     if (titleEdit) {
-        TextInputDialog("제목 변경", sheet.title, "빈 제목은 저장할 수 없습니다.") {
+        TextInputDialog(
+            title = "제목 변경",
+            initial = sheet.title,
+            helper = "빈 제목은 저장할 수 없습니다."
+        ) {
             titleEdit = false
             if (it != null && it.trim().isNotEmpty()) onRename(it)
         }
@@ -457,9 +776,9 @@ private fun CountingScreen(
 
     if (memoEdit) {
         TextInputDialog(
-            "실셈표 메모",
-            sheet.memo,
-            "",
+            title = "실셈표 메모",
+            initial = sheet.memo,
+            helper = "",
             allowEmpty = true,
             singleLine = false
         ) {
@@ -472,10 +791,16 @@ private fun CountingScreen(
 @Composable
 private fun AggregateSummary(sheet: CountingSheet) {
     val sections = mutableListOf<Pair<String, Map<String, Int>>>()
-    sheet.groups.sortedBy { it.order }.forEach { g ->
-        val totals = DomainRules.aggregate(sheet.items.filter { it.groupId == g.id })
-        if (totals.isNotEmpty()) sections += g.name to totals
+
+    sheet.groups.sortedBy { it.order }.forEach { group ->
+        val totals = DomainRules.aggregate(
+            sheet.items.filter { it.groupId == group.id }
+        )
+        if (totals.isNotEmpty()) {
+            sections += group.name to totals
+        }
     }
+
     val ungrouped = sheet.items.filter { it.groupId == null }
     if (ungrouped.isNotEmpty()) {
         sections += "미지정" to DomainRules.aggregate(ungrouped)
@@ -483,7 +808,9 @@ private fun AggregateSummary(sheet: CountingSheet) {
 
     if (sections.isNotEmpty()) {
         Column(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp)
         ) {
             Text(
                 "현재 합계",
@@ -491,18 +818,25 @@ private fun AggregateSummary(sheet: CountingSheet) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
             )
+
             LazyColumn(
-                Modifier.fillMaxWidth().heightIn(max = 112.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 112.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 items(sections) { (name, totals) ->
+                    val group = sheet.groups.firstOrNull { it.name == name }
                     Surface(
-                        tonalElevation = 1.dp,
+                        color = group?.let { parseColor(it.color).copy(alpha = 0.10f) }
+                            ?: MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
                         shape = MaterialTheme.shapes.small,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp),
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 7.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
@@ -511,11 +845,83 @@ private fun AggregateSummary(sheet: CountingSheet) {
                                 modifier = Modifier.widthIn(min = 76.dp)
                             )
                             Text(
-                                totals.entries.joinToString("   ") { "${it.key} ${it.value}" },
+                                totals.entries.joinToString("   ") {
+                                    "${it.key} ${it.value}"
+                                },
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalculationSummary(sheet: CountingSheet) {
+    if (sheet.calculations.isEmpty()) return
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 2.dp)
+    ) {
+        Text(
+            "그룹 계산",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+        )
+
+        sheet.calculations.forEach { calculation ->
+            val leftGroup = sheet.groups.firstOrNull {
+                it.id == calculation.leftGroupId
+            } ?: return@forEach
+            val rightGroup = sheet.groups.firstOrNull {
+                it.id == calculation.rightGroupId
+            } ?: return@forEach
+
+            val left = DomainRules.aggregate(
+                sheet.items.filter { it.groupId == leftGroup.id }
+            )
+            val right = DomainRules.aggregate(
+                sheet.items.filter { it.groupId == rightGroup.id }
+            )
+            val result = DomainRules.calculate(
+                left,
+                calculation.operator,
+                right
+            )
+
+            val symbol = if (calculation.operator == CalculationOperator.ADD) "+" else "−"
+            val label = calculation.name.ifBlank {
+                "${leftGroup.name} $symbol ${rightGroup.name}"
+            }
+
+            Surface(
+                tonalElevation = 1.dp,
+                shape = MaterialTheme.shapes.small,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 4.dp)
+            ) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        label,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.widthIn(min = 110.dp)
+                    )
+                    Text(
+                        result.entries.joinToString("   ") {
+                            "${it.key} ${it.value}"
+                        }
+                    )
                 }
             }
         }
@@ -537,7 +943,9 @@ private fun ItemDialog(
     done: (ItemDraft?) -> Unit
 ) {
     var name by remember { mutableStateOf(item?.name ?: "") }
-    var quantityRaw by remember { mutableStateOf(item?.quantity?.toString() ?: "0") }
+    var quantityRaw by remember {
+        mutableStateOf(item?.quantity?.toString() ?: "0")
+    }
     var unit by remember { mutableStateOf(item?.unit ?: "개") }
     var note by remember { mutableStateOf(item?.note ?: "") }
     var groupId by remember { mutableStateOf(item?.groupId) }
@@ -545,7 +953,9 @@ private fun ItemDialog(
 
     AlertDialog(
         onDismissRequest = { done(null) },
-        title = { Text(if (item == null) "항목 추가" else "항목 편집") },
+        title = {
+            Text(if (item == null) "항목 추가" else "항목 편집")
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
@@ -561,7 +971,9 @@ private fun ItemDialog(
                         onValueChange = { quantityRaw = it },
                         label = { Text("수량") },
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Number
+                        )
                     )
                 }
 
@@ -579,19 +991,17 @@ private fun ItemDialog(
                 )
 
                 Text("그룹")
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    FilterChip(
-                        selected = groupId == null,
-                        onClick = { groupId = null },
-                        label = { Text("미지정") }
-                    )
-                }
+                FilterChip(
+                    selected = groupId == null,
+                    onClick = { groupId = null },
+                    label = { Text("미지정") }
+                )
 
-                sheet.groups.sortedBy { it.order }.forEach { g ->
+                sheet.groups.sortedBy { it.order }.forEach { group ->
                     FilterChip(
-                        selected = groupId == g.id,
-                        onClick = { groupId = g.id },
-                        label = { Text(g.name) }
+                        selected = groupId == group.id,
+                        onClick = { groupId = group.id },
+                        label = { Text(group.name) }
                     )
                 }
 
@@ -601,23 +1011,41 @@ private fun ItemDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                val q = if (item == null) DomainRules.parseQuantity(quantityRaw) else item.quantity
-                when {
-                    name.trim().isEmpty() -> error = "항목명을 입력하세요."
-                    unit.trim().isEmpty() -> error = "단위를 입력하세요."
-                    q == null -> error = "수량은 0 이상의 정수만 가능합니다."
-                    else -> done(
-                        ItemDraft(
-                            name.trim(),
-                            q,
-                            unit.trim(),
-                            note.trim(),
-                            groupId
-                        )
-                    )
+            TextButton(
+                onClick = {
+                    val quantity = if (item == null) {
+                        DomainRules.parseQuantity(quantityRaw)
+                    } else {
+                        item.quantity
+                    }
+
+                    when {
+                        name.trim().isEmpty() -> {
+                            error = "항목명을 입력하세요."
+                        }
+
+                        unit.trim().isEmpty() -> {
+                            error = "단위를 입력하세요."
+                        }
+
+                        quantity == null -> {
+                            error = "수량은 0 이상의 정수만 가능합니다."
+                        }
+
+                        else -> {
+                            done(
+                                ItemDraft(
+                                    name = name.trim(),
+                                    quantity = quantity,
+                                    unit = unit.trim(),
+                                    note = note.trim(),
+                                    groupId = groupId
+                                )
+                            )
+                        }
+                    }
                 }
-            }) {
+            ) {
                 Text("확인")
             }
         },
@@ -646,7 +1074,9 @@ private fun QuantityDialog(
                     value = raw,
                     onValueChange = { raw = it },
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number
+                    )
                 )
                 if (error.isNotBlank()) {
                     Text(error, color = MaterialTheme.colorScheme.error)
@@ -654,14 +1084,16 @@ private fun QuantityDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                val parsed = DomainRules.parseQuantity(raw)
-                if (parsed == null) {
-                    error = "0 이상의 정수를 입력하세요."
-                } else {
-                    done(parsed)
+            TextButton(
+                onClick = {
+                    val parsed = DomainRules.parseQuantity(raw)
+                    if (parsed == null) {
+                        error = "0 이상의 정수를 입력하세요."
+                    } else {
+                        done(parsed)
+                    }
                 }
-            }) {
+            ) {
                 Text("확인")
             }
         },
@@ -692,7 +1124,11 @@ private fun GroupScreen(
         topBar = {
             TopAppBar(
                 title = { Text("그룹 관리") },
-                navigationIcon = { TextButton(onClick = onBack) { Text("뒤로") } }
+                navigationIcon = {
+                    TextButton(onClick = onBack) {
+                        Text("뒤로")
+                    }
+                }
             )
         },
         floatingActionButton = {
@@ -702,26 +1138,50 @@ private fun GroupScreen(
         }
     ) { padding ->
         if (sheet.groups.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
                 Text("그룹이 없습니다.")
             }
         } else {
             LazyColumn(
-                Modifier.padding(padding),
+                modifier = Modifier.padding(padding),
                 contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(sheet.groups.sortedBy { it.order }) { g ->
-                    Card(Modifier.fillMaxWidth()) {
+                items(sheet.groups.sortedBy { it.order }) { group ->
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = parseColor(group.color).copy(alpha = 0.12f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Row(
-                            Modifier.fillMaxWidth().padding(12.dp),
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(Modifier.size(18.dp).background(parseColor(g.color), CircleShape))
+                            Box(
+                                Modifier
+                                    .size(18.dp)
+                                    .background(parseColor(group.color), CircleShape)
+                            )
                             Spacer(Modifier.width(10.dp))
-                            Text(g.name, Modifier.weight(1f), fontWeight = FontWeight.Bold)
-                            TextButton(onClick = { rename = g }) { Text("이름 변경") }
-                            TextButton(onClick = { delete = g }) { Text("삭제") }
+                            Text(
+                                group.name,
+                                Modifier.weight(1f),
+                                fontWeight = FontWeight.Bold
+                            )
+                            TextButton(onClick = { rename = group }) {
+                                Text("편집")
+                            }
+                            TextButton(onClick = { delete = group }) {
+                                Text("삭제")
+                            }
                         }
                     }
                 }
@@ -730,31 +1190,40 @@ private fun GroupScreen(
     }
 
     if (create) {
-        GroupEditDialog("그룹 추가", "", "#6750A4") { name, color ->
+        GroupEditDialog(
+            title = "그룹 추가",
+            initialName = "",
+            initialColor = "#6750A4"
+        ) { name, color ->
             create = false
             if (name != null) onAdd(name, color)
         }
     }
 
-    rename?.let { g ->
-        GroupEditDialog("그룹 편집", g.name, g.color) { name, color ->
+    rename?.let { group ->
+        GroupEditDialog(
+            title = "그룹 편집",
+            initialName = group.name,
+            initialColor = group.color
+        ) { name, color ->
             rename = null
-            if (name != null) onRename(g.id, name, color)
+            if (name != null) onRename(group.id, name, color)
         }
     }
 
-    delete?.let { g ->
-        val itemCount = sheet.items.count { it.groupId == g.id }
-        val calcCount = sheet.calculations.count {
-            it.leftGroupId == g.id || it.rightGroupId == g.id
+    delete?.let { group ->
+        val itemCount = sheet.items.count { it.groupId == group.id }
+        val calculationCount = sheet.calculations.count {
+            it.leftGroupId == group.id || it.rightGroupId == group.id
         }
 
         ConfirmDialog(
-            "그룹 삭제",
-            "항목 ${itemCount}개는 삭제되지 않고 '미지정'으로 변경됩니다. 관련 계산 ${calcCount}개는 삭제됩니다."
+            title = "그룹 삭제",
+            message = "항목 ${itemCount}개는 삭제되지 않고 '미지정'으로 변경됩니다. " +
+                "관련 계산 ${calculationCount}개는 삭제됩니다."
         ) {
             delete = null
-            if (it) onDelete(g.id)
+            if (it) onDelete(group.id)
         }
     }
 }
@@ -770,13 +1239,19 @@ private fun CalculationScreen(
 ) {
     var editor by remember { mutableStateOf<GroupCalculation?>(null) }
     var creating by remember { mutableStateOf(false) }
-    var delete by remember { mutableStateOf<GroupCalculation?>(null) }
+    var deleteTarget by remember { mutableStateOf<GroupCalculation?>(null) }
+
+    BackHandler { onBack() }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("그룹 계산") },
-                navigationIcon = { TextButton(onClick = onBack) { Text("뒤로") } }
+                navigationIcon = {
+                    TextButton(onClick = onBack) {
+                        Text("뒤로")
+                    }
+                }
             )
         },
         floatingActionButton = {
@@ -785,41 +1260,81 @@ private fun CalculationScreen(
             }
         }
     ) { padding ->
-        if (sheet.groups.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("먼저 그룹을 만들어 주세요.")
+        when {
+            sheet.groups.isEmpty() -> {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(padding),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("먼저 그룹을 만들어 주세요.")
+                }
             }
-        } else if (sheet.calculations.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("등록된 계산이 없습니다.")
-            }
-        } else {
-            LazyColumn(
-                Modifier.padding(padding),
-                contentPadding = PaddingValues(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(sheet.calculations) { c ->
-                    val lg = sheet.groups.firstOrNull { it.id == c.leftGroupId }?.name ?: "?"
-                    val rg = sheet.groups.firstOrNull { it.id == c.rightGroupId }?.name ?: "?"
-                    val op = if (c.operator == CalculationOperator.ADD) "+" else "-"
-                    val leftTotals = DomainRules.aggregate(sheet.items.filter { it.groupId == c.leftGroupId })
-                    val rightTotals = DomainRules.aggregate(sheet.items.filter { it.groupId == c.rightGroupId })
-                    val result = DomainRules.calculate(leftTotals, c.operator, rightTotals)
 
-                    Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(12.dp)) {
-                            Text(
-                                c.name.ifBlank { "$lg $op $rg" },
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text("$lg $op $rg")
-                            result.forEach { (unit, q) ->
-                                Text("$unit : $q")
+            sheet.calculations.isEmpty() -> {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(padding),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("등록된 계산이 없습니다.")
+                }
+            }
+
+            else -> {
+                LazyColumn(
+                    modifier = Modifier.padding(padding),
+                    contentPadding = PaddingValues(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(sheet.calculations) { calculation ->
+                        val leftName = sheet.groups.firstOrNull {
+                            it.id == calculation.leftGroupId
+                        }?.name ?: "?"
+                        val rightName = sheet.groups.firstOrNull {
+                            it.id == calculation.rightGroupId
+                        }?.name ?: "?"
+                        val symbol =
+                            if (calculation.operator == CalculationOperator.ADD) "+" else "−"
+
+                        val leftTotals = DomainRules.aggregate(
+                            sheet.items.filter {
+                                it.groupId == calculation.leftGroupId
                             }
-                            Row {
-                                TextButton(onClick = { editor = c }) { Text("편집") }
-                                TextButton(onClick = { delete = c }) { Text("삭제") }
+                        )
+                        val rightTotals = DomainRules.aggregate(
+                            sheet.items.filter {
+                                it.groupId == calculation.rightGroupId
+                            }
+                        )
+                        val result = DomainRules.calculate(
+                            leftTotals,
+                            calculation.operator,
+                            rightTotals
+                        )
+
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(12.dp)) {
+                                Text(
+                                    calculation.name.ifBlank {
+                                        "$leftName $symbol $rightName"
+                                    },
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text("$leftName $symbol $rightName")
+                                result.forEach { (unit, quantity) ->
+                                    Text("$unit : $quantity")
+                                }
+                                Row {
+                                    TextButton(onClick = { editor = calculation }) {
+                                        Text("편집")
+                                    }
+                                    TextButton(onClick = { deleteTarget = calculation }) {
+                                        Text("삭제")
+                                    }
+                                }
                             }
                         }
                     }
@@ -829,23 +1344,36 @@ private fun CalculationScreen(
     }
 
     if (creating) {
-        CalculationDialog(sheet, null) { d ->
+        CalculationDialog(sheet, null) { draft ->
             creating = false
-            d?.let { onAdd(it.left, it.op, it.right, it.name) }
+            draft?.let {
+                onAdd(it.left, it.op, it.right, it.name)
+            }
         }
     }
 
-    editor?.let { c ->
-        CalculationDialog(sheet, c) { d ->
+    editor?.let { calculation ->
+        CalculationDialog(sheet, calculation) { draft ->
             editor = null
-            d?.let { onEdit(c.id, it.left, it.op, it.right, it.name) }
+            draft?.let {
+                onEdit(
+                    calculation.id,
+                    it.left,
+                    it.op,
+                    it.right,
+                    it.name
+                )
+            }
         }
     }
 
-    delete?.let { c ->
-        ConfirmDialog("계산 삭제", "이 계산을 삭제합니다.") {
-            delete = null
-            if (it) onDelete(c.id)
+    deleteTarget?.let { calculation ->
+        ConfirmDialog(
+            title = "계산 삭제",
+            message = "이 계산을 삭제합니다."
+        ) {
+            deleteTarget = null
+            if (it) onDelete(calculation.id)
         }
     }
 }
@@ -874,7 +1402,7 @@ private fun CalculationDialog(
     var right by remember {
         mutableStateOf(current?.rightGroupId ?: sheet.groups.first().id)
     }
-    var op by remember {
+    var operator by remember {
         mutableStateOf(current?.operator ?: CalculationOperator.ADD)
     }
     var name by remember {
@@ -883,38 +1411,40 @@ private fun CalculationDialog(
 
     AlertDialog(
         onDismissRequest = { done(null) },
-        title = { Text(if (current == null) "계산 추가" else "계산 편집") },
+        title = {
+            Text(if (current == null) "계산 추가" else "계산 편집")
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("왼쪽 그룹")
-                sheet.groups.forEach { g ->
+                sheet.groups.forEach { group ->
                     FilterChip(
-                        selected = left == g.id,
-                        onClick = { left = g.id },
-                        label = { Text(g.name) }
+                        selected = left == group.id,
+                        onClick = { left = group.id },
+                        label = { Text(group.name) }
                     )
                 }
 
                 Text("연산")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
-                        selected = op == CalculationOperator.ADD,
-                        onClick = { op = CalculationOperator.ADD },
+                        selected = operator == CalculationOperator.ADD,
+                        onClick = { operator = CalculationOperator.ADD },
                         label = { Text("+") }
                     )
                     FilterChip(
-                        selected = op == CalculationOperator.SUBTRACT,
-                        onClick = { op = CalculationOperator.SUBTRACT },
+                        selected = operator == CalculationOperator.SUBTRACT,
+                        onClick = { operator = CalculationOperator.SUBTRACT },
                         label = { Text("−") }
                     )
                 }
 
                 Text("오른쪽 그룹")
-                sheet.groups.forEach { g ->
+                sheet.groups.forEach { group ->
                     FilterChip(
-                        selected = right == g.id,
-                        onClick = { right = g.id },
-                        label = { Text(g.name) }
+                        selected = right == group.id,
+                        onClick = { right = group.id },
+                        label = { Text(group.name) }
                     )
                 }
 
@@ -926,9 +1456,18 @@ private fun CalculationDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                done(CalcDraft(left, op, right, name.trim()))
-            }) {
+            TextButton(
+                onClick = {
+                    done(
+                        CalcDraft(
+                            left = left,
+                            op = operator,
+                            right = right,
+                            name = name.trim()
+                        )
+                    )
+                }
+            ) {
                 Text("확인")
             }
         },
@@ -951,11 +1490,17 @@ private fun ResultScreen(
         ResultGenerator.generate(sheet)
     }
 
+    BackHandler { onBack() }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("결과 미리보기") },
-                navigationIcon = { TextButton(onClick = onBack) { Text("뒤로") } }
+                navigationIcon = {
+                    TextButton(onClick = onBack) {
+                        Text("뒤로")
+                    }
+                }
             )
         }
     ) { padding ->
@@ -967,10 +1512,14 @@ private fun ResultScreen(
         ) {
             Surface(
                 tonalElevation = 2.dp,
-                modifier = Modifier.weight(1f).fillMaxWidth()
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
             ) {
                 LazyColumn(Modifier.padding(12.dp)) {
-                    item { Text(result) }
+                    item {
+                        Text(result)
+                    }
                 }
             }
 
@@ -982,8 +1531,9 @@ private fun ResultScreen(
             ) {
                 Button(
                     onClick = {
-                        val clipboard =
-                            context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clipboard = context.getSystemService(
+                            Context.CLIPBOARD_SERVICE
+                        ) as ClipboardManager
                         clipboard.setPrimaryClip(
                             ClipData.newPlainText("실셈 결과", result)
                         )
@@ -1017,50 +1567,172 @@ private fun ResultScreen(
     }
 }
 
+private val GROUP_COLORS = listOf(
+    "#6750A4",
+    "#006C4C",
+    "#9C4238",
+    "#0061A4",
+    "#7D5260",
+    "#6B5E00",
+    "#725188",
+    "#3F6374"
+)
 
-private val GROUP_COLORS = listOf("#6750A4", "#006C4C", "#9C4238", "#0061A4", "#7D5260", "#6B5E00", "#725188", "#3F6374")
-
-private fun parseColor(hex: String): Color = runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrDefault(Color(0xFF6750A4))
+private fun parseColor(hex: String): Color {
+    return runCatching {
+        Color(android.graphics.Color.parseColor(hex))
+    }.getOrDefault(Color(0xFF6750A4))
+}
 
 @Composable
-private fun GroupEditDialog(title: String, initialName: String, initialColor: String, done: (String?, String) -> Unit) {
+private fun GroupEditDialog(
+    title: String,
+    initialName: String,
+    initialColor: String,
+    done: (String?, String) -> Unit
+) {
     var name by remember { mutableStateOf(initialName) }
     var color by remember { mutableStateOf(initialColor) }
     var error by remember { mutableStateOf("") }
+
     AlertDialog(
-        onDismissRequest = { done(null, color) }, title = { Text(title) },
-        text = { Column { OutlinedTextField(name, { name = it }, label = { Text("그룹명") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(14.dp)); Text("그룹 색상")
-            Spacer(Modifier.height(8.dp)); Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { GROUP_COLORS.take(4).forEach { c -> ColorDot(c, color == c) { color = c } } }
-            Spacer(Modifier.height(8.dp)); Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { GROUP_COLORS.drop(4).forEach { c -> ColorDot(c, color == c) { color = c } } }
-            if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
-        } },
-        confirmButton = { TextButton(onClick = { if (name.trim().isEmpty()) error = "그룹명을 입력하세요." else done(name.trim(), color) }) { Text("확인") } },
-        dismissButton = { TextButton(onClick = { done(null, color) }) { Text("취소") } }
+        onDismissRequest = { done(null, color) },
+        title = { Text(title) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("그룹명") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(14.dp))
+                Text("그룹 색상")
+                Spacer(Modifier.height(8.dp))
+
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    GROUP_COLORS.take(4).forEach { candidate ->
+                        ColorDot(
+                            color = candidate,
+                            selected = color == candidate,
+                            onClick = { color = candidate }
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    GROUP_COLORS.drop(4).forEach { candidate ->
+                        ColorDot(
+                            color = candidate,
+                            selected = color == candidate,
+                            onClick = { color = candidate }
+                        )
+                    }
+                }
+
+                if (error.isNotBlank()) {
+                    Text(error, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (name.trim().isEmpty()) {
+                        error = "그룹명을 입력하세요."
+                    } else {
+                        done(name.trim(), color)
+                    }
+                }
+            ) {
+                Text("확인")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { done(null, color) }) {
+                Text("취소")
+            }
+        }
     )
 }
 
-@Composable private fun ColorDot(color: String, selected: Boolean, onClick: () -> Unit) {
-    Surface(modifier = Modifier.size(if (selected) 38.dp else 34.dp).clickable(onClick = onClick), shape = CircleShape, color = parseColor(color), tonalElevation = if (selected) 6.dp else 0.dp) { if (selected) Box(contentAlignment = Alignment.Center) { Text("✓", color = Color.White) } }
+@Composable
+private fun ColorDot(
+    color: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .size(if (selected) 38.dp else 34.dp)
+            .clickable(onClick = onClick),
+        shape = CircleShape,
+        color = parseColor(color),
+        tonalElevation = if (selected) 6.dp else 0.dp
+    ) {
+        if (selected) {
+            Box(contentAlignment = Alignment.Center) {
+                Text("✓", color = Color.White)
+            }
+        }
+    }
 }
 
 @Composable
-private fun GroupAssignmentDialog(sheet: CountingSheet, done: (Set<String>?, String?) -> Unit) {
-    var groupId by remember { mutableStateOf<String?>(sheet.groups.firstOrNull()?.id) }
-    var selected by remember { mutableStateOf(setOf<String>()) }
+private fun GroupPickerDialog(
+    sheet: CountingSheet,
+    done: (String?) -> Unit
+) {
     AlertDialog(
-        onDismissRequest = { done(null, null) },
+        onDismissRequest = { done(null) },
         title = { Text("그룹 지정") },
-        text = { Column {
-            if (sheet.groups.isEmpty()) Text("먼저 그룹을 생성하세요.") else {
-                Text("1. 배치할 그룹 선택", fontWeight = FontWeight.Bold)
-                sheet.groups.sortedBy { it.order }.forEach { g -> Row(Modifier.fillMaxWidth().clickable { groupId = g.id }.padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) { RadioButton(groupId == g.id, { groupId = g.id }); Box(Modifier.size(14.dp).background(parseColor(g.color), CircleShape)); Spacer(Modifier.width(8.dp)); Text(g.name) } }
-                HorizontalDivider(); Spacer(Modifier.height(8.dp)); Text("2. 항목 선택", fontWeight = FontWeight.Bold)
-                LazyColumn(Modifier.heightIn(max = 320.dp)) { items(sheet.items.sortedBy { it.order }) { item -> val checked = item.id in selected; Row(Modifier.fillMaxWidth().clickable { selected = if (checked) selected - item.id else selected + item.id }.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) { Checkbox(checked, { v -> selected = if (v) selected + item.id else selected - item.id }); Text("${item.order + 1}. ${item.name}") } } }
+        text = {
+            if (sheet.groups.isEmpty()) {
+                Text("먼저 그룹을 생성하세요.")
+            } else {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    sheet.groups.sortedBy { it.order }.forEach { group ->
+                        Surface(
+                            color = parseColor(group.color).copy(alpha = 0.12f),
+                            shape = MaterialTheme.shapes.small,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { done(group.id) }
+                        ) {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    Modifier
+                                        .size(16.dp)
+                                        .background(parseColor(group.color), CircleShape)
+                                )
+                                Spacer(Modifier.width(10.dp))
+                                Text(
+                                    group.name,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+                }
             }
-        } },
-        confirmButton = { TextButton(enabled = groupId != null && selected.isNotEmpty(), onClick = { done(selected, groupId) }) { Text("확인") } },
-        dismissButton = { TextButton(onClick = { done(null, null) }) { Text("취소") } }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = { done(null) }) {
+                Text("취소")
+            }
+        }
     )
 }
 
@@ -1102,13 +1774,15 @@ private fun TextInputDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                if (!allowEmpty && value.trim().isEmpty()) {
-                    error = "빈 값은 저장할 수 없습니다."
-                } else {
-                    done(value)
+            TextButton(
+                onClick = {
+                    if (!allowEmpty && value.trim().isEmpty()) {
+                        error = "빈 값은 저장할 수 없습니다."
+                    } else {
+                        done(value)
+                    }
                 }
-            }) {
+            ) {
                 Text("확인")
             }
         },
