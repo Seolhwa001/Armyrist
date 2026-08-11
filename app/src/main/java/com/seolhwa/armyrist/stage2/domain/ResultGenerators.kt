@@ -66,7 +66,15 @@ object ChecklistResultGenerator {
             lines += ""
             lines += "[$label]"
             for (item in matching) {
-                lines += item.name
+                val timeSuffix =
+                    if (item.notificationEnabled && item.scheduledTimeMinutes != null) {
+                        " — ${formatChecklistTime(item.scheduledTimeMinutes)}"
+                    } else {
+                        ""
+                    }
+
+                lines += item.name + timeSuffix
+
                 if (item.note.isNotBlank()) {
                     lines += "  비고: ${item.note.trim()}"
                 }
@@ -74,6 +82,12 @@ object ChecklistResultGenerator {
         }
 
         return lines.joinToString("\n")
+    }
+
+    private fun formatChecklistTime(minutes: Int): String {
+        val hour = minutes / 60
+        val minute = minutes % 60
+        return "%02d:%02d".format(hour, minute)
     }
 }
 
