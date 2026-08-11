@@ -27,7 +27,8 @@ data class ChecklistGroup(
     val id: String = UUID.randomUUID().toString(),
     val checklistId: String,
     val name: String,
-    val order: Int
+    val order: Int,
+    val color: String = "#6750A4"
 )
 
 data class ChecklistItem(
