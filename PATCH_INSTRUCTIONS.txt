@@ -1,13 +1,5 @@
-Armyrist 0.3.15 Pre-TimePlan Structural Cleanup
-
-IMPORTANT: because two Kotlin files move paths, do not merely overwrite files.
-Delete:
-app/src/main/java/com/seolhwa/armyrist/CoreSuiteRepository.kt
-app/src/main/java/com/seolhwa/armyrist/stage2/data/CountingRepository.kt
-
-Then add/replace the files from this patch.
-
-Scope:
-- source/package alignment only
-- TimePlan v2 boundary note only (no v2 feature)
-- Counting drag regression fix: haptic, finger-follow translation, edge auto-scroll
+TimePlan Step 2 — Calculation Engine
+Prerequisite: Step 1 Revised Domain already applied.
+ADD the two files in this patch. No existing file is replaced or deleted.
+Scope: pure forward/reverse, range references/stay, zero duration, midnight and <24h boundary.
+No UI, persistence, migration, Candidate/Conflict or portable-data changes.
