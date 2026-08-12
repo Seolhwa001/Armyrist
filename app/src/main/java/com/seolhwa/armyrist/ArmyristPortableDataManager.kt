@@ -73,6 +73,8 @@ object ArmyristPortableDataManager {
     private const val KDF_ITERATIONS = 600_000
     private const val KEY_BITS = 256
     private const val GCM_TAG_BITS = 128
+    private const val MAX_PORTABLE_FILE_BYTES =
+        32 * 1024 * 1024
 
     private val secureRandom = SecureRandom()
 
@@ -182,6 +184,7 @@ object ArmyristPortableDataManager {
 
     fun inspect(bytes: ByteArray): PortableResult<ContainerInspection> {
         return runCatching {
+            requirePortableFileSize(bytes)
             require(bytes.isNotEmpty())
             val outer = JSONObject(bytes.toString(Charsets.UTF_8))
             validateOuterMetadata(outer)
@@ -198,9 +201,15 @@ object ArmyristPortableDataManager {
         }.fold(
             onSuccess = { PortableResult.Success(it) },
             onFailure = {
-                PortableResult.Error(
-                    "지원하는 Armyrist 데이터 파일이 아닙니다."
-                )
+                if (it is PortableFileTooLargeException) {
+                    PortableResult.Error(
+                        "파일이 너무 커서 가져올 수 없습니다."
+                    )
+                } else {
+                    PortableResult.Error(
+                        "지원하는 Armyrist 데이터 파일이 아닙니다."
+                    )
+                }
             }
         )
     }
@@ -210,6 +219,7 @@ object ArmyristPortableDataManager {
         password: CharArray?
     ): PortableResult<ValidatedBackup> {
         return runCatching {
+            requirePortableFileSize(bytes)
             require(bytes.isNotEmpty())
 
             val outer = JSONObject(bytes.toString(Charsets.UTF_8))
@@ -305,14 +315,19 @@ object ArmyristPortableDataManager {
         }.fold(
             onSuccess = { PortableResult.Success(it) },
             onFailure = {
-                if (it is UnsupportedTimePlanSchemaException) {
-                    PortableResult.Error(
-                        "이 파일의 시간계획 데이터 버전은 현재 Armyrist에서 지원하지 않습니다."
-                    )
-                } else {
-                    PortableResult.Error(
-                        "암호가 올바르지 않거나 파일이 손상되었습니다."
-                    )
+                when (it) {
+                    is PortableFileTooLargeException ->
+                        PortableResult.Error(
+                            "파일이 너무 커서 가져올 수 없습니다."
+                        )
+                    is UnsupportedTimePlanSchemaException ->
+                        PortableResult.Error(
+                            "이 파일의 시간계획 데이터 버전은 현재 Armyrist에서 지원하지 않습니다."
+                        )
+                    else ->
+                        PortableResult.Error(
+                            "암호가 올바르지 않거나 파일이 손상되었습니다."
+                        )
                 }
             }
         )
@@ -853,6 +868,17 @@ object ArmyristPortableDataManager {
         return getString(key)
     }
 
+    private fun requirePortableFileSize(
+        bytes: ByteArray
+    ) {
+        if (bytes.size > MAX_PORTABLE_FILE_BYTES) {
+            throw PortableFileTooLargeException()
+        }
+    }
+
+    private class PortableFileTooLargeException :
+        IllegalArgumentException()
+
     private fun sha256Hex(bytes: ByteArray): String {
         val digest = MessageDigest.getInstance("SHA-256")
             .digest(bytes)
@@ -933,6 +959,7 @@ object ArmyristPortableDataManager {
         password: CharArray?
     ): PortableResult<ValidatedPortableDocument> {
         return runCatching {
+            requirePortableFileSize(bytes)
             require(bytes.isNotEmpty())
             val outer = JSONObject(bytes.toString(Charsets.UTF_8))
             validateOuterMetadata(outer)
@@ -982,14 +1009,19 @@ object ArmyristPortableDataManager {
                 )
             )
         }.getOrElse {
-            if (it is UnsupportedTimePlanSchemaException) {
-                PortableResult.Error(
-                    "이 시간계획 데이터 버전은 현재 Armyrist에서 지원하지 않습니다."
-                )
-            } else {
-                PortableResult.Error(
-                    "암호가 올바르지 않거나 파일이 손상되었습니다."
-                )
+            when (it) {
+                is PortableFileTooLargeException ->
+                    PortableResult.Error(
+                        "파일이 너무 커서 가져올 수 없습니다."
+                    )
+                is UnsupportedTimePlanSchemaException ->
+                    PortableResult.Error(
+                        "이 시간계획 데이터 버전은 현재 Armyrist에서 지원하지 않습니다."
+                    )
+                else ->
+                    PortableResult.Error(
+                        "암호가 올바르지 않거나 파일이 손상되었습니다."
+                    )
             }
         }
     }
