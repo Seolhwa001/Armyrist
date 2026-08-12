@@ -59,6 +59,7 @@ fun TimePlanV2App(
     } else {
         TimePlanV2Detail(
             plan = selected,
+            onHome = onHome,
             onBack = { selectedId = null },
             onResult = { sharingId = selected.id },
             onCommit = {
@@ -129,6 +130,7 @@ private fun TimePlanV2List(
 @Composable
 private fun TimePlanV2Detail(
     plan: RevisedTimePlan,
+    onHome: () -> Unit,
     onBack: () -> Unit,
     onResult: () -> Unit,
     onCommit: (RevisedTimePlan) -> Unit
@@ -154,20 +156,70 @@ private fun TimePlanV2Detail(
     fun rebuildLinks(changed: RevisedTimePlan): RevisedTimePlan =
         TimePlanCandidateEngine.normalizeTopology(changed)
 
-    Scaffold(topBar = {
-        TimePlanDetailHeader(
-            title = plan.title,
-            onBack = onBack,
-            onTitle = { titleEdit = true },
-            resultEnabled = true,
-            onResult = onResult
-        )
-    }) { padding ->
-        LazyColumn(
-            Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(10.dp, 8.dp, 10.dp, 28.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+    Scaffold(
+        topBar = {
+            ArmyristTopBar(
+                title = plan.title,
+                subtitle = "TIME PLAN · V2 · AUTO SAVE",
+                leadingLabel = "홈",
+                onLeading = onHome
+            )
+        }
+    ) { padding ->
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
         ) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onBack,
+                    modifier = Modifier.weight(1f),
+                    shape = ArmyristPanelShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ArmyristColors.HeaderRaised,
+                        contentColor = ArmyristColors.OnDark
+                    )
+                ) {
+                    Text("목록", fontWeight = FontWeight.Bold)
+                }
+
+                OutlinedButton(
+                    onClick = { titleEdit = true },
+                    modifier = Modifier.weight(1f),
+                    shape = ArmyristPanelShape,
+                    border = BorderStroke(1.dp, ArmyristColors.PrimaryControl),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = ArmyristColors.WorkSurface,
+                        contentColor = ArmyristColors.PrimaryText
+                    )
+                ) {
+                    Text("제목 수정", fontWeight = FontWeight.Bold)
+                }
+
+                Button(
+                    onClick = onResult,
+                    modifier = Modifier.weight(1f),
+                    shape = ArmyristPanelShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ArmyristColors.PrimaryControl,
+                        contentColor = ArmyristColors.OnDark
+                    )
+                ) {
+                    Text("결과 전달", fontWeight = FontWeight.Bold)
+                }
+            }
+
+            LazyColumn(
+                Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(8.dp, 0.dp, 8.dp, 24.dp),
+                verticalArrangement = Arrangement.spacedBy(1.dp)
+            ) {
             item {
                 PointCard(
                     label = "시작",
@@ -294,6 +346,7 @@ private fun TimePlanV2Detail(
                 }
             }
         }
+        }
     }
 
     if (editingStart) {
@@ -398,60 +451,6 @@ private fun TimePlanV2Detail(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TimePlanDetailHeader(
-    title: String,
-    onBack: () -> Unit,
-    onTitle: () -> Unit,
-    resultEnabled: Boolean,
-    onResult: () -> Unit
-) {
-    TopAppBar(
-        navigationIcon = {
-            OutlinedButton(
-                onClick = onBack,
-                shape = ArmyristPanelShape,
-                border = BorderStroke(1.dp, ArmyristColors.OnDark.copy(alpha = 0.65f)),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = ArmyristColors.OnDark),
-                contentPadding = PaddingValues(horizontal = 10.dp)
-            ) { Text("목록") }
-        },
-        title = {
-            Column(
-                modifier = Modifier.clickable(onClick = onTitle).padding(horizontal = 4.dp)
-            ) {
-                Text(title, fontWeight = FontWeight.Bold, maxLines = 1)
-                Text(
-                    "TIME PLAN · V2 · AUTO SAVE",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ArmyristColors.OnDark.copy(alpha = 0.78f),
-                    maxLines = 1
-                )
-            }
-        },
-        actions = {
-            OutlinedButton(
-                onClick = onResult,
-                enabled = resultEnabled,
-                shape = ArmyristPanelShape,
-                border = BorderStroke(1.dp, ArmyristColors.OnDark.copy(alpha = if (resultEnabled) 0.65f else 0.30f)),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = ArmyristColors.OnDark,
-                    disabledContentColor = ArmyristColors.OnDark.copy(alpha = 0.38f)
-                ),
-                contentPadding = PaddingValues(horizontal = 10.dp)
-            ) { Text("결과 전달") }
-        },
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = ArmyristColors.Header,
-            titleContentColor = ArmyristColors.OnDark,
-            navigationIconContentColor = ArmyristColors.OnDark,
-            actionIconContentColor = ArmyristColors.OnDark
-        )
-    )
-}
-
 @Composable
 private fun PointCard(
     label: String,
@@ -467,7 +466,7 @@ private fun PointCard(
         border = BorderStroke(if (emphasized) 2.dp else 1.dp, ArmyristColors.PrimaryControl)
     ) {
         Row(
-            Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(Modifier.width(82.dp)) {
@@ -506,7 +505,7 @@ private fun EventPointCard(label: String, event: TimeEvent, onClick: () -> Unit)
         border = BorderStroke(1.dp, ArmyristColors.Border)
     ) {
         Row(
-            Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(Modifier.width(92.dp)) {
@@ -542,26 +541,29 @@ private fun EventPointCard(label: String, event: TimeEvent, onClick: () -> Unit)
 @Composable
 private fun ElapsedConnector(link: TimeLink?, onClick: () -> Unit) {
     val minutes = link?.duration?.minutes
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 1.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Text("│", color = ArmyristColors.Border, modifier = Modifier.height(6.dp))
         OutlinedButton(
             onClick = onClick,
+            modifier = Modifier.heightIn(min = 40.dp),
             shape = ArmyristPanelShape,
             border = BorderStroke(1.dp, ArmyristColors.Border),
             colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = ArmyristColors.AppBackground,
                 contentColor = ArmyristColors.PrimaryControl
             ),
-            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 5.dp)
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp)
         ) {
             Text(
-                if (minutes == null) "+ 경과시간 입력" else "경과시간  ${durationText(minutes)}  ▼",
+                if (minutes == null) "+ 경과시간 입력" else "경과 ${durationText(minutes)}  ▼",
+                style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold
             )
         }
-        Text("│", color = ArmyristColors.Border, modifier = Modifier.height(6.dp))
     }
 }
 
