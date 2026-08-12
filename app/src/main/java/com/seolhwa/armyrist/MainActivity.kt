@@ -1285,6 +1285,7 @@ private data class ItemDraft(
     val groupId: String?
 )
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ItemDialog(
     sheet: CountingSheet,
@@ -1302,84 +1303,227 @@ private fun ItemDialog(
 
     AlertDialog(
         onDismissRequest = { done(null) },
+        shape = ArmyristPanelShape,
+        containerColor = ArmyristColors.WorkSurface,
         title = {
-            Text(if (item == null) "항목 추가" else "항목 편집")
+            Column {
+                Text(
+                    if (item == null) "항목 추가" else "항목 편집",
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "COUNTING ITEM",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ArmyristColors.SecondaryText
+                )
+            }
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it },
+                    onValueChange = {
+                        name = it
+                        error = ""
+                    },
                     label = { Text("항목명") },
-                    singleLine = true
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = ArmyristColors.InputSurface,
+                        unfocusedContainerColor = ArmyristColors.InputSurface,
+                        focusedBorderColor = ArmyristColors.PrimaryControl,
+                        unfocusedBorderColor = ArmyristColors.Border
+                    )
                 )
 
-                if (item == null) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (item == null) {
+                        OutlinedTextField(
+                            value = quantityRaw,
+                            onValueChange = {
+                                quantityRaw = it
+                                error = ""
+                            },
+                            label = { Text("수량") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Number
+                            ),
+                            modifier = Modifier.weight(0.8f),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = ArmyristColors.InputSurface,
+                                unfocusedContainerColor = ArmyristColors.InputSurface,
+                                focusedBorderColor = ArmyristColors.PrimaryControl,
+                                unfocusedBorderColor = ArmyristColors.Border
+                            )
+                        )
+                    }
+
                     OutlinedTextField(
-                        value = quantityRaw,
-                        onValueChange = { quantityRaw = it },
-                        label = { Text("수량") },
+                        value = unit,
+                        onValueChange = {
+                            unit = it
+                            error = ""
+                        },
+                        label = { Text("단위") },
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Number
+                        modifier = Modifier.weight(1f),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = ArmyristColors.InputSurface,
+                            unfocusedContainerColor = ArmyristColors.InputSurface,
+                            focusedBorderColor = ArmyristColors.PrimaryControl,
+                            unfocusedBorderColor = ArmyristColors.Border
                         )
                     )
                 }
 
                 OutlinedTextField(
-                    value = unit,
-                    onValueChange = { unit = it },
-                    label = { Text("단위 (예: 개, 봉, 병, 박스)") },
-                    singleLine = true
-                )
-
-                OutlinedTextField(
                     value = note,
                     onValueChange = { note = it },
-                    label = { Text("비고") }
-                )
-
-                Text("그룹")
-                FilterChip(
-                    selected = groupId == null,
-                    onClick = { groupId = null },
-                    label = { Text("미지정") }
-                )
-
-                sheet.groups.sortedBy { it.order }.forEach { group ->
-                    FilterChip(
-                        selected = groupId == group.id,
-                        onClick = { groupId = group.id },
-                        label = { Text(group.name) }
+                    label = { Text("비고") },
+                    minLines = 1,
+                    maxLines = 2,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = ArmyristColors.InputSurface,
+                        unfocusedContainerColor = ArmyristColors.InputSurface,
+                        focusedBorderColor = ArmyristColors.PrimaryControl,
+                        unfocusedBorderColor = ArmyristColors.Border
                     )
+                )
+
+                Text(
+                    "그룹",
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    maxItemsInEachRow = 3
+                ) {
+                    val unassignedSelected = groupId == null
+                    Surface(
+                        onClick = { groupId = null },
+                        shape = ArmyristPanelShape,
+                        color =
+                            if (unassignedSelected) {
+                                ArmyristColors.SecondaryControl
+                            } else {
+                                ArmyristColors.RaisedSurface
+                            },
+                        border = BorderStroke(
+                            if (unassignedSelected) 2.dp else 1.dp,
+                            if (unassignedSelected) {
+                                ArmyristColors.PrimaryControl
+                            } else {
+                                ArmyristColors.Border
+                            }
+                        )
+                    ) {
+                        Text(
+                            "미지정",
+                            modifier = Modifier.padding(
+                                horizontal = 10.dp,
+                                vertical = 8.dp
+                            ),
+                            fontWeight =
+                                if (unassignedSelected) {
+                                    FontWeight.Bold
+                                } else {
+                                    FontWeight.Medium
+                                }
+                        )
+                    }
+
+                    sheet.groups
+                        .sortedBy { it.order }
+                        .forEach { group ->
+                            val color = parseColor(group.color)
+                            val selected = groupId == group.id
+
+                            Surface(
+                                onClick = { groupId = group.id },
+                                shape = ArmyristPanelShape,
+                                color = color.copy(
+                                    alpha =
+                                        if (selected) 0.28f else 0.12f
+                                ),
+                                border = BorderStroke(
+                                    if (selected) 2.dp else 1.dp,
+                                    color.copy(
+                                        alpha =
+                                            if (selected) 0.95f else 0.62f
+                                    )
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(
+                                        horizontal = 9.dp,
+                                        vertical = 7.dp
+                                    ),
+                                    verticalAlignment =
+                                        Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        Modifier
+                                            .size(10.dp)
+                                            .background(
+                                                color,
+                                                ArmyristPanelShape
+                                            )
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        group.name,
+                                        maxLines = 1,
+                                        fontWeight =
+                                            if (selected) {
+                                                FontWeight.Bold
+                                            } else {
+                                                FontWeight.Medium
+                                            }
+                                    )
+                                }
+                            }
+                        }
                 }
 
                 if (error.isNotBlank()) {
-                    Text(error, color = MaterialTheme.colorScheme.error)
+                    Text(
+                        error,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
         },
         confirmButton = {
-            TextButton(
+            Button(
                 onClick = {
-                    val quantity = if (item == null) {
-                        DomainRules.parseQuantity(quantityRaw)
-                    } else {
-                        item.quantity
-                    }
+                    val quantity =
+                        if (item == null) {
+                            DomainRules.parseQuantity(quantityRaw)
+                        } else {
+                            item.quantity
+                        }
 
                     when {
-                        name.trim().isEmpty() -> {
+                        name.trim().isEmpty() ->
                             error = "항목명을 입력하세요."
-                        }
 
-                        unit.trim().isEmpty() -> {
+                        unit.trim().isEmpty() ->
                             error = "단위를 입력하세요."
-                        }
 
-                        quantity == null -> {
+                        quantity == null ->
                             error = "수량은 0 이상의 정수만 가능합니다."
-                        }
 
                         else -> {
                             done(
@@ -1393,13 +1537,32 @@ private fun ItemDialog(
                             )
                         }
                     }
-                }
+                },
+                shape = ArmyristPanelShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ArmyristColors.PrimaryControl,
+                    contentColor = ArmyristColors.OnDark
+                )
             ) {
-                Text("확인")
+                Text(
+                    "확인",
+                    fontWeight = FontWeight.Bold
+                )
             }
         },
         dismissButton = {
-            TextButton(onClick = { done(null) }) {
+            OutlinedButton(
+                onClick = { done(null) },
+                shape = ArmyristPanelShape,
+                border = BorderStroke(
+                    1.dp,
+                    ArmyristColors.Border
+                ),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = ArmyristColors.WorkSurface,
+                    contentColor = ArmyristColors.PrimaryText
+                )
+            ) {
                 Text("취소")
             }
         }

@@ -633,30 +633,24 @@ private fun ChecklistDetailScreen(
                 ) {
                     ChecklistUtilityButton(text = "그룹", onClick = { groupManager = true })
                     ChecklistUtilityButton(text = "그룹 지정", onClick = { groupPicker = true })
-                    AssistChip(
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = ArmyristColors.WorkSurface,
-                            labelColor = ArmyristColors.PrimaryText
-                        ),
-                        border = AssistChipDefaults.assistChipBorder(
-                            enabled = true,
-                            borderColor = ArmyristColors.Border
-                        ),
+                    ChecklistUtilityButton(
+                        text = "알람음 일괄",
                         onClick = {
                             val enabledItems =
-                                checklist.items.filter { it.notificationEnabled }
+                                checklist.items.filter {
+                                    it.notificationEnabled
+                                }
 
-                            if (enabledItems.isEmpty()) {
-                                // Nothing to apply yet. Keep item flow simple.
-                            } else {
+                            if (enabledItems.isNotEmpty()) {
                                 onPickNotificationSound(
-                                    enabledItems.firstOrNull()?.notificationSoundUri
+                                    enabledItems
+                                        .firstOrNull()
+                                        ?.notificationSoundUri
                                 ) { soundUri ->
                                     onBulkNotificationSound(soundUri)
                                 }
                             }
-                        },
-                        label = { Text("알람음 일괄") }
+                        }
                     )
                     ChecklistUtilityButton(text = "메모", onClick = { memoEdit = true })
                     ChecklistUtilityButton(text = "초기화", onClick = { resetConfirm = true })
