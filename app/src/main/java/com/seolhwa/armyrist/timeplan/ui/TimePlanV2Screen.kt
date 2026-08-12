@@ -453,16 +453,19 @@ private fun TimePlanV2Detail(
     }
 
     editingLink?.let { (from, to) ->
+        val currentLink = linkFor(from, to)
         DurationEditDialog(
-            initial = linkFor(from, to)?.duration?.minutes,
+            initialMinutes = currentLink?.duration?.minutes,
+            initialLabel = currentLink?.label.orEmpty(),
             onDismiss = { editingLink = null },
-            onConfirm = { minutes ->
+            onConfirm = { minutes, label ->
                 val candidate = TimePlanCandidateEngine.create(
                     plan,
                     TimePlanCandidateEngine.EditIntent.SetLinkDuration(
                         fromNodeId = from,
                         toNodeId = to,
-                        duration = minutes?.let(TimeDuration::requireMinutes)
+                        duration = minutes?.let(TimeDuration::requireMinutes),
+                        label = label
                     )
                 )
                 if (candidate.conflicts.isEmpty()) onCommit(candidate.proposed)
@@ -625,8 +628,14 @@ private fun ElapsedConnector(link: TimeLink?, onClick: () -> Unit) {
             ),
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp)
         ) {
+            val displayLabel = link?.label?.takeIf { it.isNotBlank() } ?: "경과"
             Text(
-                if (minutes == null) "+ 경과시간 입력" else "경과 ${durationText(minutes)}  ▼",
+                if (minutes == null) {
+                    if (displayLabel == "경과") "+ 경과시간 입력"
+                    else "$displayLabel · 경과시간 입력  ▼"
+                } else {
+                    "$displayLabel ${durationText(minutes)}  ▼"
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -748,42 +757,182 @@ private fun EventEditDialog(
 
 @Composable
 private fun DurationEditDialog(
-    initial: Int?,
+    initialMinutes: Int?,
+    initialLabel: String,
     onDismiss: () -> Unit,
-    onConfirm: (Int?) -> Unit
+    onConfirm: (Int?, String?) -> Unit
 ) {
-    var raw by remember { mutableStateOf(initial?.toString().orEmpty()) }
+    val safeInitial = (initialMinutes ?: 0).coerceIn(0, MINUTES_PER_DAY - 1)
+    var selectedDurationMinutes by remember {
+        mutableIntStateOf(safeInitial)
+    }
+    var raw by remember {
+        mutableStateOf(initialMinutes?.toString().orEmpty())
+    }
+    var label by remember { mutableStateOf(initialLabel) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    val selectedHours = selectedDurationMinutes / 60
+    val selectedMinutes = selectedDurationMinutes % 60
+    val minuteWheelReference = nearestFiveMinuteDetent(selectedMinutes)
+
+    fun setSelected(hours: Int, minutes: Int) {
+        selectedDurationMinutes = (hours * 60 + minutes)
+            .coerceIn(0, MINUTES_PER_DAY - 1)
+        raw = selectedDurationMinutes.toString()
+        error = null
+    }
+
+    fun parseRawDuration(value: String): Int? {
+        val parsed = value.filter(Char::isDigit).toIntOrNull() ?: return null
+        return parsed.takeIf { it in 0 until MINUTES_PER_DAY }
+    }
+
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = ArmyristPanelShape,
             color = ArmyristColors.WorkSurface,
             border = BorderStroke(1.dp, ArmyristColors.Border)
         ) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Text("경과시간", fontWeight = FontWeight.Bold)
-                Text("분 단위로 입력합니다. 예: 40, 80, 120", style = MaterialTheme.typography.bodySmall, color = ArmyristColors.SecondaryText)
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    "경과시간",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "시간·분 휠 또는 총 분 직접 입력",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ArmyristColors.SecondaryText
+                )
+
+                OutlinedTextField(
+                    value = label,
+                    onValueChange = { label = it },
+                    label = { Text("경과 명칭") },
+                    placeholder = { Text("예: 이동, 교육, 정비") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Column(
+                        modifier = Modifier.width(116.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            "시간",
+                            fontWeight = FontWeight.Bold,
+                            color = ArmyristColors.PrimaryControl
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        ArmyristWheelPicker(
+                            values = (0..23).toList(),
+                            selectedValue = selectedHours,
+                            valueText = { it.toString() },
+                            onUserSelected = { hours ->
+                                setSelected(hours, selectedMinutes)
+                            }
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .width(34.dp)
+                            .height(150.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            ":",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = ArmyristColors.PrimaryText
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier.width(116.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            "분",
+                            fontWeight = FontWeight.Bold,
+                            color = ArmyristColors.PrimaryControl
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        ArmyristWheelPicker(
+                            values = (0..55 step 5).toList(),
+                            selectedValue = minuteWheelReference,
+                            valueText = { "%02d".format(it) },
+                            onUserSelected = { minutes ->
+                                setSelected(selectedHours, minutes)
+                            }
+                        )
+                    }
+                }
+
+                Text(
+                    "직접 입력",
+                    fontWeight = FontWeight.Bold,
+                    color = ArmyristColors.PrimaryControl
+                )
                 OutlinedTextField(
                     value = raw,
-                    onValueChange = { raw = it.filter(Char::isDigit); error = null },
-                    label = { Text("분") },
+                    onValueChange = { incoming ->
+                        raw = incoming.filter(Char::isDigit).take(4)
+                        error = null
+                        parseRawDuration(raw)?.let { exactMinutes ->
+                            selectedDurationMinutes = exactMinutes
+                        }
+                    },
+                    label = { Text("총 분 (예: 40 / 80 / 120)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     isError = error != null,
-                    supportingText = { error?.let { Text(it) } },
-                    modifier = Modifier.fillMaxWidth()
+                    supportingText = {
+                        error?.let { Text(it) }
+                    }
                 )
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     OutlinedButton(
-                        onClick = { onConfirm(null) },
+                        onClick = {
+                            onConfirm(
+                                null,
+                                label.trim().ifEmpty { null }
+                            )
+                        },
                         modifier = Modifier.weight(1f),
                         shape = ArmyristPanelShape
-                    ) { Text("비우기") }
+                    ) {
+                        Text("비우기")
+                    }
+
                     Button(
                         onClick = {
-                            val v = raw.toIntOrNull()
-                            if (v == null || v < 0) error = "0 이상의 분 값을 입력하세요."
-                            else onConfirm(v)
+                            val exact = parseRawDuration(raw)
+                            if (exact == null) {
+                                error = "0~1439분 범위의 값을 입력하세요."
+                            } else {
+                                selectedDurationMinutes = exact
+                                onConfirm(
+                                    exact,
+                                    label.trim().ifEmpty { null }
+                                )
+                            }
                         },
                         modifier = Modifier.weight(1f),
                         shape = ArmyristPanelShape,
@@ -791,7 +940,12 @@ private fun DurationEditDialog(
                             containerColor = ArmyristColors.PrimaryControl,
                             contentColor = ArmyristColors.OnDark
                         )
-                    ) { Text("확인") }
+                    ) {
+                        Text(
+                            "확인 · ${durationText(selectedDurationMinutes)}",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
