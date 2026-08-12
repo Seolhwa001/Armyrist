@@ -440,14 +440,29 @@ private fun EventPointCard(label: String, event: TimeEvent, onClick: () -> Unit)
             Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(Modifier.width(90.dp)) {
+            Column(Modifier.width(92.dp)) {
                 Text(label, style = MaterialTheme.typography.labelSmall, color = ArmyristColors.SecondaryText)
                 Text(eventTimeText(event.timeSpec), fontWeight = FontWeight.Bold)
             }
-            Column(Modifier.weight(1f)) {
-                Text(event.name, fontWeight = FontWeight.Bold)
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    event.name,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    modifier = Modifier.weight(0.42f)
+                )
                 event.note?.takeIf { it.isNotBlank() }?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = ArmyristColors.SecondaryText, maxLines = 2)
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ArmyristColors.SecondaryText,
+                        maxLines = 1,
+                        modifier = Modifier.weight(0.58f)
+                    )
                 }
             }
             Text("편집", style = MaterialTheme.typography.labelMedium, color = ArmyristColors.PrimaryControl)
@@ -457,17 +472,27 @@ private fun EventPointCard(label: String, event: TimeEvent, onClick: () -> Unit)
 
 @Composable
 private fun ElapsedConnector(link: TimeLink?, onClick: () -> Unit) {
-    val text = link?.duration?.minutes?.let(::durationText) ?: "경과 미입력"
-    Row(
-        modifier = Modifier.fillMaxWidth().heightIn(min = 38.dp),
-        verticalAlignment = Alignment.CenterVertically
+    val minutes = link?.duration?.minutes
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(Modifier.width(34.dp))
         Text("│", color = ArmyristColors.Border)
-        TextButton(onClick = onClick) {
-            Text("경과 · $text", color = ArmyristColors.PrimaryControl, fontWeight = FontWeight.Bold)
+        OutlinedButton(
+            onClick = onClick,
+            shape = ArmyristPanelShape,
+            border = BorderStroke(1.dp, ArmyristColors.Border),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = ArmyristColors.PrimaryControl
+            ),
+            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 5.dp)
+        ) {
+            Text(
+                if (minutes == null) "+ 경과시간 입력" else "경과시간  ${durationText(minutes)}  ▼",
+                fontWeight = FontWeight.Bold
+            )
         }
-        Text("▼", color = ArmyristColors.Border)
+        Text("│", color = ArmyristColors.Border)
     }
 }
 
@@ -734,6 +759,8 @@ private fun Armyrist24HourTimeDialog(
             ) {
                 Text("시간 입력", fontWeight = FontWeight.Bold)
                 Text("24시간제 · 선택과 직접 입력을 한 화면에서 사용합니다.", style = MaterialTheme.typography.bodySmall, color = ArmyristColors.SecondaryText)
+
+                Text("시", fontWeight = FontWeight.Bold, color = ArmyristColors.PrimaryControl)
                 for (row in 0 until 4) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         for (col in 0 until 6) {
@@ -742,24 +769,54 @@ private fun Armyrist24HourTimeDialog(
                                 selected = hour == h,
                                 onClick = { hour = h; raw = "%02d%02d".format(hour, minute); error = null },
                                 label = { Text("%02d".format(h)) },
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = ArmyristColors.PrimaryControl,
+                                    selectedLabelColor = ArmyristColors.OnDark
+                                )
                             )
                         }
                     }
                 }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                    listOf(0, 10, 20, 30, 40, 50).forEach { m ->
-                        FilterChip(
-                            selected = minute == m,
-                            onClick = { minute = m; raw = "%02d%02d".format(hour, minute); error = null },
-                            label = { Text("%02d".format(m)) },
-                            modifier = Modifier.weight(1f)
-                        )
+                Text("분", fontWeight = FontWeight.Bold, color = ArmyristColors.PrimaryControl)
+                listOf(listOf(0, 10, 20), listOf(30, 40, 50)).forEach { minuteRow ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        minuteRow.forEach { m ->
+                            FilterChip(
+                                selected = minute == m,
+                                onClick = { minute = m; raw = "%02d%02d".format(hour, minute); error = null },
+                                label = { Text("%02d".format(m)) },
+                                modifier = Modifier.weight(1f),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = ArmyristColors.PrimaryControl,
+                                    selectedLabelColor = ArmyristColors.OnDark
+                                )
+                            )
+                        }
                     }
                 }
+
+                Text("직접 입력", fontWeight = FontWeight.Bold, color = ArmyristColors.PrimaryControl)
                 OutlinedTextField(
                     value = raw,
-                    onValueChange = { raw = it.filter(Char::isDigit).take(4); error = null },
+                    onValueChange = {
+                        raw = it.filter(Char::isDigit).take(4)
+                        error = null
+                        val digits = raw
+                        val parsed = when (digits.length) {
+                            3 -> digits.substring(0, 1).toIntOrNull()?.let { h ->
+                                digits.substring(1, 3).toIntOrNull()?.let { m -> h to m }
+                            }
+                            4 -> digits.substring(0, 2).toIntOrNull()?.let { h ->
+                                digits.substring(2, 4).toIntOrNull()?.let { m -> h to m }
+                            }
+                            else -> null
+                        }
+                        if (parsed != null && parsed.first in 0..23 && parsed.second in 0..59) {
+                            hour = parsed.first
+                            minute = parsed.second
+                        }
+                    },
                     label = { Text("직접 입력 (940 / 1710)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
