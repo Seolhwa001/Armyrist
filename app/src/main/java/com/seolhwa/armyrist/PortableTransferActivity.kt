@@ -285,12 +285,15 @@ class PortableTransferActivity : ComponentActivity() {
                                             this@PortableTransferActivity, data
                                         )) {
                                             is PortableResult.Success -> {
-                                                if (p.dataType == ArmyristPortableDataType.CHECKLIST) {
-                                                    ChecklistNotificationManager.reconcile(
-                                                        this@PortableTransferActivity,
-                                                        (application as ArmyristApplication).coreSuiteRepository
-                                                    )
-                                                }
+                                                val app =
+                                                    application as ArmyristApplication
+
+                                                // importIndividual commits directly to the portable
+                                                // SharedPreferences snapshots. Repository instances
+                                                // cache domain lists in memory, so they must be reloaded
+                                                // before returning to the tool list.
+                                                app.reloadAfterPortableDataChange()
+
                                                 Toast.makeText(
                                                     this@PortableTransferActivity,
                                                     "새 ${typeLabel(p.dataType)} 문서로 가져왔습니다.",
