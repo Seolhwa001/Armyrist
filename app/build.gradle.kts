@@ -12,8 +12,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 20
-        versionName = "0.3.20-timeplan-v2-ui"
+        versionCode = 21
+        versionName = "0.3.21-timeplan-flow-fix"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
