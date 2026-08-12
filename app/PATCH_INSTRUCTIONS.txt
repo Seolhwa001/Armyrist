@@ -1,0 +1,11 @@
+Armyrist 0.3.17 — TimePlan Core Revision Step 1
+
+ADD:
+app/src/main/java/com/seolhwa/armyrist/timeplan/domain/RevisedTimePlanModels.kt
+app/src/test/java/com/seolhwa/armyrist/timeplan/domain/RevisedTimePlanModelsTest.kt
+
+REPLACE:
+app/build.gradle.kts
+
+No existing TimePlan v1 persistence/UI is modified in Step 1.
+No migration, calculator, candidate/conflict, or portable behavior is implemented yet.
