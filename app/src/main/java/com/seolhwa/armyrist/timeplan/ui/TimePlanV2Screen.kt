@@ -147,10 +147,10 @@ private fun TimePlanV2Detail(
     var editingEvent by remember { mutableStateOf<TimeEvent?>(null) }
     var editingLink by remember { mutableStateOf<Pair<String, String>?>(null) }
     var pendingBoundaryEdit by remember {
-        mutableStateOf<Pair<String, EventTimeSpec>?>(null)
+        mutableStateOf<TimeEvent?>(null)
     }
     var pendingEventConflict by remember {
-        mutableStateOf<Triple<String, EventTimeSpec, List<TimePlanCandidateEngine.Conflict>>?>(null)
+        mutableStateOf<Pair<TimeEvent, List<TimePlanCandidateEngine.Conflict>>?>(null)
     }
     var editingStart by remember { mutableStateOf(false) }
     var editingEnd by remember { mutableStateOf(false) }
@@ -438,23 +438,16 @@ private fun TimePlanV2Detail(
                         proposedSpec = changed.timeSpec
                     )
                 ) {
-                    pendingBoundaryEdit = changed.id to changed.timeSpec
+                    pendingBoundaryEdit = changed
                 } else {
-                    val candidate = TimePlanCandidateEngine.create(
-                        plan,
-                        TimePlanCandidateEngine.EditIntent.SetEventTime(
-                            changed.id,
-                            changed.timeSpec
-                        )
+                    val candidate = TimePlanCandidateEngine.createEventEdit(
+                        existing = plan,
+                        changedEvent = changed
                     )
                     if (candidate.conflicts.isEmpty()) {
                         onCommit(candidate.proposed)
                     } else {
-                        pendingEventConflict = Triple(
-                            changed.id,
-                            changed.timeSpec,
-                            candidate.conflicts
-                        )
+                        pendingEventConflict = changed to candidate.conflicts
                     }
                 }
                 editingEvent = null
@@ -484,7 +477,7 @@ private fun TimePlanV2Detail(
         )
     }
 
-    pendingEventConflict?.let { (eventId, proposedSpec, conflicts) ->
+    pendingEventConflict?.let { (changedEvent, conflicts) ->
         val hasHardRangeError = conflicts.any {
             it.type == TimePlanCandidateEngine.ConflictType.RANGE_ORDER_INVALID
         }
@@ -524,10 +517,9 @@ private fun TimePlanV2Detail(
                     Button(
                         onClick = {
                             val adjusted =
-                                TimePlanCandidateEngine.createEventTimeWithDownstreamShift(
+                                TimePlanCandidateEngine.createEventEditWithDownstreamShift(
                                     existing = plan,
-                                    eventId = eventId,
-                                    proposedSpec = proposedSpec
+                                    changedEvent = changedEvent
                                 )
                             if (adjusted.conflicts.isEmpty()) {
                                 onCommit(adjusted.proposed)
@@ -535,11 +527,7 @@ private fun TimePlanV2Detail(
                             } else {
                                 // Keep the dialog open and replace the conflict list.
                                 // The user is never returned to the timeline as if save succeeded.
-                                pendingEventConflict = Triple(
-                                    eventId,
-                                    proposedSpec,
-                                    adjusted.conflicts
-                                )
+                                pendingEventConflict = changedEvent to adjusted.conflicts
                             }
                         },
                         colors = ButtonDefaults.buttonColors(
@@ -554,8 +542,8 @@ private fun TimePlanV2Detail(
         )
     }
 
-    pendingBoundaryEdit?.let { (eventId, proposedSpec) ->
-        val proposedClock = TimePlanCalculator.arrivalClock(proposedSpec)?.time
+    pendingBoundaryEdit?.let { changedEvent ->
+        val proposedClock = TimePlanCalculator.arrivalClock(changedEvent.timeSpec)?.time
         val endClock = plan.end.value.time
         AlertDialog(
             onDismissRequest = { pendingBoundaryEdit = null },
@@ -579,19 +567,14 @@ private fun TimePlanV2Detail(
                 Button(
                     onClick = {
                         val candidate =
-                            TimePlanCandidateEngine.createEventTimeWithDownstreamShift(
+                            TimePlanCandidateEngine.createEventEditWithDownstreamShift(
                                 existing = plan,
-                                eventId = eventId,
-                                proposedSpec = proposedSpec
+                                changedEvent = changedEvent
                             )
                         if (candidate.conflicts.isEmpty()) {
                             onCommit(candidate.proposed)
                         } else {
-                            pendingEventConflict = Triple(
-                                eventId,
-                                proposedSpec,
-                                candidate.conflicts
-                            )
+                            pendingEventConflict = changedEvent to candidate.conflicts
                         }
                         pendingBoundaryEdit = null
                     },
