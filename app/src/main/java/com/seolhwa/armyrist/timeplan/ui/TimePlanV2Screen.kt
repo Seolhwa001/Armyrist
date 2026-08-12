@@ -1078,7 +1078,10 @@ private fun DurationEditDialog(
                             selectedValue = selectedHours,
                             valueText = { it.toString() },
                             onUserSelected = { hours ->
-                                setSelected(hours, selectedMinutes)
+                                // Read the canonical state at callback execution time.
+                                // The other wheel may have updated it before Compose has
+                                // had a chance to recompose this lambda.
+                                setSelected(hours, selectedDurationMinutes % 60)
                             }
                         )
                     }
@@ -1112,7 +1115,8 @@ private fun DurationEditDialog(
                             selectedValue = minuteWheelReference,
                             valueText = { "%02d".format(it) },
                             onUserSelected = { minutes ->
-                                setSelected(selectedHours, minutes)
+                                // Do not use a recomposition snapshot of selectedHours.
+                                setSelected(selectedDurationMinutes / 60, minutes)
                             }
                         )
                     }
@@ -1330,7 +1334,10 @@ private fun Armyrist24HourTimeDialog(
                             selectedValue = selectedHour,
                             valueText = { "%02d".format(it) },
                             onUserSelected = { hour ->
-                                setSelected(hour, selectedMinute)
+                                // Read the canonical minute-of-day at callback execution
+                                // time so rapid cross-wheel input cannot restore a stale
+                                // minute captured by the previous composition.
+                                setSelected(hour, selectedMinuteOfDay % 60)
                             }
                         )
                     }
@@ -1360,7 +1367,9 @@ private fun Armyrist24HourTimeDialog(
                             selectedValue = minuteWheelReference,
                             valueText = { "%02d".format(it) },
                             onUserSelected = { minute ->
-                                setSelected(selectedHour, minute)
+                                // Preserve the hour from the canonical state, not from a
+                                // potentially stale recomposition snapshot.
+                                setSelected(selectedMinuteOfDay / 60, minute)
                             }
                         )
                     }
