@@ -12,8 +12,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 30
-        versionName = "0.3.30-regression-hardening"
+        versionCode = 31
+        versionName = "0.3.31-inspection-rework1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
