@@ -24,6 +24,15 @@ class CoreSuiteRepository(context: Context) {
     }
 
     @Synchronized
+    fun reloadFromPersistence() {
+        checklists = emptyList()
+        timePlans = emptyList()
+        userProfile = UserProfile()
+        reportTemplates = emptyList()
+        load()
+    }
+
+    @Synchronized
     fun getChecklists(): List<Checklist> =
         checklists.sortedByDescending { it.updatedAt }
 

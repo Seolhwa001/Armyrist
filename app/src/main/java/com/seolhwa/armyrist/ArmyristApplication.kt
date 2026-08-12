@@ -27,7 +27,11 @@ class ArmyristApplication : Application() {
     }
 
     fun reloadAfterPortableDataChange() {
-        reloadRepositories()
+        // Keep repository object identity stable so Activities that already
+        // hold these instances immediately see imported/restored data.
+        repository.reloadFromPersistence()
+        coreSuiteRepository.reloadFromPersistence()
+
         ChecklistNotificationManager.reconcile(
             this,
             coreSuiteRepository

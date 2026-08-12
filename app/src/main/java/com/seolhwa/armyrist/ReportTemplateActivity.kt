@@ -8,6 +8,8 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
@@ -206,7 +208,9 @@ private fun TemplateEditor(
     onSave: (String, String) -> Boolean
 ) {
     val context = LocalContext.current
-    var name by remember(template?.id) { mutableStateOf(template?.name ?: "") }
+    var name by remember(template?.id) {
+        mutableStateOf(template?.name ?: "")
+    }
     var body by remember(template?.id) {
         val initial = template?.body ?: ""
         mutableStateOf(
@@ -219,86 +223,173 @@ private fun TemplateEditor(
     var error by remember { mutableStateOf("") }
 
     fun insertToken(token: String) {
-        val start = body.selection.min.coerceIn(0, body.text.length)
-        val end = body.selection.max.coerceIn(0, body.text.length)
+        val start =
+            body.selection.min.coerceIn(0, body.text.length)
+        val end =
+            body.selection.max.coerceIn(0, body.text.length)
+
         val newText =
             body.text.substring(0, start) +
                 token +
                 body.text.substring(end)
-        val newCursor = start + token.length
+
         body = TextFieldValue(
             text = newText,
-            selection = TextRange(newCursor)
+            selection = TextRange(start + token.length)
         )
     }
 
-    Column(
-        Modifier.fillMaxSize().padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        ArmyristTopBar(
-            title = if (template == null) "새 보고 양식" else "보고 양식 편집",
-            subtitle = "REPORT TEMPLATE · EDIT",
-            leadingLabel = "홈",
-            onLeading = onHome
-        )
-        Button(
-            onClick = onBack,
-            shape = ArmyristPanelShape,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = ArmyristColors.HeaderRaised,
-                contentColor = ArmyristColors.OnDark
+    Scaffold(
+        topBar = {
+            ArmyristTopBar(
+                title =
+                    if (template == null) {
+                        "새 보고 양식"
+                    } else {
+                        "보고 양식 편집"
+                    },
+                subtitle = "REPORT TEMPLATE · EDIT",
+                leadingLabel = "홈",
+                onLeading = onHome
             )
+        }
+    ) { padding ->
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement =
+                Arrangement.spacedBy(12.dp)
         ) {
-            Text("목록", fontWeight = FontWeight.Bold)
-        }
-
-        OutlinedTextField(
-            value = name,
-            onValueChange = { name = it; error = "" },
-            label = { Text("양식 이름") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Text("지원 변수", fontWeight = FontWeight.SemiBold)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf("{사용자}", "{제목}", "{전달내용}").forEach { token ->
-                AssistChip(onClick = { insertToken(token) }, label = { Text(token) })
+            Button(
+                onClick = onBack,
+                shape = ArmyristPanelShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor =
+                        ArmyristColors.HeaderRaised,
+                    contentColor =
+                        ArmyristColors.OnDark
+                )
+            ) {
+                Text(
+                    "목록",
+                    fontWeight = FontWeight.Bold
+                )
             }
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf("{날짜}", "{시간}").forEach { token ->
-                AssistChip(onClick = { insertToken(token) }, label = { Text(token) })
-            }
-        }
 
-        OutlinedTextField(
-            value = body,
-            onValueChange = { body = it },
-            label = { Text("보고 양식") },
-            minLines = 8,
-            modifier = Modifier.fillMaxWidth()
-        )
+            OutlinedTextField(
+                value = name,
+                onValueChange = {
+                    name = it
+                    error = ""
+                },
+                label = { Text("양식 이름") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
 
-        if (error.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error)
+            Text(
+                "지원 변수",
+                fontWeight = FontWeight.SemiBold
+            )
 
-        Button(
-            onClick = {
-                if (name.trim().isEmpty()) {
-                    error = "양식 이름을 입력하세요."
-                } else if (onSave(name, body.text)) {
-                    Toast.makeText(context, "저장되었습니다.", Toast.LENGTH_SHORT).show()
-                } else {
-                    error = "저장할 수 없습니다."
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement =
+                    Arrangement.spacedBy(6.dp)
+            ) {
+                listOf(
+                    "{사용자}",
+                    "{제목}"
+                ).forEach { token ->
+                    AssistChip(
+                        onClick = { insertToken(token) },
+                        label = { Text(token) }
+                    )
                 }
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("저장") }
+            }
 
-        Text(
-            "예: 충성! {사용자}입니다.\n\n{전달내용}\n\n{날짜} {시간}",
-            style = MaterialTheme.typography.bodySmall
-        )
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement =
+                    Arrangement.spacedBy(6.dp)
+            ) {
+                listOf(
+                    "{전달내용}",
+                    "{날짜}"
+                ).forEach { token ->
+                    AssistChip(
+                        onClick = { insertToken(token) },
+                        label = { Text(token) }
+                    )
+                }
+            }
+
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement =
+                    Arrangement.spacedBy(6.dp)
+            ) {
+                AssistChip(
+                    onClick = { insertToken("{시간}") },
+                    label = { Text("{시간}") }
+                )
+            }
+
+            OutlinedTextField(
+                value = body,
+                onValueChange = { body = it },
+                label = { Text("보고 양식") },
+                minLines = 8,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            if (error.isNotEmpty()) {
+                Text(
+                    error,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+
+            Button(
+                onClick = {
+                    if (name.trim().isEmpty()) {
+                        error = "양식 이름을 입력하세요."
+                    } else if (onSave(name, body.text)) {
+                        Toast.makeText(
+                            context,
+                            "저장되었습니다.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        error = "저장할 수 없습니다."
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 52.dp),
+                shape = ArmyristPanelShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor =
+                        ArmyristColors.PrimaryControl,
+                    contentColor =
+                        ArmyristColors.OnDark
+                )
+            ) {
+                Text(
+                    "저장",
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Text(
+                "예: 충성! {사용자}입니다.\n\n" +
+                    "{전달내용}\n\n{날짜} {시간}",
+                style = MaterialTheme.typography.bodySmall,
+                color = ArmyristColors.SecondaryText
+            )
+        }
     }
 }
