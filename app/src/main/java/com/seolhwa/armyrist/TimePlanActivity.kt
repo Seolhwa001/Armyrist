@@ -123,7 +123,9 @@ private fun TimePlanApp(
                         ) ?: "경과"
                     }
                 ),
-                onBack = { showingResult = false }
+                onBack = { showingResult = false },
+                portableDataType = ArmyristPortableDataType.TIME_PLAN,
+                portableRootId = selected.id
             )
         }
 
@@ -725,31 +727,7 @@ private fun TimePlanDetailScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp, vertical = 4.dp)
             ) {
-                ArmyristUtilityActionButton(
-                    text = "데이터 내보내기",
-                    onClick = {
-                        context.startActivity(
-                            Intent(
-                                context,
-                                PortableTransferActivity::class.java
-                            ).apply {
-                                putExtra(
-                                    PortableTransferActivity.EXTRA_MODE,
-                                    PortableTransferActivity.MODE_EXPORT
-                                )
-                                putExtra(
-                                    PortableTransferActivity.EXTRA_TYPE,
-                                    ArmyristPortableDataType.TIME_PLAN.name
-                                )
-                                putExtra(
-                                    PortableTransferActivity.EXTRA_ROOT_ID,
-                                    plan.id
-                                )
                             }
-                        )
-                    }
-                )
-            }
 
             TimePlanStatusCard(plan)
 

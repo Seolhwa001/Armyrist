@@ -51,7 +51,9 @@ private fun applyReportTemplate(
 fun CommonShareScreen(
     repo: CoreSuiteRepository,
     result: ToolResult,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    portableDataType: ArmyristPortableDataType? = null,
+    portableRootId: String? = null
 ) {
     BackHandler(onBack = onBack)
     val context = LocalContext.current
@@ -91,9 +93,11 @@ fun CommonShareScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("결과") },
-                navigationIcon = { TextButton(onClick = onBack) { Text("뒤로") } }
+            ArmyristTopBar(
+                title = "전달",
+                subtitle = "RESULT / TEXT & DATA",
+                leadingLabel = "뒤로",
+                onLeading = onBack
             )
         }
     ) { padding ->
@@ -131,16 +135,18 @@ fun CommonShareScreen(
             )
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
+                ArmyristActionButton(
+                    text = "복사",
                     onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         clipboard.setPrimaryClip(ClipData.newPlainText("Armyrist result", finalText))
                         Toast.makeText(context, "복사되었습니다.", Toast.LENGTH_SHORT).show()
                     },
                     modifier = Modifier.weight(1f)
-                ) { Text("복사") }
+                )
 
-                Button(
+                ArmyristActionButton(
+                    text = "텍스트 공유",
                     onClick = {
                         val intent = Intent(Intent.ACTION_SEND).apply {
                             type = "text/plain"
@@ -148,8 +154,31 @@ fun CommonShareScreen(
                         }
                         context.startActivity(Intent.createChooser(intent, "공유"))
                     },
-                    modifier = Modifier.weight(1f)
-                ) { Text("공유") }
+                    modifier = Modifier.weight(1f),
+                    primary = true
+                )
+            }
+
+            if (portableDataType != null && !portableRootId.isNullOrBlank()) {
+                HorizontalDivider(color = ArmyristColors.Border)
+                Text("Armyrist 데이터", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "현재 문서를 .armyrist 파일로 저장하거나 다른 Armyrist로 전송합니다.",
+                    color = ArmyristColors.SecondaryText
+                )
+                ArmyristActionButton(
+                    text = "데이터 저장 / 전송",
+                    onClick = {
+                        context.startActivity(
+                            Intent(context, PortableTransferActivity::class.java).apply {
+                                putExtra(PortableTransferActivity.EXTRA_MODE, PortableTransferActivity.MODE_EXPORT)
+                                putExtra(PortableTransferActivity.EXTRA_TYPE, portableDataType.name)
+                                putExtra(PortableTransferActivity.EXTRA_ROOT_ID, portableRootId)
+                            }
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }

@@ -253,7 +253,9 @@ private fun ChecklistApp(
             CommonShareScreen(
                 repo = repo,
                 result = ChecklistResultGenerator.generate(selected),
-                onBack = { showingResult = false }
+                onBack = { showingResult = false },
+                portableDataType = ArmyristPortableDataType.CHECKLIST,
+                portableRootId = selected.id
             )
         }
 
@@ -658,31 +660,7 @@ private fun ChecklistDetailScreen(
                     )
                     ChecklistUtilityButton(text = "메모", onClick = { memoEdit = true })
                     ChecklistUtilityButton(text = "초기화", onClick = { resetConfirm = true })
-                    ChecklistUtilityButton(
-                        text = "데이터 내보내기",
-                        onClick = {
-                            context.startActivity(
-                                Intent(
-                                    context,
-                                    PortableTransferActivity::class.java
-                                ).apply {
-                                    putExtra(
-                                        PortableTransferActivity.EXTRA_MODE,
-                                        PortableTransferActivity.MODE_EXPORT
-                                    )
-                                    putExtra(
-                                        PortableTransferActivity.EXTRA_TYPE,
-                                        ArmyristPortableDataType.CHECKLIST.name
-                                    )
-                                    putExtra(
-                                        PortableTransferActivity.EXTRA_ROOT_ID,
-                                        checklist.id
-                                    )
-                                }
-                            )
-                        }
-                    )
-                }
+                                    }
 
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),

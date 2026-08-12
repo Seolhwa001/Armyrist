@@ -234,7 +234,9 @@ private fun ArmyristApp(
                             title = sheet.title,
                             body = ResultGenerator.generate(sheet)
                         ),
-                        onBack = { screen = Screen.COUNTING }
+                        onBack = { screen = Screen.COUNTING },
+                        portableDataType = ArmyristPortableDataType.COUNTING,
+                        portableRootId = sheet.id
                     )
 
                     Screen.SHEETS -> Unit
@@ -544,31 +546,7 @@ private fun CountingScreen(
                         text = "메모",
                         onClick = { memoEdit = true }
                     )
-                    ArmyristUtilityButton(
-                        text = "데이터 내보내기",
-                        onClick = {
-                            context.startActivity(
-                                Intent(
-                                    context,
-                                    PortableTransferActivity::class.java
-                                ).apply {
-                                    putExtra(
-                                        PortableTransferActivity.EXTRA_MODE,
-                                        PortableTransferActivity.MODE_EXPORT
-                                    )
-                                    putExtra(
-                                        PortableTransferActivity.EXTRA_TYPE,
-                                        ArmyristPortableDataType.COUNTING.name
-                                    )
-                                    putExtra(
-                                        PortableTransferActivity.EXTRA_ROOT_ID,
-                                        sheet.id
-                                    )
-                                }
-                            )
-                        }
-                    )
-                }
+                                    }
             } else {
                 val targetGroup = sheet.groups.firstOrNull { it.id == assignmentGroupId }
                 val targetLabel =
