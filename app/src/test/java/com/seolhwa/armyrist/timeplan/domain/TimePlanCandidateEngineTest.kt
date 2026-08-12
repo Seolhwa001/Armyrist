@@ -272,6 +272,94 @@ class TimePlanCandidateEngineTest {
         assertTrue(candidate.conflicts.isEmpty())
     }
 
+
+    @Test fun singlePointInsideAnotherRangeIsHardOccupiedRangeConflict() {
+        val existing = RevisedTimePlan(
+            id = "p", title = "x",
+            start = TimeAnchor(ClockValue.explicit(c(8,0))),
+            midwayEvents = listOf(
+                TimeEvent(
+                    id = "r", kind = TimeEventKind.MIDWAY, order = 0, name = "교육",
+                    timeSpec = EventTimeSpec.Range(
+                        ClockValue.explicit(c(9,0)),
+                        ClockValue.explicit(c(10,0))
+                    )
+                ),
+                TimeEvent(
+                    id = "p2", kind = TimeEventKind.MIDWAY, order = 1, name = "이동",
+                    timeSpec = EventTimeSpec.Single(ClockValue.explicit(c(10,30)))
+                )
+            ),
+            end = TimeAnchor(ClockValue.explicit(c(12,0))),
+            links = emptyList(), createdAt = "0", updatedAt = "0"
+        )
+        val changed = existing.midwayEvents[1].copy(
+            timeSpec = EventTimeSpec.Single(ClockValue.explicit(c(9,30)))
+        )
+        val conflict = TimePlanCandidateEngine.occupiedRangeConflict(existing, changed)
+        assertEquals("교육", conflict?.eventName)
+        assertEquals(c(9,0), conflict?.rangeStart)
+        assertEquals(c(10,0), conflict?.rangeEnd)
+    }
+
+    @Test fun pointAtExactRangeEndIsAllowed() {
+        val existing = RevisedTimePlan(
+            id = "p", title = "x",
+            start = TimeAnchor(ClockValue.explicit(c(8,0))),
+            midwayEvents = listOf(
+                TimeEvent(
+                    id = "r", kind = TimeEventKind.MIDWAY, order = 0, name = "교육",
+                    timeSpec = EventTimeSpec.Range(
+                        ClockValue.explicit(c(9,0)),
+                        ClockValue.explicit(c(10,0))
+                    )
+                ),
+                TimeEvent(
+                    id = "p2", kind = TimeEventKind.MIDWAY, order = 1, name = "이동",
+                    timeSpec = EventTimeSpec.Single(ClockValue.explicit(c(10,30)))
+                )
+            ),
+            end = TimeAnchor(ClockValue.explicit(c(12,0))),
+            links = emptyList(), createdAt = "0", updatedAt = "0"
+        )
+        val changed = existing.midwayEvents[1].copy(
+            timeSpec = EventTimeSpec.Single(ClockValue.explicit(c(10,0)))
+        )
+        assertEquals(null, TimePlanCandidateEngine.occupiedRangeConflict(existing, changed))
+    }
+
+    @Test fun overlappingRangeWithAnotherRangeIsHardConflict() {
+        val existing = RevisedTimePlan(
+            id = "p", title = "x",
+            start = TimeAnchor(ClockValue.explicit(c(8,0))),
+            midwayEvents = listOf(
+                TimeEvent(
+                    id = "r", kind = TimeEventKind.MIDWAY, order = 0, name = "교육",
+                    timeSpec = EventTimeSpec.Range(
+                        ClockValue.explicit(c(9,0)),
+                        ClockValue.explicit(c(10,0))
+                    )
+                ),
+                TimeEvent(
+                    id = "r2", kind = TimeEventKind.MIDWAY, order = 1, name = "정비",
+                    timeSpec = EventTimeSpec.Range(
+                        ClockValue.explicit(c(10,30)),
+                        ClockValue.explicit(c(11,0))
+                    )
+                )
+            ),
+            end = TimeAnchor(ClockValue.explicit(c(12,0))),
+            links = emptyList(), createdAt = "0", updatedAt = "0"
+        )
+        val changed = existing.midwayEvents[1].copy(
+            timeSpec = EventTimeSpec.Range(
+                ClockValue.explicit(c(9,30)),
+                ClockValue.explicit(c(10,30))
+            )
+        )
+        assertEquals("교육", TimePlanCandidateEngine.occupiedRangeConflict(existing, changed)?.eventName)
+    }
+
     @Test fun cancelCanDiscardCandidateBecauseExistingIsRetained() {
         val existing=base()
         val candidate=TimePlanCandidateEngine.create(
