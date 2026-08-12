@@ -4,7 +4,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.draw.zIndex
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.gestures.scrollBy
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -453,6 +454,7 @@ private fun CountingScreen(
     var assignmentSelected by remember { mutableStateOf(setOf<String>()) }
 
     val dragThresholdPx = with(LocalDensity.current) { 44.dp.toPx() }
+    val listState = rememberLazyListState()
 
     BackHandler {
         if (assignmentGroupId != null) {
@@ -611,6 +613,7 @@ private fun CountingScreen(
             HorizontalDivider()
 
             LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     start = 8.dp,
