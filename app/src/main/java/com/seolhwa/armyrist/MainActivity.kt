@@ -1,5 +1,11 @@
 package com.seolhwa.armyrist
 
+import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.zIndex
+import androidx.compose.foundation.gestures.scrollBy
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -641,9 +647,18 @@ private fun CountingScreen(
                     val assignmentMode = assignmentGroupId != null
                     val selected = item.id in assignmentSelected
 
-                    var dragAccumulatedY by remember(item.id) {
+                    var dragOffsetY by remember(item.id) {
                         mutableFloatStateOf(0f)
                     }
+                    var isDragging by remember(item.id) {
+                        mutableStateOf(false)
+                    }
+                    val haptic = LocalHapticFeedback.current
+                    val dragScope = rememberCoroutineScope()
+                    val edgeThresholdPx =
+                        with(LocalDensity.current) { 72.dp.toPx() }
+                    val autoScrollStepPx =
+                        with(LocalDensity.current) { 18.dp.toPx() }
 
                     val groupColor =
                         currentGroup?.let { parseColor(it.color) }
@@ -678,28 +693,95 @@ private fun CountingScreen(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .pointerInput(item.id, assignmentMode) {
+                            .zIndex(if (isDragging) 1f else 0f)
+                            .graphicsLayer {
+                                translationY =
+                                    if (isDragging) dragOffsetY else 0f
+                                shadowElevation =
+                                    if (isDragging) 10f else 0f
+                            }
+                            .pointerInput(
+                                item.id,
+                                assignmentMode,
+                                sheet.items.map { it.id }
+                            ) {
                                 if (!assignmentMode) {
                                     detectDragGesturesAfterLongPress(
                                         onDragStart = {
-                                            dragAccumulatedY = 0f
+                                            isDragging = true
+                                            dragOffsetY = 0f
+                                            haptic.performHapticFeedback(
+                                                HapticFeedbackType.LongPress
+                                            )
                                         },
                                         onDragCancel = {
-                                            dragAccumulatedY = 0f
+                                            isDragging = false
+                                            dragOffsetY = 0f
                                         },
                                         onDragEnd = {
-                                            dragAccumulatedY = 0f
+                                            isDragging = false
+                                            dragOffsetY = 0f
                                         },
                                         onDrag = { change, dragAmount ->
                                             change.consume()
-                                            dragAccumulatedY += dragAmount.y
+                                            dragOffsetY += dragAmount.y
 
-                                            if (dragAccumulatedY >= dragThresholdPx) {
+                                            if (
+                                                dragOffsetY >=
+                                                dragThresholdPx
+                                            ) {
                                                 onMove(item.id, 1)
-                                                dragAccumulatedY = 0f
-                                            } else if (dragAccumulatedY <= -dragThresholdPx) {
+                                                dragOffsetY -=
+                                                    dragThresholdPx
+                                                haptic.performHapticFeedback(
+                                                    HapticFeedbackType.TextHandleMove
+                                                )
+                                            } else if (
+                                                dragOffsetY <=
+                                                -dragThresholdPx
+                                            ) {
                                                 onMove(item.id, -1)
-                                                dragAccumulatedY = 0f
+                                                dragOffsetY +=
+                                                    dragThresholdPx
+                                                haptic.performHapticFeedback(
+                                                    HapticFeedbackType.TextHandleMove
+                                                )
+                                            }
+
+                                            val info =
+                                                listState.layoutInfo
+                                            val dragged =
+                                                info.visibleItemsInfo
+                                                    .firstOrNull {
+                                                        it.key == item.id
+                                                    }
+
+                                            if (dragged != null) {
+                                                val top =
+                                                    dragged.offset +
+                                                        dragOffsetY
+                                                val bottom =
+                                                    top + dragged.size
+                                                when {
+                                                    top <
+                                                        info.viewportStartOffset +
+                                                        edgeThresholdPx -> {
+                                                        dragScope.launch {
+                                                            listState.scrollBy(
+                                                                -autoScrollStepPx
+                                                            )
+                                                        }
+                                                    }
+                                                    bottom >
+                                                        info.viewportEndOffset -
+                                                        edgeThresholdPx -> {
+                                                        dragScope.launch {
+                                                            listState.scrollBy(
+                                                                autoScrollStepPx
+                                                            )
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     )
