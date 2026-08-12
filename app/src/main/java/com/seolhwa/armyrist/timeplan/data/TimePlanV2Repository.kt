@@ -76,6 +76,74 @@ class TimePlanV2Repository(context: Context) {
         plans = load()
     }
 
+    @Synchronized
+    fun exportPortableSnapshot(): String {
+        val root = JSONObject()
+            .put("schemaVersion", SCHEMA_VERSION)
+            .put(
+                "plans",
+                JSONArray().apply {
+                    plans.forEach { plan ->
+                        put(com.seolhwa.armyrist.timeplan.portable.TimePlanPortableV2Codec.encode(plan))
+                    }
+                }
+            )
+        return root.toString()
+    }
+
+    @Synchronized
+    fun replaceAllPortable(snapshot: String): Boolean {
+        val root = JSONObject(snapshot)
+        require(root.getInt("schemaVersion") == SCHEMA_VERSION)
+        val array = root.optJSONArray("plans") ?: JSONArray()
+        val decoded = List(array.length()) { index ->
+            com.seolhwa.armyrist.timeplan.portable.TimePlanPortableV2Codec.decode(
+                array.getJSONObject(index)
+            )
+        }
+        return persist(decoded)
+    }
+
+    @Synchronized
+    fun importPortableAsNew(plan: RevisedTimePlan): String? {
+        val newPlanId = java.util.UUID.randomUUID().toString()
+        val eventIdMap = linkedMapOf<String, String>()
+
+        plan.midwayEvents.forEach {
+            eventIdMap[it.id] = java.util.UUID.randomUUID().toString()
+        }
+        plan.finalPoint?.let {
+            eventIdMap[it.id] = java.util.UUID.randomUUID().toString()
+        }
+
+        fun remapNode(id: String): String = when (id) {
+            com.seolhwa.armyrist.timeplan.domain.TimePlanConflictEngine.START_ID -> id
+            com.seolhwa.armyrist.timeplan.domain.TimePlanConflictEngine.END_ID -> id
+            else -> eventIdMap[id] ?: error("Unknown TimePlan node id.")
+        }
+
+        val now = System.currentTimeMillis().toString()
+        val imported = plan.copy(
+            id = newPlanId,
+            midwayEvents = plan.midwayEvents.map { event ->
+                event.copy(id = eventIdMap.getValue(event.id))
+            },
+            finalPoint = plan.finalPoint?.let { event ->
+                event.copy(id = eventIdMap.getValue(event.id))
+            },
+            links = plan.links.map { link ->
+                link.copy(
+                    fromNodeId = remapNode(link.fromNodeId),
+                    toNodeId = remapNode(link.toNodeId)
+                )
+            },
+            createdAt = now,
+            updatedAt = now
+        )
+
+        return if (commit(imported)) newPlanId else null
+    }
+
     private fun persist(next: List<RevisedTimePlan>): Boolean {
         val root = JSONObject()
             .put("schemaVersion", SCHEMA_VERSION)
