@@ -204,6 +204,74 @@ class TimePlanCandidateEngineTest {
         assertEquals(c(11,20), candidate.proposed.end.value.time)
     }
 
+
+    @Test fun rangeStartingEarlierThanPreviousDepartureCanReflowPrefixAndSuffix() {
+        val existing = RevisedTimePlan(
+            id = "p",
+            title = "x",
+            start = TimeAnchor(ClockValue.explicit(c(8,30))),
+            midwayEvents = listOf(
+                TimeEvent(
+                    id = "a",
+                    kind = TimeEventKind.MIDWAY,
+                    order = 0,
+                    name = "A",
+                    timeSpec = EventTimeSpec.Single(ClockValue.explicit(c(9,30)))
+                ),
+                TimeEvent(
+                    id = "b",
+                    kind = TimeEventKind.MIDWAY,
+                    order = 1,
+                    name = "B",
+                    timeSpec = EventTimeSpec.Single(ClockValue.explicit(c(10,0)))
+                )
+            ),
+            end = TimeAnchor(ClockValue.explicit(c(12,0))),
+            links = listOf(
+                TimeLink(
+                    TimePlanConflictEngine.START_ID, "a",
+                    TimeDuration.requireMinutes(60), ValueOrigin.DERIVED
+                ),
+                TimeLink("a", "b", TimeDuration.requireMinutes(30), ValueOrigin.DERIVED),
+                TimeLink(
+                    "b", TimePlanConflictEngine.END_ID,
+                    TimeDuration.requireMinutes(120), ValueOrigin.DERIVED
+                )
+            ),
+            createdAt = "0",
+            updatedAt = "0"
+        )
+
+        val changed = existing.midwayEvents[1].copy(
+            timeSpec = EventTimeSpec.Range(
+                ClockValue.explicit(c(9,20)),
+                ClockValue.explicit(c(10,20))
+            )
+        )
+
+        assertTrue(
+            TimePlanCandidateEngine.eventEditNeedsPrefixReflow(existing, changed)
+        )
+
+        val candidate =
+            TimePlanCandidateEngine.createEventEditWithTimelineReflow(
+                existing,
+                changed
+            )
+
+        val first = candidate.proposed.midwayEvents.first { it.id == "a" }
+        val second = candidate.proposed.midwayEvents.first { it.id == "b" }
+        assertEquals(
+            c(9,20),
+            (first.timeSpec as EventTimeSpec.Single).value.time
+        )
+        val range = second.timeSpec as EventTimeSpec.Range
+        assertEquals(c(9,20), range.start.time)
+        assertEquals(c(10,20), range.end.time)
+        assertEquals(c(12,20), candidate.proposed.end.value.time)
+        assertTrue(candidate.conflicts.isEmpty())
+    }
+
     @Test fun cancelCanDiscardCandidateBecauseExistingIsRetained() {
         val existing=base()
         val candidate=TimePlanCandidateEngine.create(
