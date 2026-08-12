@@ -335,6 +335,90 @@ object TimePlanCandidateEngine {
         )
     }
 
+
+    data class OccupiedRangeConflict(
+        val eventId: String,
+        val eventName: String,
+        val rangeStart: ClockTime,
+        val rangeEnd: ClockTime
+    )
+
+    /**
+     * Returns the first other Event Range whose occupied interval overlaps the
+     * edited event. Range END is an open boundary: [start, end), therefore a
+     * point exactly at rangeEnd is allowed.
+     *
+     * This is a hard UX conflict: do not auto-move another occupied Range.
+     */
+    fun occupiedRangeConflict(
+        existing: RevisedTimePlan,
+        changedEvent: TimeEvent
+    ): OccupiedRangeConflict? {
+        val changedArrival = TimePlanCalculator.arrivalClock(changedEvent.timeSpec)?.time
+            ?: return null
+        val changedDeparture = TimePlanCalculator.departureClock(changedEvent.timeSpec)?.time
+            ?: changedArrival
+
+        fun minute(t: ClockTime) = t.minuteOfDay
+        fun normalizeEnd(start: Int, end: Int): Int =
+            if (end < start) end + MINUTES_PER_DAY else end
+
+        fun intervalsOverlap(
+            aStartClock: ClockTime,
+            aEndClock: ClockTime,
+            bStartClock: ClockTime,
+            bEndClock: ClockTime
+        ): Boolean {
+            val aStart = minute(aStartClock)
+            val aEnd = normalizeEnd(aStart, minute(aEndClock))
+            val bStart0 = minute(bStartClock)
+            val bEnd0 = normalizeEnd(bStart0, minute(bEndClock))
+
+            // Compare B in neighboring day placements to support midnight ranges.
+            return listOf(-MINUTES_PER_DAY, 0, MINUTES_PER_DAY).any { shift ->
+                val bStart = bStart0 + shift
+                val bEnd = bEnd0 + shift
+                aStart < bEnd && bStart < aEnd
+            }
+        }
+
+        // A Single point has zero mathematical width, so test containment
+        // explicitly against [rangeStart, rangeEnd).
+        fun pointInsideRange(point: ClockTime, start: ClockTime, end: ClockTime): Boolean {
+            val s = minute(start)
+            val e = normalizeEnd(s, minute(end))
+            return listOf(
+                minute(point) - MINUTES_PER_DAY,
+                minute(point),
+                minute(point) + MINUTES_PER_DAY
+            ).any { p -> p >= s && p < e }
+        }
+
+        for (other in existing.orderedEvents()) {
+            if (other.id == changedEvent.id) continue
+            val otherRange = other.timeSpec as? EventTimeSpec.Range ?: continue
+            val rs = otherRange.start.time ?: continue
+            val re = otherRange.end.time ?: continue
+
+            val overlaps = when (changedEvent.timeSpec) {
+                is EventTimeSpec.Single ->
+                    pointInsideRange(changedArrival, rs, re)
+                is EventTimeSpec.Range ->
+                    intervalsOverlap(changedArrival, changedDeparture, rs, re)
+                EventTimeSpec.Unspecified -> false
+            }
+            if (overlaps) {
+                return OccupiedRangeConflict(
+                    eventId = other.id,
+                    eventName = other.name,
+                    rangeStart = rs,
+                    rangeEnd = re
+                )
+            }
+        }
+        return null
+    }
+
     fun eventEditNeedsPrefixReflow(
         existing: RevisedTimePlan,
         changedEvent: TimeEvent
