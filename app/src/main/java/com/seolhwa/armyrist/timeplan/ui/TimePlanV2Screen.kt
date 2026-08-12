@@ -152,6 +152,9 @@ private fun TimePlanV2Detail(
     var pendingEventConflict by remember {
         mutableStateOf<Pair<TimeEvent, List<TimePlanCandidateEngine.Conflict>>?>(null)
     }
+    var pendingOccupiedRangeConflict by remember {
+        mutableStateOf<Pair<TimeEvent, TimePlanCandidateEngine.OccupiedRangeConflict>?>(null)
+    }
     var editingStart by remember { mutableStateOf(false) }
     var editingEnd by remember { mutableStateOf(false) }
 
@@ -431,7 +434,14 @@ private fun TimePlanV2Detail(
                 editingEvent = null
             },
             onConfirm = { changed ->
-                if (
+                val occupiedRange =
+                    TimePlanCandidateEngine.occupiedRangeConflict(
+                        existing = plan,
+                        changedEvent = changed
+                    )
+                if (occupiedRange != null) {
+                    pendingOccupiedRangeConflict = changed to occupiedRange
+                } else if (
                     TimePlanCandidateEngine.requiresEndBoundaryConfirmation(
                         existing = plan,
                         eventId = changed.id,
@@ -473,6 +483,30 @@ private fun TimePlanV2Detail(
                 )
                 if (candidate.conflicts.isEmpty()) onCommit(candidate.proposed)
                 editingLink = null
+            }
+        )
+    }
+
+    pendingOccupiedRangeConflict?.let { (_, conflict) ->
+        AlertDialog(
+            onDismissRequest = { pendingOccupiedRangeConflict = null },
+            title = { Text("시간이 겹칩니다") },
+            text = {
+                Text(
+                    "입력한 시간이 ${conflict.eventName.ifBlank { "다른 지점" }} " +
+                        "(${formatClock(conflict.rangeStart)}~${formatClock(conflict.rangeEnd)}) " +
+                        "시간범위와 겹칩니다.\n\n겹치지 않도록 시간을 변경해 주세요."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { pendingOccupiedRangeConflict = null },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ArmyristColors.PrimaryControl
+                    )
+                ) {
+                    Text("확인")
+                }
             }
         )
     }
