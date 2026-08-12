@@ -12,8 +12,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 27
-        versionName = "0.3.27-event-metadata-fix"
+        versionCode = 28
+        versionName = "0.3.28-range-wheel-fix"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
