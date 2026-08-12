@@ -68,8 +68,14 @@ class TimePlanCandidateEngineTest {
         assertEquals(ValueOrigin.DERIVED,midway.origin)
         assertEquals(c(11,10),candidate.proposed.end.value.time)
         assertEquals(ValueOrigin.DERIVED,candidate.proposed.end.value.origin)
-        assertEquals(50,candidate.proposed.links[0].duration?.minutes)
-        assertEquals(80,candidate.proposed.links[1].duration?.minutes)
+        val firstLink = candidate.proposed.links.first {
+            it.fromNodeId == TimePlanConflictEngine.START_ID && it.toNodeId == "m"
+        }
+        val secondLink = candidate.proposed.links.first {
+            it.fromNodeId == "m" && it.toNodeId == TimePlanConflictEngine.END_ID
+        }
+        assertEquals(50,firstLink.duration?.minutes)
+        assertEquals(80,secondLink.duration?.minutes)
         assertTrue(candidate.conflicts.isEmpty())
     }
 
@@ -97,6 +103,26 @@ class TimePlanCandidateEngineTest {
         assertEquals(80,candidate.proposed.links[1].duration?.minutes)
         assertTrue(candidate.conflicts.isEmpty())
     }
+
+
+    @Test fun durationEditStoresCustomLinkLabel() {
+        val existing=base()
+        val candidate=TimePlanCandidateEngine.create(
+            existing,
+            TimePlanCandidateEngine.EditIntent.SetLinkDuration(
+                TimePlanConflictEngine.START_ID,
+                "m",
+                TimeDuration.requireMinutes(50),
+                label="이동"
+            )
+        )
+        val link=candidate.proposed.links.first {
+            it.fromNodeId == TimePlanConflictEngine.START_ID && it.toNodeId == "m"
+        }
+        assertEquals("이동",link.label)
+        assertEquals(50,link.duration?.minutes)
+    }
+
 
     @Test fun cancelCanDiscardCandidateBecauseExistingIsRetained() {
         val existing=base()
