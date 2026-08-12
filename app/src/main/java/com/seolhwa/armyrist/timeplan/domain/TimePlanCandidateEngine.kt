@@ -74,6 +74,49 @@ object TimePlanCandidateEngine {
      * Existing adjacent links are preserved. Newly adjacent points receive a link
      * immediately, and when both clocks resolve its duration is derived at once.
      */
+    /**
+     * Appends a FINAL point without disabling the action when one already exists.
+     * If a FINAL already exists, it is demoted to the last MIDWAY while preserving
+     * its identity, clock/range, note and any user-provided name. The whole topology
+     * is then rebuilt as one pure state transition.
+     */
+    fun appendFinalPoint(
+        plan: RevisedTimePlan,
+        newFinalId: String,
+        defaultFinalName: String = "종료지점"
+    ): RevisedTimePlan {
+        require(newFinalId.isNotBlank()) { "New FINAL id must not be blank." }
+
+        val orderedMidways = plan.midwayEvents.sortedBy { it.order }
+        val convertedFinal = plan.finalPoint?.let { previous ->
+            val nextMidNumber = orderedMidways.size + 1
+            previous.copy(
+                kind = TimeEventKind.MIDWAY,
+                order = orderedMidways.size,
+                name = if (previous.name == defaultFinalName) {
+                    "중도 $nextMidNumber"
+                } else {
+                    previous.name
+                }
+            )
+        }
+        val newMidways = (orderedMidways + listOfNotNull(convertedFinal))
+            .mapIndexed { index, event -> event.copy(order = index) }
+        val newFinal = TimeEvent(
+            id = newFinalId,
+            kind = TimeEventKind.FINAL,
+            order = newMidways.size,
+            name = defaultFinalName
+        )
+
+        return normalizeTopology(
+            plan.copy(
+                midwayEvents = newMidways,
+                finalPoint = newFinal
+            )
+        )
+    }
+
     fun normalizeTopology(plan: RevisedTimePlan): RevisedTimePlan {
         val refs = TimePlanConflictEngine.nodeReferences(plan)
         val old = plan.links.associateBy { it.fromNodeId to it.toNodeId }
