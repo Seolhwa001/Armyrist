@@ -52,6 +52,54 @@ object TimePlanCandidateEngine {
             get() = conflicts.isNotEmpty() || impacts.size > 1
     }
 
+
+    /**
+     * Applies the entire edited event (name, note, kind/order-preserving metadata,
+     * and timeSpec) before recalculating adjacent links/conflicts.
+     *
+     * This exists because SetEventTime intentionally changes timeSpec only.
+     * Event-edit UI must not lose name/note changes while passing through
+     * CandidateEngine.
+     */
+    fun createEventEdit(
+        existing: RevisedTimePlan,
+        changedEvent: TimeEvent
+    ): Candidate {
+        val eventExists = existing.orderedEvents().any { it.id == changedEvent.id }
+        if (!eventExists) {
+            return Candidate(
+                existing = existing,
+                proposed = existing,
+                impacts = emptyList(),
+                conflicts = emptyList()
+            )
+        }
+
+        val metadataApplied =
+            if (changedEvent.kind == TimeEventKind.FINAL) {
+                existing.copy(finalPoint = changedEvent)
+            } else {
+                existing.copy(
+                    midwayEvents = existing.midwayEvents.map { event ->
+                        if (event.id == changedEvent.id) changedEvent else event
+                    }
+                )
+            }
+
+        val intent = EditIntent.SetEventTime(
+            eventId = changedEvent.id,
+            timeSpec = changedEvent.timeSpec
+        )
+        val recalculated = recalculateLinksForIntent(metadataApplied, intent)
+
+        return Candidate(
+            existing = existing,
+            proposed = recalculated,
+            impacts = detectImpacts(existing, recalculated),
+            conflicts = TimePlanConflictEngine.detect(recalculated)
+        )
+    }
+
     fun create(
         existing: RevisedTimePlan,
         intent: EditIntent
@@ -163,6 +211,52 @@ object TimePlanCandidateEngine {
      * warning.  The edited event remains EXPLICIT; automatically moved clocks
      * become DERIVED.
      */
+
+    /**
+     * Full-event equivalent of createEventTimeWithDownstreamShift().
+     * Preserves edited name/note while shifting downstream clocks.
+     */
+    fun createEventEditWithDownstreamShift(
+        existing: RevisedTimePlan,
+        changedEvent: TimeEvent
+    ): Candidate {
+        val oldEvent = existing.orderedEvents().firstOrNull { it.id == changedEvent.id }
+            ?: return createEventEdit(existing, changedEvent)
+
+        val oldDeparture = TimePlanCalculator.departureClock(oldEvent.timeSpec)?.time
+            ?: return createEventEdit(existing, changedEvent)
+        val newDeparture = TimePlanCalculator.departureClock(changedEvent.timeSpec)?.time
+            ?: return createEventEdit(existing, changedEvent)
+
+        val metadataApplied =
+            if (changedEvent.kind == TimeEventKind.FINAL) {
+                existing.copy(finalPoint = changedEvent)
+            } else {
+                existing.copy(
+                    midwayEvents = existing.midwayEvents.map { event ->
+                        if (event.id == changedEvent.id) changedEvent else event
+                    }
+                )
+            }
+
+        val delta = signedClockDelta(oldDeparture, newDeparture)
+        val shifted = shiftNodesAfter(
+            plan = metadataApplied,
+            anchorNodeId = changedEvent.id,
+            deltaMinutes = delta,
+            includeAnchor = false
+        )
+        val intent = EditIntent.SetEventTime(changedEvent.id, changedEvent.timeSpec)
+        val recalculated = recalculateLinksForIntent(shifted, intent)
+
+        return Candidate(
+            existing = existing,
+            proposed = recalculated,
+            impacts = detectImpacts(existing, recalculated),
+            conflicts = TimePlanConflictEngine.detect(recalculated)
+        )
+    }
+
     fun createEventTimeWithDownstreamShift(
         existing: RevisedTimePlan,
         eventId: String,
