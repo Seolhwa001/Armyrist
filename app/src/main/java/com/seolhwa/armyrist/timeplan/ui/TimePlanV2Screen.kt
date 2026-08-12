@@ -145,6 +145,9 @@ private fun TimePlanV2Detail(
     var memoEdit by remember { mutableStateOf(false) }
     var editingEvent by remember { mutableStateOf<TimeEvent?>(null) }
     var editingLink by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var pendingBoundaryEdit by remember {
+        mutableStateOf<Pair<String, EventTimeSpec>?>(null)
+    }
     var editingStart by remember { mutableStateOf(false) }
     var editingEnd by remember { mutableStateOf(false) }
 
@@ -424,14 +427,26 @@ private fun TimePlanV2Detail(
                 editingEvent = null
             },
             onConfirm = { changed ->
-                val next =
-                    if (changed.kind == TimeEventKind.FINAL) plan.copy(finalPoint = changed)
-                    else plan.copy(midwayEvents = plan.midwayEvents.map { if (it.id == changed.id) changed else it })
-                val candidate = TimePlanCandidateEngine.create(
-                    next,
-                    TimePlanCandidateEngine.EditIntent.SetEventTime(changed.id, changed.timeSpec)
-                )
-                if (candidate.conflicts.isEmpty()) onCommit(candidate.proposed)
+                if (
+                    TimePlanCandidateEngine.requiresEndBoundaryConfirmation(
+                        existing = plan,
+                        eventId = changed.id,
+                        proposedSpec = changed.timeSpec
+                    )
+                ) {
+                    pendingBoundaryEdit = changed.id to changed.timeSpec
+                } else {
+                    val candidate = TimePlanCandidateEngine.create(
+                        plan,
+                        TimePlanCandidateEngine.EditIntent.SetEventTime(
+                            changed.id,
+                            changed.timeSpec
+                        )
+                    )
+                    if (candidate.conflicts.isEmpty()) {
+                        onCommit(candidate.proposed)
+                    }
+                }
                 editingEvent = null
             }
         )
@@ -452,6 +467,52 @@ private fun TimePlanV2Detail(
                 )
                 if (candidate.conflicts.isEmpty()) onCommit(candidate.proposed)
                 editingLink = null
+            }
+        )
+    }
+
+    pendingBoundaryEdit?.let { (eventId, proposedSpec) ->
+        val proposedClock = TimePlanCalculator.arrivalClock(proposedSpec)?.time
+        val endClock = plan.end.value.time
+        AlertDialog(
+            onDismissRequest = { pendingBoundaryEdit = null },
+            title = { Text("시간 순서 확인") },
+            text = {
+                Text(
+                    if (proposedClock != null && endClock != null) {
+                        "입력한 중도 시각 ${formatClock(proposedClock)}이 현재 종료 시각 " +
+                            "${formatClock(endClock)}보다 늦습니다. 이후 일정을 같은 만큼 이동하시겠습니까?"
+                    } else {
+                        "입력한 시각이 현재 종료 범위를 넘어갑니다. 이후 일정을 함께 이동하시겠습니까?"
+                    }
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingBoundaryEdit = null }) {
+                    Text("취소")
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val candidate =
+                            TimePlanCandidateEngine.createEventTimeWithDownstreamShift(
+                                existing = plan,
+                                eventId = eventId,
+                                proposedSpec = proposedSpec
+                            )
+                        if (candidate.conflicts.isEmpty()) {
+                            onCommit(candidate.proposed)
+                        }
+                        pendingBoundaryEdit = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ArmyristColors.PrimaryControl,
+                        contentColor = ArmyristColors.OnDark
+                    )
+                ) {
+                    Text("이후 일정 조정")
+                }
             }
         )
     }
