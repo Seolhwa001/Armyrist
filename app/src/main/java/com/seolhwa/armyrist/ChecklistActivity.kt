@@ -619,21 +619,6 @@ private fun ChecklistDetailScreen(
                 ) {
                     Text("전달", fontWeight = FontWeight.Bold)
                 }
-                OutlinedButton(
-                    onClick = {
-                        context.startActivity(
-                            Intent(context, PortableTransferActivity::class.java).apply {
-                                putExtra(PortableTransferActivity.EXTRA_MODE, PortableTransferActivity.MODE_EXPORT)
-                                putExtra(PortableTransferActivity.EXTRA_TYPE, ArmyristPortableDataType.CHECKLIST.name)
-                                putExtra(PortableTransferActivity.EXTRA_ROOT_ID, checklist.id)
-                            }
-                        )
-                    },
-                    modifier = Modifier.weight(1f),
-                    shape = ArmyristPanelShape
-                ) {
-                    Text("데이터", fontWeight = FontWeight.Bold)
-                }
 
             }
 
@@ -673,6 +658,30 @@ private fun ChecklistDetailScreen(
                     )
                     ChecklistUtilityButton(text = "메모", onClick = { memoEdit = true })
                     ChecklistUtilityButton(text = "초기화", onClick = { resetConfirm = true })
+                    ChecklistUtilityButton(
+                        text = "데이터 내보내기",
+                        onClick = {
+                            context.startActivity(
+                                Intent(
+                                    context,
+                                    PortableTransferActivity::class.java
+                                ).apply {
+                                    putExtra(
+                                        PortableTransferActivity.EXTRA_MODE,
+                                        PortableTransferActivity.MODE_EXPORT
+                                    )
+                                    putExtra(
+                                        PortableTransferActivity.EXTRA_TYPE,
+                                        ArmyristPortableDataType.CHECKLIST.name
+                                    )
+                                    putExtra(
+                                        PortableTransferActivity.EXTRA_ROOT_ID,
+                                        checklist.id
+                                    )
+                                }
+                            )
+                        }
+                    )
                 }
 
                 Row(

@@ -717,22 +717,38 @@ private fun TimePlanDetailScreen(
                 ) {
                     Text("전달", fontWeight = FontWeight.Bold)
                 }
-                OutlinedButton(
+
+            }
+
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                ArmyristUtilityActionButton(
+                    text = "데이터 내보내기",
                     onClick = {
                         context.startActivity(
-                            Intent(context, PortableTransferActivity::class.java).apply {
-                                putExtra(PortableTransferActivity.EXTRA_MODE, PortableTransferActivity.MODE_EXPORT)
-                                putExtra(PortableTransferActivity.EXTRA_TYPE, ArmyristPortableDataType.TIME_PLAN.name)
-                                putExtra(PortableTransferActivity.EXTRA_ROOT_ID, plan.id)
+                            Intent(
+                                context,
+                                PortableTransferActivity::class.java
+                            ).apply {
+                                putExtra(
+                                    PortableTransferActivity.EXTRA_MODE,
+                                    PortableTransferActivity.MODE_EXPORT
+                                )
+                                putExtra(
+                                    PortableTransferActivity.EXTRA_TYPE,
+                                    ArmyristPortableDataType.TIME_PLAN.name
+                                )
+                                putExtra(
+                                    PortableTransferActivity.EXTRA_ROOT_ID,
+                                    plan.id
+                                )
                             }
                         )
-                    },
-                    modifier = Modifier.weight(1f),
-                    shape = ArmyristPanelShape
-                ) {
-                    Text("데이터", fontWeight = FontWeight.Bold)
-                }
-
+                    }
+                )
             }
 
             TimePlanStatusCard(plan)

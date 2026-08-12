@@ -146,20 +146,30 @@ private fun TemplateList(
                                 } else {
                                     TextButton(onClick = { onDefault(template.id) }) { Text("기본 지정") }
                                 }
-                                TextButton(
+                                ArmyristUtilityActionButton(
+                                    text = "데이터 내보내기",
                                     onClick = {
                                         context.startActivity(
                                             android.content.Intent(
                                                 context,
                                                 PortableTransferActivity::class.java
                                             ).apply {
-                                                putExtra(PortableTransferActivity.EXTRA_MODE, PortableTransferActivity.MODE_EXPORT)
-                                                putExtra(PortableTransferActivity.EXTRA_TYPE, ArmyristPortableDataType.REPORT_TEMPLATE.name)
-                                                putExtra(PortableTransferActivity.EXTRA_ROOT_ID, template.id)
+                                                putExtra(
+                                                    PortableTransferActivity.EXTRA_MODE,
+                                                    PortableTransferActivity.MODE_EXPORT
+                                                )
+                                                putExtra(
+                                                    PortableTransferActivity.EXTRA_TYPE,
+                                                    ArmyristPortableDataType.REPORT_TEMPLATE.name
+                                                )
+                                                putExtra(
+                                                    PortableTransferActivity.EXTRA_ROOT_ID,
+                                                    template.id
+                                                )
                                             }
                                         )
                                     }
-                                ) { Text("데이터") }
+                                )
                                 TextButton(onClick = { onDelete(template.id) }) { Text("삭제") }
                             }
                         }

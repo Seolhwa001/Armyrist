@@ -369,7 +369,7 @@ private fun DataManagementScreen(
                 Text("실셈·체크리스트·시간계획·보고 양식 .armyrist 파일을 새 문서로 추가합니다.")
                 Spacer(Modifier.height(12.dp))
                 ArmyristActionButton(
-                    text = "Armyrist 데이터 파일 선택",
+                    text = "데이터 가져오기",
                     onClick = {
                         context.startActivity(
                             android.content.Intent(
