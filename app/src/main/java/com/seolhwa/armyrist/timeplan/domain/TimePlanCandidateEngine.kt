@@ -102,11 +102,18 @@ object TimePlanCandidateEngine {
         }
         val newMidways = (orderedMidways + listOfNotNull(convertedFinal))
             .mapIndexed { index, event -> event.copy(order = index) }
+        val newFinalTimeSpec = plan.end.value.time?.let { endClock ->
+            EventTimeSpec.Single(
+                ClockValue.derived(endClock)
+            )
+        } ?: EventTimeSpec.Unspecified
+
         val newFinal = TimeEvent(
             id = newFinalId,
             kind = TimeEventKind.FINAL,
             order = newMidways.size,
-            name = defaultFinalName
+            name = defaultFinalName,
+            timeSpec = newFinalTimeSpec
         )
 
         return normalizeTopology(
