@@ -396,23 +396,60 @@ object TimePlanCandidateEngine {
 
         for (other in existing.orderedEvents()) {
             if (other.id == changedEvent.id) continue
-            val otherRange = other.timeSpec as? EventTimeSpec.Range ?: continue
-            val rs = otherRange.start.time ?: continue
-            val re = otherRange.end.time ?: continue
 
-            val overlaps = when (changedEvent.timeSpec) {
-                is EventTimeSpec.Single ->
+            val overlaps = when {
+                changedEvent.timeSpec is EventTimeSpec.Single &&
+                    other.timeSpec is EventTimeSpec.Range -> {
+                    val rs = other.timeSpec.start.time ?: continue
+                    val re = other.timeSpec.end.time ?: continue
                     pointInsideRange(changedArrival, rs, re)
-                is EventTimeSpec.Range ->
+                }
+
+                changedEvent.timeSpec is EventTimeSpec.Range &&
+                    other.timeSpec is EventTimeSpec.Range -> {
+                    val rs = other.timeSpec.start.time ?: continue
+                    val re = other.timeSpec.end.time ?: continue
                     intervalsOverlap(changedArrival, changedDeparture, rs, re)
-                EventTimeSpec.Unspecified -> false
+                }
+
+                changedEvent.timeSpec is EventTimeSpec.Range &&
+                    other.timeSpec is EventTimeSpec.Single -> {
+                    val point = other.timeSpec.value.time ?: continue
+                    // Symmetric case: the newly entered occupied Range may
+                    // swallow a pre-existing Single point.
+                    pointInsideRange(
+                        point = point,
+                        start = changedArrival,
+                        end = changedDeparture
+                    )
+                }
+
+                else -> false
             }
+
             if (overlaps) {
+                val conflictRange = when (val otherSpec = other.timeSpec) {
+                    is EventTimeSpec.Range -> {
+                        val rs = otherSpec.start.time ?: changedArrival
+                        val re = otherSpec.end.time ?: changedDeparture
+                        rs to re
+                    }
+                    is EventTimeSpec.Single -> {
+                        val point = otherSpec.value.time ?: changedArrival
+                        // For a Single swallowed by the changed Range, show the
+                        // edited occupied Range because that is the interval the
+                        // user must change.
+                        changedArrival to changedDeparture
+                    }
+                    EventTimeSpec.Unspecified ->
+                        changedArrival to changedDeparture
+                }
+
                 return OccupiedRangeConflict(
                     eventId = other.id,
                     eventName = other.name,
-                    rangeStart = rs,
-                    rangeEnd = re
+                    rangeStart = conflictRange.first,
+                    rangeEnd = conflictRange.second
                 )
             }
         }
