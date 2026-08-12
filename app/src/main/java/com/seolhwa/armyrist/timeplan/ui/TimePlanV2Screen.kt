@@ -798,54 +798,44 @@ private fun Armyrist24HourTimeDialog(
     onDismiss: () -> Unit,
     onConfirm: (ClockTime) -> Unit
 ) {
-    var selectedHour by remember { mutableIntStateOf(initial?.minuteOfDay?.div(60) ?: 9) }
-    var selectedMinute by remember { mutableIntStateOf(initial?.minuteOfDay?.rem(60) ?: 0) }
+    val initialMinuteOfDay = initial?.minuteOfDay ?: (9 * 60)
+    var selectedMinuteOfDay by remember { mutableIntStateOf(initialMinuteOfDay) }
     var raw by remember {
-        mutableStateOf("%02d%02d".format(selectedHour, selectedMinute))
+        mutableStateOf(
+            "%02d%02d".format(
+                selectedMinuteOfDay / 60,
+                selectedMinuteOfDay % 60
+            )
+        )
     }
     var error by remember { mutableStateOf<String?>(null) }
 
-    // Direct-input values may be 1-minute precision.  The minute wheel only
-    // has 5-minute detents, so it points to the nearest detent without
-    // modifying selectedMinute until the user actually scrolls that wheel.
-    val minuteDetents = remember { (0..55 step 5).toList() }
-    var minuteWheelReference by remember {
-        mutableIntStateOf(nearestFiveMinuteDetent(selectedMinute))
-    }
+    val selectedHour = selectedMinuteOfDay / 60
+    val selectedMinute = selectedMinuteOfDay % 60
+    val minuteWheelReference = nearestFiveMinuteDetent(selectedMinute)
 
-    fun updateFromWheel(hour: Int = selectedHour, minute: Int = selectedMinute) {
-        selectedHour = hour
-        selectedMinute = minute
-        raw = "%02d%02d".format(selectedHour, selectedMinute)
+    fun setSelected(hour: Int, minute: Int) {
+        selectedMinuteOfDay = hour * 60 + minute
+        raw = "%02d%02d".format(hour, minute)
         error = null
     }
 
     fun parseRaw(value: String): Pair<Int, Int>? {
         val digits = value.filter(Char::isDigit)
         val parsed = when (digits.length) {
-            3 -> digits.substring(0, 1).toIntOrNull()?.let { h ->
-                digits.substring(1, 3).toIntOrNull()?.let { m -> h to m }
+            3 -> {
+                val h = digits.substring(0, 1).toIntOrNull()
+                val m = digits.substring(1, 3).toIntOrNull()
+                if (h != null && m != null) h to m else null
             }
-            4 -> digits.substring(0, 2).toIntOrNull()?.let { h ->
-                digits.substring(2, 4).toIntOrNull()?.let { m -> h to m }
+            4 -> {
+                val h = digits.substring(0, 2).toIntOrNull()
+                val m = digits.substring(2, 4).toIntOrNull()
+                if (h != null && m != null) h to m else null
             }
             else -> null
         }
         return parsed?.takeIf { it.first in 0..23 && it.second in 0..59 }
-    }
-
-    fun applyRaw(): Boolean {
-        val parsed = parseRaw(raw)
-        if (parsed == null) {
-            error = "000~2359 범위의 올바른 시각을 입력하세요."
-            return false
-        }
-        selectedHour = parsed.first
-        selectedMinute = parsed.second
-        minuteWheelReference = nearestFiveMinuteDetent(selectedMinute)
-        raw = "%02d%02d".format(selectedHour, selectedMinute)
-        error = null
-        return true
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -872,55 +862,52 @@ private fun Armyrist24HourTimeDialog(
                 )
 
                 Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.Top
                 ) {
                     Column(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.width(116.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(
-                            "시",
-                            fontWeight = FontWeight.Bold,
-                            color = ArmyristColors.PrimaryControl
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        ArmyristInfiniteWheelPicker(
+                        Text("시", fontWeight = FontWeight.Bold, color = ArmyristColors.PrimaryControl)
+                        Spacer(Modifier.height(2.dp))
+                        ArmyristWheelPicker(
                             values = (0..23).toList(),
                             selectedValue = selectedHour,
                             valueText = { "%02d".format(it) },
                             onUserSelected = { hour ->
-                                updateFromWheel(hour = hour)
+                                setSelected(hour, selectedMinute)
                             }
                         )
                     }
 
-                    Text(
-                        ":",
-                        modifier = Modifier.padding(top = 72.dp),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = ArmyristColors.PrimaryText
-                    )
-
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    Box(
+                        modifier = Modifier
+                            .width(34.dp)
+                            .height(150.dp),
+                        contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            "분",
+                            ":",
+                            style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
-                            color = ArmyristColors.PrimaryControl
+                            color = ArmyristColors.PrimaryText
                         )
-                        Spacer(Modifier.height(4.dp))
-                        ArmyristInfiniteWheelPicker(
-                            values = minuteDetents,
+                    }
+
+                    Column(
+                        modifier = Modifier.width(116.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("분", fontWeight = FontWeight.Bold, color = ArmyristColors.PrimaryControl)
+                        Spacer(Modifier.height(2.dp))
+                        ArmyristWheelPicker(
+                            values = (0..55 step 5).toList(),
                             selectedValue = minuteWheelReference,
                             valueText = { "%02d".format(it) },
                             onUserSelected = { minute ->
-                                minuteWheelReference = minute
-                                updateFromWheel(minute = minute)
+                                setSelected(selectedHour, minute)
                             }
                         )
                     }
@@ -936,13 +923,8 @@ private fun Armyrist24HourTimeDialog(
                     onValueChange = { incoming ->
                         raw = incoming.filter(Char::isDigit).take(4)
                         error = null
-
-                        // Sync immediately as soon as the entered HHMM is valid.
-                        // 1-minute precision is deliberately preserved.
-                        parseRaw(raw)?.let { parsed ->
-                            selectedHour = parsed.first
-                            selectedMinute = parsed.second
-                            minuteWheelReference = nearestFiveMinuteDetent(selectedMinute)
+                        parseRaw(raw)?.let { (hour, minute) ->
+                            selectedMinuteOfDay = hour * 60 + minute
                         }
                     },
                     label = { Text("직접 입력 (850 / 0850 / 1737)") },
@@ -955,12 +937,12 @@ private fun Armyrist24HourTimeDialog(
 
                 Button(
                     onClick = {
-                        if (applyRaw()) {
-                            onConfirm(
-                                ClockTime.requireMinuteOfDay(
-                                    selectedHour * 60 + selectedMinute
-                                )
-                            )
+                        val parsed = parseRaw(raw)
+                        if (parsed == null) {
+                            error = "000~2359 범위의 올바른 시각을 입력하세요."
+                        } else {
+                            selectedMinuteOfDay = parsed.first * 60 + parsed.second
+                            onConfirm(ClockTime.requireMinuteOfDay(selectedMinuteOfDay))
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -981,13 +963,15 @@ private fun Armyrist24HourTimeDialog(
 }
 
 private fun nearestFiveMinuteDetent(minute: Int): Int {
-    val lower = (minute / 5) * 5
-    val upper = (lower + 5).coerceAtMost(55)
-    return if (minute - lower < upper - minute) lower else upper
+    val rounded = ((minute + 2) / 5) * 5
+    return when {
+        rounded >= 60 -> 55
+        else -> rounded.coerceIn(0, 55)
+    }
 }
 
 @Composable
-private fun ArmyristInfiniteWheelPicker(
+private fun ArmyristWheelPicker(
     values: List<Int>,
     selectedValue: Int,
     valueText: (Int) -> String,
@@ -996,63 +980,58 @@ private fun ArmyristInfiniteWheelPicker(
     require(values.isNotEmpty())
 
     val view = LocalView.current
-    val itemHeight = 48.dp
-    val repetitionCount = 1000
-    val middleCycle = repetitionCount / 2
-    val selectedBaseIndex = values.indexOf(selectedValue).coerceAtLeast(0)
-    val initialIndex = middleCycle * values.size + selectedBaseIndex
+    val itemHeight = 44.dp
+    val centerPadding = itemHeight
+    val cycles = 1000
+    val middle = cycles / 2
+    val selectedIndex = values.indexOf(selectedValue).coerceAtLeast(0)
+    val initialIndex = middle * values.size + selectedIndex
 
     val state = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
     val flingBehavior = rememberSnapFlingBehavior(lazyListState = state)
+    var ignoreProgrammaticScroll by remember { mutableStateOf(false) }
+    var lastUserIndex by remember { mutableIntStateOf(initialIndex) }
 
-    var programmaticSync by remember { mutableStateOf(false) }
-    var lastHapticIndex by remember { mutableIntStateOf(initialIndex) }
-
-    // Direct input or the other wheel can move the reference value.
-    // Re-center silently; do not reinterpret this as a user wheel action.
+    // Keep the visual wheel synchronized with the one authoritative selected time.
     LaunchedEffect(selectedValue) {
-        val currentValue = values[
-            ((state.firstVisibleItemIndex % values.size) + values.size) % values.size
-        ]
-        if (currentValue != selectedValue) {
-            val current = state.firstVisibleItemIndex
-            val currentCycle = current / values.size
-            val target = currentCycle * values.size + selectedBaseIndex
-            programmaticSync = true
-            state.scrollToItem(target)
-            lastHapticIndex = target
-            programmaticSync = false
+        val visibleCenter = state.layoutInfo.visibleItemsInfo.minByOrNull { item ->
+            kotlin.math.abs(
+                (item.offset + item.size / 2) -
+                    (state.layoutInfo.viewportStartOffset + state.layoutInfo.viewportEndOffset) / 2
+            )
+        }
+        val currentNormalized = visibleCenter?.index?.let {
+            ((it % values.size) + values.size) % values.size
+        }
+        if (currentNormalized != selectedIndex) {
+            val currentIndex = visibleCenter?.index ?: state.firstVisibleItemIndex
+            val cycle = currentIndex / values.size
+            val target = cycle * values.size + selectedIndex
+            ignoreProgrammaticScroll = true
+            state.scrollToItem((target - 1).coerceAtLeast(0))
+            lastUserIndex = target
+            ignoreProgrammaticScroll = false
         }
     }
 
-    // Value transition, not frame transition, drives selection and haptics.
     LaunchedEffect(state) {
         snapshotFlow {
-            Triple(
-                state.firstVisibleItemIndex,
-                state.firstVisibleItemScrollOffset,
-                state.isScrollInProgress
-            )
-        }.collect { (firstIndex, offset, scrolling) ->
-            if (!scrolling || programmaticSync) return@collect
+            val info = state.layoutInfo
+            val viewportCenter = (info.viewportStartOffset + info.viewportEndOffset) / 2
+            val centered = info.visibleItemsInfo.minByOrNull { item ->
+                kotlin.math.abs((item.offset + item.size / 2) - viewportCenter)
+            }
+            Triple(centered?.index, state.isScrollInProgress, ignoreProgrammaticScroll)
+        }.collect { (centeredIndex, scrolling, ignored) ->
+            if (centeredIndex == null || !scrolling || ignored) return@collect
 
-            // Whichever detent is closest to the center is treated as selected
-            // while the user's finger/flick is moving.
-            val itemPx = state.layoutInfo.visibleItemsInfo
-                .firstOrNull()
-                ?.size
-                ?.coerceAtLeast(1)
-                ?: return@collect
-            val nearestIndex = if (offset >= itemPx / 2) firstIndex + 1 else firstIndex
+            if (centeredIndex != lastUserIndex) {
+                // One selection tick per detent crossed. performHapticFeedback respects
+                // the platform's haptic policy; no direct vibrator is used.
+                view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                lastUserIndex = centeredIndex
 
-            if (nearestIndex != lastHapticIndex) {
-                val stepCount = kotlin.math.abs(nearestIndex - lastHapticIndex)
-                repeat(stepCount.coerceAtMost(6)) {
-                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                }
-                lastHapticIndex = nearestIndex
-
-                val normalized = ((nearestIndex % values.size) + values.size) % values.size
+                val normalized = ((centeredIndex % values.size) + values.size) % values.size
                 onUserSelected(values[normalized])
             }
         }
@@ -1060,10 +1039,11 @@ private fun ArmyristInfiniteWheelPicker(
 
     Box(
         modifier = Modifier
-            .fillMaxWidth()
-            .height(itemHeight * 3),
+            .width(116.dp)
+            .height(132.dp),
         contentAlignment = Alignment.Center
     ) {
+        // Thin selection band: it reads as a wheel focus area, not as a large button.
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1077,10 +1057,10 @@ private fun ArmyristInfiniteWheelPicker(
             modifier = Modifier.fillMaxSize(),
             state = state,
             flingBehavior = flingBehavior,
-            contentPadding = PaddingValues(vertical = itemHeight),
+            contentPadding = PaddingValues(vertical = centerPadding),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            items(repetitionCount * values.size) { index ->
+            items(cycles * values.size) { index ->
                 val value = values[index % values.size]
                 Box(
                     modifier = Modifier
@@ -1088,12 +1068,13 @@ private fun ArmyristInfiniteWheelPicker(
                         .height(itemHeight),
                     contentAlignment = Alignment.Center
                 ) {
-                    val isCentered = index == lastHapticIndex
+                    val normalizedIndex = ((lastUserIndex % values.size) + values.size) % values.size
+                    val isSelectedValue = values[normalizedIndex] == value
                     Text(
                         valueText(value),
-                        fontSize = if (isCentered) 22.sp else 18.sp,
-                        fontWeight = if (isCentered) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isCentered) ArmyristColors.OnDark else ArmyristColors.SecondaryText
+                        fontSize = if (isSelectedValue) 21.sp else 17.sp,
+                        fontWeight = if (isSelectedValue) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isSelectedValue) Color.White else ArmyristColors.SecondaryText
                     )
                 }
             }
