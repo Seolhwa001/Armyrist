@@ -25,8 +25,11 @@ class ReportTemplateActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val repo = (application as ArmyristApplication).coreSuiteRepository
         setContent {
-            MaterialTheme {
-                Surface(Modifier.fillMaxSize()) {
+            ArmyristTheme {
+                Surface(
+                    Modifier.fillMaxSize(),
+                    color = ArmyristColors.AppBackground
+                ) {
                     ReportTemplateApp(repo) { finish() }
                 }
             }
@@ -112,13 +115,41 @@ private fun TemplateList(
                 onLeading = onHome
             )
         },
-        floatingActionButton = { FloatingActionButton(onClick = onCreate) { Text("+") } }
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = onCreate,
+                shape = ArmyristPanelShape,
+                containerColor = ArmyristColors.PrimaryControl,
+                contentColor = ArmyristColors.OnDark,
+                text = {
+                    Text(
+                        "새 보고 양식",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                icon = {
+                    Text("+", fontWeight = FontWeight.Bold)
+                }
+            )
+        }
     ) { padding ->
         if (templates.isEmpty()) {
-            Column(Modifier.padding(padding).padding(20.dp)) {
-                Text("등록된 보고 양식이 없습니다.", fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(8.dp))
-                Text("{사용자}, {제목}, {전달내용}, {날짜}, {시간} 변수를 사용할 수 있습니다.")
+            Column(
+                Modifier
+                    .padding(padding)
+                    .padding(16.dp)
+            ) {
+                ArmyristPanel(Modifier.fillMaxWidth()) {
+                    Text(
+                        "등록된 보고 양식이 없습니다.",
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "{사용자}, {제목}, {전달내용}, {날짜}, {시간} 변수를 사용할 수 있습니다.",
+                        color = ArmyristColors.SecondaryText
+                    )
+                }
             }
         } else {
             LazyColumn(
@@ -128,7 +159,17 @@ private fun TemplateList(
             ) {
                 items(templates, key = { it.id }) { template ->
                     Card(
-                        modifier = Modifier.fillMaxWidth().clickable { onOpen(template.id) }
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onOpen(template.id) },
+                        shape = ArmyristPanelShape,
+                        colors = CardDefaults.cardColors(
+                            containerColor = ArmyristColors.RaisedSurface
+                        ),
+                        border = BorderStroke(
+                            1.dp,
+                            ArmyristColors.Border
+                        )
                     ) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -147,7 +188,7 @@ private fun TemplateList(
                                     TextButton(onClick = { onDefault(template.id) }) { Text("기본 지정") }
                                 }
                                 ArmyristUtilityActionButton(
-                                    text = "데이터 내보내기",
+                                    text = "데이터 전달",
                                     onClick = {
                                         context.startActivity(
                                             android.content.Intent(
@@ -215,7 +256,7 @@ private fun TemplateEditor(
     }
 
     Column(
-        Modifier.fillMaxSize().padding(20.dp),
+        Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         ArmyristTopBar(
@@ -226,6 +267,7 @@ private fun TemplateEditor(
         )
         Button(
             onClick = onBack,
+            modifier = Modifier.padding(horizontal = 16.dp),
             shape = ArmyristPanelShape,
             colors = ButtonDefaults.buttonColors(
                 containerColor = ArmyristColors.HeaderRaised,
@@ -240,16 +282,32 @@ private fun TemplateEditor(
             onValueChange = { name = it; error = "" },
             label = { Text("양식 이름") },
             singleLine = true,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
         )
 
-        Text("지원 변수", fontWeight = FontWeight.SemiBold)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            "지원 변수",
+            modifier = Modifier.padding(horizontal = 16.dp),
+            fontWeight = FontWeight.SemiBold
+        )
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
             listOf("{사용자}", "{제목}", "{전달내용}").forEach { token ->
                 AssistChip(onClick = { insertToken(token) }, label = { Text(token) })
             }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
             listOf("{날짜}", "{시간}").forEach { token ->
                 AssistChip(onClick = { insertToken(token) }, label = { Text(token) })
             }
@@ -260,7 +318,9 @@ private fun TemplateEditor(
             onValueChange = { body = it },
             label = { Text("보고 양식") },
             minLines = 8,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
         )
 
         if (error.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error)
@@ -275,12 +335,21 @@ private fun TemplateEditor(
                     error = "저장할 수 없습니다."
                 }
             },
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("저장") }
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            shape = ArmyristPanelShape,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = ArmyristColors.PrimaryControl,
+                contentColor = ArmyristColors.OnDark
+            )
+        ) { Text("저장", fontWeight = FontWeight.Bold) }
 
         Text(
             "예: 충성! {사용자}입니다.\n\n{전달내용}\n\n{날짜} {시간}",
-            style = MaterialTheme.typography.bodySmall
+            style = MaterialTheme.typography.bodySmall,
+            color = ArmyristColors.SecondaryText,
+            modifier = Modifier.padding(horizontal = 16.dp)
         )
     }
 }

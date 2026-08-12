@@ -235,7 +235,7 @@ private fun ArmyristApp(
                             body = ResultGenerator.generate(sheet)
                         ),
                         onBack = { screen = Screen.COUNTING },
-                        portableDataType = ArmyristPortableDataType.COUNTING,
+                        portableType = ArmyristPortableDataType.COUNTING,
                         portableRootId = sheet.id
                     )
 
@@ -515,7 +515,7 @@ private fun CountingScreen(
                         contentColor = ArmyristColors.OnDark
                     )
                 ) {
-                    Text("전달", fontWeight = FontWeight.Bold)
+                    Text("결과 전달", fontWeight = FontWeight.Bold)
                 }
 
             }
@@ -546,7 +546,9 @@ private fun CountingScreen(
                         text = "메모",
                         onClick = { memoEdit = true }
                     )
-                                    }
+                        }
+                    )
+                }
             } else {
                 val targetGroup = sheet.groups.firstOrNull { it.id == assignmentGroupId }
                 val targetLabel =

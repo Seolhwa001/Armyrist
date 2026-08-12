@@ -8,16 +8,23 @@ import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
 import com.seolhwa.armyrist.stage2.domain.ReportTemplate
 import com.seolhwa.armyrist.stage2.domain.ToolResult
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -40,7 +47,6 @@ private fun applyReportTemplate(
         "{시간}" to SimpleDateFormat("HH:mm", Locale.getDefault()).format(now)
     )
 
-    // Single-pass token replacement: replacement values are never interpreted again.
     val regex = Regex("""\{사용자\}|\{제목\}|\{전달내용\}|\{날짜\}|\{시간\}""")
     return regex.replace(template.body) { match ->
         values[match.value] ?: match.value
@@ -52,7 +58,7 @@ fun CommonShareScreen(
     repo: CoreSuiteRepository,
     result: ToolResult,
     onBack: () -> Unit,
-    portableDataType: ArmyristPortableDataType? = null,
+    portableType: ArmyristPortableDataType? = null,
     portableRootId: String? = null
 ) {
     BackHandler(onBack = onBack)
@@ -60,16 +66,40 @@ fun CommonShareScreen(
     val templates = remember { repo.getReportTemplates() }
     val default = templates.firstOrNull { it.isDefault }
     var selectedId by remember { mutableStateOf(default?.id ?: NONE_TEMPLATE) }
-    val selected =
-        templates.firstOrNull { it.id == selectedId }
+    val selected = templates.firstOrNull { it.id == selectedId }
 
-    // One report snapshot per explicit selection/result state.
-    // Preview, clipboard and Android Share all use this exact text.
-    val capturedAt =
-        remember(selectedId, result) {
-            Date()
+    var pendingSaveBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var encrypt by remember { mutableStateOf(false) }
+    var password by remember { mutableStateOf("") }
+    var passwordConfirm by remember { mutableStateOf("") }
+
+    val saveFile = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/vnd.armyrist.data")
+    ) { uri ->
+        val bytes = pendingSaveBytes
+        pendingSaveBytes = null
+        if (uri != null && bytes != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use {
+                    it.write(bytes)
+                } ?: error("openOutputStream failed")
+            }.onSuccess {
+                Toast.makeText(
+                    context,
+                    "데이터 파일을 저장했습니다.",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }.onFailure {
+                Toast.makeText(
+                    context,
+                    "데이터 파일을 저장할 수 없습니다.",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
         }
+    }
 
+    val capturedAt = remember(selectedId, result) { Date() }
     val capturedUserName =
         remember(selectedId, result) {
             repo.getUserProfile().displayName
@@ -91,94 +121,372 @@ fun CommonShareScreen(
             )
         }
 
+    fun createPortableBytes(): ByteArray? {
+        val type = portableType
+        val rootId = portableRootId
+        if (type == null || rootId.isNullOrBlank()) {
+            Toast.makeText(
+                context,
+                "이 화면에서는 데이터 파일을 만들 수 없습니다.",
+                Toast.LENGTH_SHORT
+            ).show()
+            return null
+        }
+
+        if (
+            encrypt &&
+            (
+                password.isBlank() ||
+                password != passwordConfirm
+            )
+        ) {
+            Toast.makeText(
+                context,
+                "암호와 암호 확인을 동일하게 입력해주세요.",
+                Toast.LENGTH_SHORT
+            ).show()
+            return null
+        }
+
+        return when (
+            val generated =
+                ArmyristPortableDataManager.createIndividualExport(
+                    context = context,
+                    dataType = type,
+                    rootId = rootId,
+                    password =
+                        if (encrypt) password.toCharArray()
+                        else null
+                )
+        ) {
+            is PortableResult.Success -> generated.value
+            is PortableResult.Error -> {
+                Toast.makeText(
+                    context,
+                    generated.message,
+                    Toast.LENGTH_LONG
+                ).show()
+                null
+            }
+        }
+    }
+
+    fun fileName(): String {
+        val type = when (portableType) {
+            ArmyristPortableDataType.COUNTING -> "counting"
+            ArmyristPortableDataType.CHECKLIST -> "checklist"
+            ArmyristPortableDataType.TIME_PLAN -> "time-plan"
+            ArmyristPortableDataType.REPORT_TEMPLATE -> "report-template"
+            else -> "armyrist-data"
+        }
+        return "$type-${System.currentTimeMillis()}.armyrist"
+    }
+
+    fun sharePortable(bytes: ByteArray) {
+        runCatching {
+            val directory =
+                File(context.cacheDir, "portable-share").apply {
+                    mkdirs()
+                }
+            directory.listFiles()?.forEach {
+                if (it.isFile) it.delete()
+            }
+
+            val file = File(directory, fileName())
+            file.writeBytes(bytes)
+
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/vnd.armyrist.data"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            context.startActivity(
+                Intent.createChooser(
+                    intent,
+                    "Armyrist 데이터 공유"
+                )
+            )
+        }.onFailure {
+            Toast.makeText(
+                context,
+                "데이터 파일을 공유할 수 없습니다.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
     Scaffold(
         topBar = {
             ArmyristTopBar(
-                title = "전달",
-                subtitle = "RESULT / TEXT & DATA",
+                title = "결과 전달",
+                subtitle = "TEXT / DATA",
                 leadingLabel = "뒤로",
                 onLeading = onBack
             )
         }
     ) { padding ->
         Column(
-            Modifier.padding(padding).padding(16.dp).fillMaxSize(),
+            Modifier
+                .padding(padding)
+                .padding(16.dp)
+                .fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("보고 양식", style = MaterialTheme.typography.titleMedium)
+            ArmyristPanel(Modifier.fillMaxWidth()) {
+                Text(
+                    "텍스트 전달",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(8.dp))
 
-            var expanded by remember { mutableStateOf(false) }
-            Box {
-                OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-                    Text(selected?.name ?: "양식 없음")
-                }
-                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    DropdownMenuItem(
-                        text = { Text("양식 없음") },
-                        onClick = { selectedId = NONE_TEMPLATE; expanded = false }
-                    )
-                    templates.forEach { template ->
+                var expanded by remember { mutableStateOf(false) }
+                Box {
+                    OutlinedButton(
+                        onClick = { expanded = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = ArmyristPanelShape,
+                        border = BorderStroke(
+                            1.dp,
+                            ArmyristColors.Border
+                        ),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = ArmyristColors.WorkSurface,
+                            contentColor = ArmyristColors.PrimaryText
+                        )
+                    ) {
+                        Text(selected?.name ?: "양식 없음")
+                    }
+                    DropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
                         DropdownMenuItem(
-                            text = { Text(if (template.isDefault) "${template.name} · 기본" else template.name) },
-                            onClick = { selectedId = template.id; expanded = false }
+                            text = { Text("양식 없음") },
+                            onClick = {
+                                selectedId = NONE_TEMPLATE
+                                expanded = false
+                            }
+                        )
+                        templates.forEach { template ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        if (template.isDefault) {
+                                            "${template.name} · 기본"
+                                        } else {
+                                            template.name
+                                        }
+                                    )
+                                },
+                                onClick = {
+                                    selectedId = template.id
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = finalText,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("미리보기") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 170.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor =
+                            ArmyristColors.InputSurface,
+                        unfocusedContainerColor =
+                            ArmyristColors.InputSurface,
+                        focusedBorderColor =
+                            ArmyristColors.PrimaryControl,
+                        unfocusedBorderColor =
+                            ArmyristColors.Border
+                    )
+                )
+
+                Spacer(Modifier.height(10.dp))
+
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement =
+                        Arrangement.spacedBy(8.dp)
+                ) {
+                    ArmyristActionButton(
+                        text = "텍스트 복사",
+                        onClick = {
+                            val clipboard =
+                                context.getSystemService(
+                                    Context.CLIPBOARD_SERVICE
+                                ) as ClipboardManager
+                            clipboard.setPrimaryClip(
+                                ClipData.newPlainText(
+                                    "Armyrist result",
+                                    finalText
+                                )
+                            )
+                            Toast.makeText(
+                                context,
+                                "텍스트를 복사했습니다.",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    ArmyristActionButton(
+                        text = "텍스트 공유",
+                        onClick = {
+                            val intent =
+                                Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(
+                                        Intent.EXTRA_TEXT,
+                                        finalText
+                                    )
+                                }
+                            context.startActivity(
+                                Intent.createChooser(
+                                    intent,
+                                    "텍스트 공유"
+                                )
+                            )
+                        },
+                        modifier = Modifier.weight(1f),
+                        primary = true
+                    )
+                }
+            }
+
+            if (
+                portableType != null &&
+                !portableRootId.isNullOrBlank()
+            ) {
+                ArmyristPanel(Modifier.fillMaxWidth()) {
+                    Text(
+                        "데이터 파일",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "다른 Armyrist에서 그대로 불러올 수 있는 .armyrist 파일입니다.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ArmyristColors.SecondaryText
+                    )
+
+                    Spacer(Modifier.height(10.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Switch(
+                            checked = encrypt,
+                            onCheckedChange = { encrypt = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor =
+                                    ArmyristColors.OnDark,
+                                checkedTrackColor =
+                                    ArmyristColors.PrimaryControl,
+                                uncheckedThumbColor =
+                                    ArmyristColors.PrimaryText,
+                                uncheckedTrackColor =
+                                    ArmyristColors.SecondaryControl,
+                                uncheckedBorderColor =
+                                    ArmyristColors.Border
+                            )
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "파일 암호화",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    if (encrypt) {
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            label = { Text("암호") },
+                            visualTransformation =
+                                PasswordVisualTransformation(),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = passwordConfirm,
+                            onValueChange = {
+                                passwordConfirm = it
+                            },
+                            label = { Text("암호 확인") },
+                            visualTransformation =
+                                PasswordVisualTransformation(),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement =
+                            Arrangement.spacedBy(6.dp)
+                    ) {
+                        ArmyristUtilityActionButton(
+                            text = "파일 저장",
+                            onClick = {
+                                createPortableBytes()?.let {
+                                    pendingSaveBytes = it
+                                    saveFile.launch(fileName())
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        ArmyristUtilityActionButton(
+                            text = "파일 불러오기",
+                            onClick = {
+                                context.startActivity(
+                                    Intent(
+                                        context,
+                                        PortableTransferActivity::class.java
+                                    ).apply {
+                                        putExtra(
+                                            PortableTransferActivity.EXTRA_MODE,
+                                            PortableTransferActivity.MODE_IMPORT
+                                        )
+                                    }
+                                )
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        ArmyristUtilityActionButton(
+                            text = "파일 공유",
+                            onClick = {
+                                createPortableBytes()?.let {
+                                    sharePortable(it)
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
-            }
-
-            OutlinedTextField(
-                value = finalText,
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("미리보기") },
-                modifier = Modifier.fillMaxWidth().weight(1f)
-            )
-
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ArmyristActionButton(
-                    text = "복사",
-                    onClick = {
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        clipboard.setPrimaryClip(ClipData.newPlainText("Armyrist result", finalText))
-                        Toast.makeText(context, "복사되었습니다.", Toast.LENGTH_SHORT).show()
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-
-                ArmyristActionButton(
-                    text = "텍스트 공유",
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, finalText)
-                        }
-                        context.startActivity(Intent.createChooser(intent, "공유"))
-                    },
-                    modifier = Modifier.weight(1f),
-                    primary = true
-                )
-            }
-
-            if (portableDataType != null && !portableRootId.isNullOrBlank()) {
-                HorizontalDivider(color = ArmyristColors.Border)
-                Text("Armyrist 데이터", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "현재 문서를 .armyrist 파일로 저장하거나 다른 Armyrist로 전송합니다.",
-                    color = ArmyristColors.SecondaryText
-                )
-                ArmyristActionButton(
-                    text = "데이터 저장 / 전송",
-                    onClick = {
-                        context.startActivity(
-                            Intent(context, PortableTransferActivity::class.java).apply {
-                                putExtra(PortableTransferActivity.EXTRA_MODE, PortableTransferActivity.MODE_EXPORT)
-                                putExtra(PortableTransferActivity.EXTRA_TYPE, portableDataType.name)
-                                putExtra(PortableTransferActivity.EXTRA_ROOT_ID, portableRootId)
-                            }
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
         }
     }

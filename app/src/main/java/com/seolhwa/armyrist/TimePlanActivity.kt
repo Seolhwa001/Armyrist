@@ -124,7 +124,7 @@ private fun TimePlanApp(
                     }
                 ),
                 onBack = { showingResult = false },
-                portableDataType = ArmyristPortableDataType.TIME_PLAN,
+                portableType = ArmyristPortableDataType.TIME_PLAN,
                 portableRootId = selected.id
             )
         }
@@ -717,17 +717,14 @@ private fun TimePlanDetailScreen(
                         contentColor = ArmyristColors.OnDark
                     )
                 ) {
-                    Text("전달", fontWeight = FontWeight.Bold)
+                    Text("결과 전달", fontWeight = FontWeight.Bold)
                 }
 
             }
-
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-            ) {
-                            }
+                        )
+                    }
+                )
+            }
 
             TimePlanStatusCard(plan)
 

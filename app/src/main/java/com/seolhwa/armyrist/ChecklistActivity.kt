@@ -254,7 +254,7 @@ private fun ChecklistApp(
                 repo = repo,
                 result = ChecklistResultGenerator.generate(selected),
                 onBack = { showingResult = false },
-                portableDataType = ArmyristPortableDataType.CHECKLIST,
+                portableType = ArmyristPortableDataType.CHECKLIST,
                 portableRootId = selected.id
             )
         }
@@ -619,7 +619,7 @@ private fun ChecklistDetailScreen(
                         contentColor = ArmyristColors.OnDark
                     )
                 ) {
-                    Text("전달", fontWeight = FontWeight.Bold)
+                    Text("결과 전달", fontWeight = FontWeight.Bold)
                 }
 
             }
@@ -660,7 +660,9 @@ private fun ChecklistDetailScreen(
                     )
                     ChecklistUtilityButton(text = "메모", onClick = { memoEdit = true })
                     ChecklistUtilityButton(text = "초기화", onClick = { resetConfirm = true })
-                                    }
+                        }
+                    )
+                }
 
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
