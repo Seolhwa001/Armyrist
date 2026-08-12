@@ -108,6 +108,21 @@ private fun TimePlanV2Detail(
             verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
             item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton(
+                        onClick = { },
+                        modifier = Modifier.weight(1f),
+                        shape = ArmyristPanelShape
+                    ) { Text("제목 수정") }
+                    OutlinedButton(
+                        onClick = { },
+                        modifier = Modifier.weight(1f),
+                        shape = ArmyristPanelShape
+                    ) { Text("결과 전달") }
+                }
+            }
+
+            item {
                 CompactSection("계획") {
                     OutlinedTextField(
                         value = title,
@@ -134,38 +149,26 @@ private fun TimePlanV2Detail(
             }
 
             item {
-                CompactSection("시간 범위") {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        AnchorTile(
-                            modifier = Modifier.weight(1f),
-                            label = "START",
-                            clock = plan.start.value,
-                            onClock = { onCommit(plan.copy(start = TimeAnchor(ClockValue.explicit(it)))) }
-                        )
-                        AnchorTile(
-                            modifier = Modifier.weight(1f),
-                            label = "END",
-                            clock = plan.end.value,
-                            onClock = { onCommit(plan.copy(end = TimeAnchor(ClockValue.explicit(it)))) }
-                        )
+                AnchorCard(
+                    label = "시작지점",
+                    clock = plan.start.value,
+                    onClock = { clock ->
+                        onCommit(plan.copy(start = TimeAnchor(ClockValue.explicit(clock))))
                     }
-                }
+                )
             }
 
             item {
                 SectionHeader(
-                    title = "중도지점",
+                    title = "지점",
                     count = plan.midwayEvents.size,
-                    action = "+ 중도지점",
+                    action = "+ 지점 추가",
                     enabled = false
                 )
             }
             if (plan.midwayEvents.isEmpty()) {
                 item {
-                    EmptyStrip("등록된 중도지점이 없습니다. · 추가 기능은 Step 6에서 연결됩니다.")
+                    EmptyStrip("등록된 중도지점이 없습니다.")
                 }
             } else {
                 plan.midwayEvents.sortedBy { it.order }.forEachIndexed { index, event ->
@@ -180,19 +183,13 @@ private fun TimePlanV2Detail(
             }
 
             item {
-                SectionHeader(
-                    title = "종료지점",
-                    count = if (plan.finalPoint == null) 0 else 1,
-                    action = "+ 종료지점",
-                    enabled = false
+                AnchorCard(
+                    label = "종료지점",
+                    clock = plan.end.value,
+                    onClock = { clock ->
+                        onCommit(plan.copy(end = TimeAnchor(ClockValue.explicit(clock))))
+                    }
                 )
-            }
-            if (plan.finalPoint == null) {
-                item { EmptyStrip("종료지점 없음 · 추가 기능은 Step 6에서 연결됩니다.") }
-            } else {
-                item(key = plan.finalPoint.id) {
-                    CompactEventRow(null, plan.finalPoint) { onCommit(plan.copy(finalPoint = it)) }
-                }
             }
 
             item {
