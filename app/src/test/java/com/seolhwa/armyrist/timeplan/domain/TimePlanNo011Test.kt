@@ -83,4 +83,52 @@ class TimePlanNo011Test {
         assertEquals("final-4", p.finalPoint?.id)
         assertTrue(p.midwayEvents.all { it.kind == TimeEventKind.MIDWAY })
     }
+
+    @Test
+    fun newFinalInheritsFinalEndClockAsDerived() {
+        val previousFinal = TimeEvent(
+            id = "old-final",
+            kind = TimeEventKind.FINAL,
+            order = 0,
+            name = "종료지점",
+            timeSpec = EventTimeSpec.Single(
+                ClockValue.explicit(ClockTime.requireMinuteOfDay(22 * 60))
+            )
+        )
+        val plan = RevisedTimePlan(
+            id = "p",
+            title = "x",
+            start = TimeAnchor(
+                ClockValue.explicit(ClockTime.requireMinuteOfDay(20 * 60))
+            ),
+            finalPoint = previousFinal,
+            end = TimeAnchor(
+                ClockValue.explicit(ClockTime.requireMinuteOfDay(0))
+            ),
+            createdAt = "0",
+            updatedAt = "0"
+        )
+
+        val result = TimePlanCandidateEngine.appendFinalPoint(
+            plan = plan,
+            newFinalId = "new-final"
+        )
+
+        val converted = result.midwayEvents.single()
+        val newFinal = requireNotNull(result.finalPoint)
+
+        assertEquals(
+            ClockTime.requireMinuteOfDay(22 * 60),
+            (converted.timeSpec as EventTimeSpec.Single).value.time
+        )
+        assertEquals(
+            ClockTime.requireMinuteOfDay(0),
+            (newFinal.timeSpec as EventTimeSpec.Single).value.time
+        )
+        assertEquals(
+            ValueOrigin.DERIVED,
+            (newFinal.timeSpec as EventTimeSpec.Single).value.origin
+        )
+    }
+
 }
