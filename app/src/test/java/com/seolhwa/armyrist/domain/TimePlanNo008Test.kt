@@ -24,7 +24,7 @@ class TimePlanNo008Test {
         assertEquals(ValueOrigin.DERIVED, link.origin)
     }
 
-    @Test fun durationEditMovesDerivedDownstreamButNotExplicitEnd() {
+    @Test fun durationEditMovesAllDownstreamIncludingExplicitEnd() {
         val e1 = TimeEvent("e1", TimeEventKind.MIDWAY, 0, "1",
             EventTimeSpec.Single(ClockValue.derived(t(8,50))))
         val e2 = TimeEvent("e2", TimeEventKind.MIDWAY, 1, "2",
@@ -42,6 +42,6 @@ class TimePlanNo008Test {
         val events = c.proposed.midwayEvents.sortedBy { it.order }
         assertEquals(t(9,0), (events[0].timeSpec as EventTimeSpec.Single).value.time)
         assertEquals(t(9,20), (events[1].timeSpec as EventTimeSpec.Single).value.time)
-        assertEquals(t(16,0), c.proposed.end.value.time)
+        assertEquals(t(16,10), c.proposed.end.value.time)
     }
 }
