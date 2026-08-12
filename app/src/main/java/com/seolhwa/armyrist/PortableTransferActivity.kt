@@ -6,6 +6,8 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
+import java.io.File
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -16,6 +18,40 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.seolhwa.armyrist.notification.ChecklistNotificationManager
 
+
+internal enum class PortableLaunchRoute {
+    INTERNAL_EXPORT,
+    INTERNAL_IMPORT,
+    EXTERNAL_VIEW,
+    EXTERNAL_SEND,
+    INVALID_EXTERNAL,
+    UNSUPPORTED
+}
+
+internal fun resolvePortableLaunchRoute(
+    action: String?,
+    extraMode: String?,
+    hasViewUri: Boolean,
+    hasSendUri: Boolean
+): PortableLaunchRoute = when (action) {
+    "android.intent.action.VIEW" ->
+        if (hasViewUri) PortableLaunchRoute.EXTERNAL_VIEW
+        else PortableLaunchRoute.INVALID_EXTERNAL
+
+    "android.intent.action.SEND" ->
+        if (hasSendUri) PortableLaunchRoute.EXTERNAL_SEND
+        else PortableLaunchRoute.INVALID_EXTERNAL
+
+    else -> when (extraMode) {
+        PortableTransferActivity.MODE_EXPORT ->
+            PortableLaunchRoute.INTERNAL_EXPORT
+        PortableTransferActivity.MODE_IMPORT ->
+            PortableLaunchRoute.INTERNAL_IMPORT
+        else ->
+            PortableLaunchRoute.UNSUPPORTED
+    }
+}
+
 class PortableTransferActivity : ComponentActivity() {
     companion object {
         const val EXTRA_MODE = "mode"
@@ -23,13 +59,14 @@ class PortableTransferActivity : ComponentActivity() {
         const val EXTRA_ROOT_ID = "rootId"
         const val MODE_EXPORT = "export"
         const val MODE_IMPORT = "import"
+        const val ARMYRIST_MIME = "application/vnd.armyrist.data"
     }
 
     private var pendingBytes: ByteArray? = null
     private var importBytes: ByteArray? = null
 
     private val createFile = registerForActivityResult(
-        ActivityResultContracts.CreateDocument("application/octet-stream")
+        ActivityResultContracts.CreateDocument(ARMYRIST_MIME)
     ) { uri ->
         val bytes = pendingBytes
         pendingBytes = null
@@ -86,10 +123,119 @@ class PortableTransferActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        when (intent.getStringExtra(EXTRA_MODE)) {
-            MODE_EXPORT -> renderExport()
-            MODE_IMPORT -> openFile.launch(arrayOf("application/octet-stream", "application/json", "*/*"))
-            else -> finish()
+
+        val viewUri =
+            if (intent.action == Intent.ACTION_VIEW) intent.data else null
+
+        val sendUri =
+            if (intent.action == Intent.ACTION_SEND) {
+                if (android.os.Build.VERSION.SDK_INT >= 33) {
+                    intent.getParcelableExtra(
+                        Intent.EXTRA_STREAM,
+                        android.net.Uri::class.java
+                    )
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(Intent.EXTRA_STREAM)
+                }
+            } else {
+                null
+            }
+
+        when (
+            resolvePortableLaunchRoute(
+                action = intent.action,
+                extraMode = intent.getStringExtra(EXTRA_MODE),
+                hasViewUri = viewUri != null,
+                hasSendUri = sendUri != null
+            )
+        ) {
+            PortableLaunchRoute.INTERNAL_EXPORT ->
+                renderExport()
+
+            PortableLaunchRoute.INTERNAL_IMPORT ->
+                openFile.launch(
+                    arrayOf(
+                        ARMYRIST_MIME,
+                        "application/octet-stream",
+                        "application/json",
+                        "*/*"
+                    )
+                )
+
+            PortableLaunchRoute.EXTERNAL_VIEW ->
+                startExternalImport(viewUri!!)
+
+            PortableLaunchRoute.EXTERNAL_SEND ->
+                startExternalImport(sendUri!!)
+
+            PortableLaunchRoute.INVALID_EXTERNAL -> {
+                Toast.makeText(
+                    this,
+                    "전달된 Armyrist 데이터 파일을 찾을 수 없습니다.",
+                    Toast.LENGTH_LONG
+                ).show()
+                finish()
+            }
+
+            PortableLaunchRoute.UNSUPPORTED ->
+                finish()
+        }
+    }
+
+    private fun startExternalImport(uri: android.net.Uri) {
+        val bytes = readUriBytesSafely(uri)
+        if (bytes == null) {
+            finish()
+            return
+        }
+        importBytes = bytes
+        renderImport(bytes)
+    }
+
+    private fun shareArmyristFile(
+        bytes: ByteArray,
+        filename: String
+    ) {
+        runCatching {
+            val directory = File(
+                cacheDir,
+                "portable-share"
+            ).apply {
+                mkdirs()
+            }
+
+            directory.listFiles()?.forEach { file ->
+                if (file.isFile) file.delete()
+            }
+
+            val file = File(directory, filename)
+            file.writeBytes(bytes)
+
+            val uri = FileProvider.getUriForFile(
+                this,
+                "$packageName.fileprovider",
+                file
+            )
+
+            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                type = ARMYRIST_MIME
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            startActivity(
+                Intent.createChooser(
+                    sendIntent,
+                    "Armyrist 데이터 공유"
+                )
+            )
+        }.onFailure {
+            Toast.makeText(
+                this,
+                "데이터 파일을 공유할 수 없습니다.",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
@@ -150,40 +296,87 @@ class PortableTransferActivity : ComponentActivity() {
                                 )
                             }
                             Spacer(Modifier.height(14.dp))
-                            ArmyristActionButton(
-                                text = "파일 생성",
-                                onClick = {
-                                    if (encrypt && (password.isBlank() || password != confirm)) {
+                            fun createPortableBytes(): ByteArray? {
+                                if (
+                                    encrypt &&
+                                    (
+                                        password.isBlank() ||
+                                            password != confirm
+                                    )
+                                ) {
+                                    Toast.makeText(
+                                        this@PortableTransferActivity,
+                                        "암호와 암호 확인을 동일하게 입력해주세요.",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    return null
+                                }
+
+                                return when (
+                                    val result =
+                                        ArmyristPortableDataManager
+                                            .createIndividualExport(
+                                                this@PortableTransferActivity,
+                                                type,
+                                                rootId,
+                                                if (encrypt) {
+                                                    password.toCharArray()
+                                                } else {
+                                                    null
+                                                }
+                                            )
+                                ) {
+                                    is PortableResult.Success ->
+                                        result.value
+
+                                    is PortableResult.Error -> {
                                         Toast.makeText(
                                             this@PortableTransferActivity,
-                                            "암호와 암호 확인을 동일하게 입력해주세요.",
+                                            result.message,
                                             Toast.LENGTH_SHORT
                                         ).show()
-                                    } else {
-                                        val result = ArmyristPortableDataManager.createIndividualExport(
-                                            this@PortableTransferActivity,
-                                            type,
-                                            rootId,
-                                            if (encrypt) password.toCharArray() else null
-                                        )
-                                        when (result) {
-                                            is PortableResult.Success -> {
-                                                pendingBytes = result.value
-                                                createFile.launch(
-                                                    "${safeTypeName(type)}-${System.currentTimeMillis()}.armyrist"
-                                                )
-                                            }
-                                            is PortableResult.Error -> Toast.makeText(
-                                                this@PortableTransferActivity,
-                                                result.message,
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
+                                        null
                                     }
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                primary = true
-                            )
+                                }
+                            }
+
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement =
+                                    Arrangement.spacedBy(8.dp)
+                            ) {
+                                ArmyristActionButton(
+                                    text = "파일 저장",
+                                    onClick = {
+                                        val bytes =
+                                            createPortableBytes()
+                                                ?: return@ArmyristActionButton
+                                        pendingBytes = bytes
+                                        createFile.launch(
+                                            "${safeTypeName(type)}-" +
+                                                "${System.currentTimeMillis()}.armyrist"
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                ArmyristActionButton(
+                                    text = "공유",
+                                    onClick = {
+                                        val bytes =
+                                            createPortableBytes()
+                                                ?: return@ArmyristActionButton
+                                        shareArmyristFile(
+                                            bytes = bytes,
+                                            filename =
+                                                "${safeTypeName(type)}-" +
+                                                    "${System.currentTimeMillis()}.armyrist"
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    primary = true
+                                )
+                            }
                         }
                     }
                 }

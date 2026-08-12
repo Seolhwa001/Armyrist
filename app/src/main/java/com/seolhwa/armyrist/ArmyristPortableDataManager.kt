@@ -325,8 +325,9 @@ object ArmyristPortableDataManager {
                         core.optJSONArray("checklists")
                             ?.length() ?: 0,
                     timePlans =
-                        core.optJSONArray("timePlans")
-                            ?.length() ?: 0,
+                        validatedRestorableTimePlanCount(
+                            timePlanV2Snapshot
+                        ),
                     reportTemplates =
                         core.optJSONArray("reportTemplates")
                             ?.length() ?: 0,
@@ -1226,6 +1227,13 @@ object ArmyristPortableDataManager {
 
     private class UnsupportedTimePlanSchemaException :
         IllegalArgumentException()
+
+    internal fun validatedRestorableTimePlanCount(
+        root: JSONObject
+    ): Int {
+        validateTimePlanV2Snapshot(root)
+        return root.optJSONArray("plans")?.length() ?: 0
+    }
 
     private fun validateTimePlanV2Snapshot(root: JSONObject) {
         require(root.getInt("schemaVersion") == 2)
