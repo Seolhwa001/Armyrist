@@ -546,8 +546,6 @@ private fun CountingScreen(
                         text = "메모",
                         onClick = { memoEdit = true }
                     )
-                        }
-                    )
                 }
             } else {
                 val targetGroup = sheet.groups.firstOrNull { it.id == assignmentGroupId }

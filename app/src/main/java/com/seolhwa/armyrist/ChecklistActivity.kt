@@ -660,8 +660,6 @@ private fun ChecklistDetailScreen(
                     )
                     ChecklistUtilityButton(text = "메모", onClick = { memoEdit = true })
                     ChecklistUtilityButton(text = "초기화", onClick = { resetConfirm = true })
-                        }
-                    )
                 }
 
                 Row(

@@ -721,10 +721,6 @@ private fun TimePlanDetailScreen(
                 }
 
             }
-                        )
-                    }
-                )
-            }
 
             TimePlanStatusCard(plan)
 
