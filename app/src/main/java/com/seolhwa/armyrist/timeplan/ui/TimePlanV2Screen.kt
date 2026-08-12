@@ -131,54 +131,23 @@ private fun TimePlanV2Detail(
     fun linkFor(from: String, to: String): TimeLink? =
         plan.links.firstOrNull { it.fromNodeId == from && it.toNodeId == to }
 
-    fun rebuildLinks(changed: RevisedTimePlan): RevisedTimePlan {
-        val ids = buildList {
-            add(TimePlanConflictEngine.START_ID)
-            addAll(changed.midwayEvents.sortedBy { it.order }.map { it.id })
-            changed.finalPoint?.let { add(it.id) }
-            add(TimePlanConflictEngine.END_ID)
-        }
-        val old = changed.links.associateBy { it.fromNodeId to it.toNodeId }
-        return changed.copy(
-            links = ids.zipWithNext().map { (a, b) ->
-                old[a to b] ?: TimeLink(a, b)
-            }
-        )
-    }
+    fun rebuildLinks(changed: RevisedTimePlan): RevisedTimePlan =
+        TimePlanCandidateEngine.normalizeTopology(changed)
 
     Scaffold(topBar = {
-        ArmyristTopBar(plan.title, "TIME PLAN · V2 · AUTO SAVE", "목록", onBack)
+        TimePlanDetailHeader(
+            title = plan.title,
+            onBack = onBack,
+            onTitle = { titleEdit = true },
+            resultEnabled = false,
+            onResult = { }
+        )
     }) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(10.dp, 8.dp, 10.dp, 28.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp)
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            item {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Surface(
-                        modifier = Modifier.weight(1f).clickable { titleEdit = true },
-                        shape = ArmyristPanelShape,
-                        color = ArmyristColors.WorkSurface,
-                        border = BorderStroke(1.dp, ArmyristColors.Border)
-                    ) {
-                        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                            Text("계획", style = MaterialTheme.typography.labelSmall, color = ArmyristColors.SecondaryText)
-                            Text(plan.title, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    OutlinedButton(
-                        onClick = { /* Common Result pipeline is wired in the dedicated Result step. */ },
-                        enabled = false,
-                        shape = ArmyristPanelShape
-                    ) { Text("결과 전달") }
-                }
-            }
-
             item {
                 PointCard(
                     label = "시작",
@@ -413,6 +382,60 @@ private fun TimePlanV2Detail(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TimePlanDetailHeader(
+    title: String,
+    onBack: () -> Unit,
+    onTitle: () -> Unit,
+    resultEnabled: Boolean,
+    onResult: () -> Unit
+) {
+    TopAppBar(
+        navigationIcon = {
+            OutlinedButton(
+                onClick = onBack,
+                shape = ArmyristPanelShape,
+                border = BorderStroke(1.dp, ArmyristColors.OnDark.copy(alpha = 0.65f)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = ArmyristColors.OnDark),
+                contentPadding = PaddingValues(horizontal = 10.dp)
+            ) { Text("목록") }
+        },
+        title = {
+            Column(
+                modifier = Modifier.clickable(onClick = onTitle).padding(horizontal = 4.dp)
+            ) {
+                Text(title, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text(
+                    "TIME PLAN · V2 · AUTO SAVE",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ArmyristColors.OnDark.copy(alpha = 0.78f),
+                    maxLines = 1
+                )
+            }
+        },
+        actions = {
+            OutlinedButton(
+                onClick = onResult,
+                enabled = resultEnabled,
+                shape = ArmyristPanelShape,
+                border = BorderStroke(1.dp, ArmyristColors.OnDark.copy(alpha = if (resultEnabled) 0.65f else 0.30f)),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = ArmyristColors.OnDark,
+                    disabledContentColor = ArmyristColors.OnDark.copy(alpha = 0.38f)
+                ),
+                contentPadding = PaddingValues(horizontal = 10.dp)
+            ) { Text("결과 전달") }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = ArmyristColors.Header,
+            titleContentColor = ArmyristColors.OnDark,
+            navigationIconContentColor = ArmyristColors.OnDark,
+            actionIconContentColor = ArmyristColors.OnDark
+        )
+    )
+}
+
 @Composable
 private fun PointCard(
     label: String,
@@ -424,11 +447,11 @@ private fun PointCard(
     Surface(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = ArmyristPanelShape,
-        color = if (emphasized) ArmyristColors.RaisedSurface else ArmyristColors.WorkSurface,
-        border = BorderStroke(1.dp, ArmyristColors.Border)
+        color = if (emphasized) ArmyristColors.PrimaryControl.copy(alpha = 0.08f) else ArmyristColors.WorkSurface,
+        border = BorderStroke(if (emphasized) 2.dp else 1.dp, ArmyristColors.PrimaryControl)
     ) {
         Row(
-            Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(Modifier.width(82.dp)) {
@@ -507,7 +530,7 @@ private fun ElapsedConnector(link: TimeLink?, onClick: () -> Unit) {
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("│", color = ArmyristColors.Border, modifier = Modifier.height(10.dp))
+        Text("│", color = ArmyristColors.Border, modifier = Modifier.height(6.dp))
         OutlinedButton(
             onClick = onClick,
             shape = ArmyristPanelShape,
@@ -522,7 +545,7 @@ private fun ElapsedConnector(link: TimeLink?, onClick: () -> Unit) {
                 fontWeight = FontWeight.Bold
             )
         }
-        Text("│", color = ArmyristColors.Border, modifier = Modifier.height(10.dp))
+        Text("│", color = ArmyristColors.Border, modifier = Modifier.height(6.dp))
     }
 }
 
