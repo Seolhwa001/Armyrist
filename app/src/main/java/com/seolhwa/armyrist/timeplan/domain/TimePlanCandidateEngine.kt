@@ -171,12 +171,15 @@ object TimePlanCandidateEngine {
         val oldEvent = existing.orderedEvents().firstOrNull { it.id == eventId }
             ?: return create(existing, EditIntent.SetEventTime(eventId, proposedSpec))
 
-        val oldArrival = TimePlanCalculator.arrivalClock(oldEvent.timeSpec)?.time
+        val oldDeparture = TimePlanCalculator.departureClock(oldEvent.timeSpec)?.time
             ?: return create(existing, EditIntent.SetEventTime(eventId, proposedSpec))
-        val newArrival = TimePlanCalculator.arrivalClock(proposedSpec)?.time
+        val newDeparture = TimePlanCalculator.departureClock(proposedSpec)?.time
             ?: return create(existing, EditIntent.SetEventTime(eventId, proposedSpec))
 
-        val delta = newArrival.minuteOfDay - oldArrival.minuteOfDay
+        // Downstream starts after this event is finished.  For a Range edit,
+        // therefore, the correct propagation delta is based on DEPARTURE
+        // (range end), not ARRIVAL (range start).
+        val delta = signedClockDelta(oldDeparture, newDeparture)
         val edited = applyIntent(
             existing,
             EditIntent.SetEventTime(eventId, proposedSpec)
@@ -432,6 +435,18 @@ object TimePlanCandidateEngine {
             }
         }
         return result
+    }
+
+    private fun signedClockDelta(
+        before: ClockTime,
+        after: ClockTime
+    ): Int {
+        var delta = after.minuteOfDay - before.minuteOfDay
+        // Use the nearest signed interpretation. This keeps normal same-day
+        // edits intuitive while still supporting edits around midnight.
+        if (delta > MINUTES_PER_DAY / 2) delta -= MINUTES_PER_DAY
+        if (delta < -MINUTES_PER_DAY / 2) delta += MINUTES_PER_DAY
+        return delta
     }
 
     private fun ClockValue.asExplicit(): ClockValue =
