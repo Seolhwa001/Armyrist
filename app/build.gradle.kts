@@ -12,8 +12,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 15
-        versionName = "0.3.15-pre-timeplan-cleanup"
+        versionCode = 16
+        versionName = "0.3.16-step0-buildfix"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
