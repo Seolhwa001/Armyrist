@@ -117,6 +117,8 @@ private fun TimePlanV2Detail(
     var memoEdit by remember { mutableStateOf(false) }
     var editingEvent by remember { mutableStateOf<TimeEvent?>(null) }
     var editingLink by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var editingStart by remember { mutableStateOf(false) }
+    var editingEnd by remember { mutableStateOf(false) }
 
     val ordered = plan.midwayEvents.sortedBy { it.order }
     val nodes = buildList {
@@ -182,11 +184,9 @@ private fun TimePlanV2Detail(
                     label = "시작",
                     timeText = clockText(plan.start.value),
                     emphasized = true,
-                    onClick = { }
+                    onClick = { editingStart = true }
                 ) {
-                    AnchorTimeEditor(plan.start.value) {
-                        onCommit(plan.copy(start = TimeAnchor(ClockValue.explicit(it))))
-                    }
+                    Text("편집", style = MaterialTheme.typography.labelMedium, color = ArmyristColors.PrimaryControl)
                 }
             }
 
@@ -208,11 +208,9 @@ private fun TimePlanV2Detail(
                                 label = "종료",
                                 timeText = clockText(plan.end.value),
                                 emphasized = true,
-                                onClick = { }
+                                onClick = { editingEnd = true }
                             ) {
-                                AnchorTimeEditor(plan.end.value) {
-                                    onCommit(plan.copy(end = TimeAnchor(ClockValue.explicit(it))))
-                                }
+                                Text("편집", style = MaterialTheme.typography.labelMedium, color = ArmyristColors.PrimaryControl)
                             }
                         }
                     }
@@ -313,6 +311,36 @@ private fun TimePlanV2Detail(
         }
     }
 
+    if (editingStart) {
+        Armyrist24HourTimeDialog(
+            initial = plan.start.value.time,
+            onDismiss = { editingStart = false },
+            onConfirm = { clock ->
+                val candidate = TimePlanCandidateEngine.create(
+                    plan,
+                    TimePlanCandidateEngine.EditIntent.SetStart(ClockValue.explicit(clock))
+                )
+                if (candidate.conflicts.isEmpty()) onCommit(candidate.proposed)
+                editingStart = false
+            }
+        )
+    }
+
+    if (editingEnd) {
+        Armyrist24HourTimeDialog(
+            initial = plan.end.value.time,
+            onDismiss = { editingEnd = false },
+            onConfirm = { clock ->
+                val candidate = TimePlanCandidateEngine.create(
+                    plan,
+                    TimePlanCandidateEngine.EditIntent.SetEnd(ClockValue.explicit(clock))
+                )
+                if (candidate.conflicts.isEmpty()) onCommit(candidate.proposed)
+                editingEnd = false
+            }
+        )
+    }
+
     if (titleEdit) {
         TextEditDialog(
             title = "제목 수정",
@@ -355,7 +383,11 @@ private fun TimePlanV2Detail(
                 val next =
                     if (changed.kind == TimeEventKind.FINAL) plan.copy(finalPoint = changed)
                     else plan.copy(midwayEvents = plan.midwayEvents.map { if (it.id == changed.id) changed else it })
-                onCommit(next)
+                val candidate = TimePlanCandidateEngine.create(
+                    next,
+                    TimePlanCandidateEngine.EditIntent.SetEventTime(changed.id, changed.timeSpec)
+                )
+                if (candidate.conflicts.isEmpty()) onCommit(candidate.proposed)
                 editingEvent = null
             }
         )
@@ -366,17 +398,15 @@ private fun TimePlanV2Detail(
             initial = linkFor(from, to)?.duration?.minutes,
             onDismiss = { editingLink = null },
             onConfirm = { minutes ->
-                val replacement = TimeLink(
-                    fromNodeId = from,
-                    toNodeId = to,
-                    duration = minutes?.let(TimeDuration::requireMinutes),
-                    origin = if (minutes == null) ValueOrigin.UNSET else ValueOrigin.EXPLICIT
-                )
-                onCommit(
-                    plan.copy(
-                        links = plan.links.filterNot { it.fromNodeId == from && it.toNodeId == to } + replacement
+                val candidate = TimePlanCandidateEngine.create(
+                    plan,
+                    TimePlanCandidateEngine.EditIntent.SetLinkDuration(
+                        fromNodeId = from,
+                        toNodeId = to,
+                        duration = minutes?.let(TimeDuration::requireMinutes)
                     )
                 )
+                if (candidate.conflicts.isEmpty()) onCommit(candidate.proposed)
                 editingLink = null
             }
         )
@@ -392,7 +422,7 @@ private fun PointCard(
     editor: @Composable () -> Unit
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = ArmyristPanelShape,
         color = if (emphasized) ArmyristColors.RaisedSurface else ArmyristColors.WorkSurface,
         border = BorderStroke(1.dp, ArmyristColors.Border)
@@ -477,7 +507,7 @@ private fun ElapsedConnector(link: TimeLink?, onClick: () -> Unit) {
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("│", color = ArmyristColors.Border, modifier = Modifier.height(16.dp))
+        Text("│", color = ArmyristColors.Border, modifier = Modifier.height(10.dp))
         OutlinedButton(
             onClick = onClick,
             shape = ArmyristPanelShape,
@@ -492,7 +522,7 @@ private fun ElapsedConnector(link: TimeLink?, onClick: () -> Unit) {
                 fontWeight = FontWeight.Bold
             )
         }
-        Text("│", color = ArmyristColors.Border, modifier = Modifier.height(16.dp))
+        Text("│", color = ArmyristColors.Border, modifier = Modifier.height(10.dp))
     }
 }
 
