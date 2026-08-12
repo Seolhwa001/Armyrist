@@ -18,7 +18,8 @@ object TimePlanCandidateEngine {
         data class SetLinkDuration(
             val fromNodeId: String,
             val toNodeId: String,
-            val duration: TimeDuration?
+            val duration: TimeDuration?,
+            val label: String? = null
         ) : EditIntent
     }
 
@@ -261,14 +262,24 @@ object TimePlanCandidateEngine {
                 toNodeId = intent.toNodeId,
                 duration = duration,
                 origin = if (duration == null) ValueOrigin.UNSET
-                else ValueOrigin.EXPLICIT
+                else ValueOrigin.EXPLICIT,
+                label = intent.label?.trim()?.ifEmpty { null }
             )
+            val hasExisting = plan.links.any {
+                it.fromNodeId == intent.fromNodeId &&
+                    it.toNodeId == intent.toNodeId
+            }
             plan.copy(
-                links = plan.links
-                    .filterNot {
-                        it.fromNodeId == intent.fromNodeId &&
-                            it.toNodeId == intent.toNodeId
-                    } + replacement
+                links = if (hasExisting) {
+                    plan.links.map { link ->
+                        if (
+                            link.fromNodeId == intent.fromNodeId &&
+                            link.toNodeId == intent.toNodeId
+                        ) replacement else link
+                    }
+                } else {
+                    plan.links + replacement
+                }
             )
         }
     }
