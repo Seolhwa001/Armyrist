@@ -54,7 +54,7 @@ class TimePlanCandidateEngineTest {
         assertEquals(ValueOrigin.DERIVED,candidate.proposed.links[0].origin)
     }
 
-    @Test fun explicitDurationDoesNotMoveExplicitClock() {
+    @Test fun explicitDurationShiftsAllDownstreamClocksByDelta() {
         val existing=base()
         val candidate=TimePlanCandidateEngine.create(
             existing,
@@ -63,12 +63,39 @@ class TimePlanCandidateEngineTest {
                 TimeDuration.requireMinutes(50)
             )
         )
-        val time=(candidate.proposed.midwayEvents.first().timeSpec as EventTimeSpec.Single).value
-        assertEquals(c(9,40),time.time)
-        assertEquals(ValueOrigin.EXPLICIT,time.origin)
-        assertTrue(candidate.conflicts.any {
-            it.type == TimePlanCandidateEngine.ConflictType.EXPLICIT_DURATION_CLOCK_MISMATCH
-        })
+        val midway=(candidate.proposed.midwayEvents.first().timeSpec as EventTimeSpec.Single).value
+        assertEquals(c(9,50),midway.time)
+        assertEquals(ValueOrigin.DERIVED,midway.origin)
+        assertEquals(c(11,10),candidate.proposed.end.value.time)
+        assertEquals(ValueOrigin.DERIVED,candidate.proposed.end.value.origin)
+        assertEquals(50,candidate.proposed.links[0].duration?.minutes)
+        assertEquals(80,candidate.proposed.links[1].duration?.minutes)
+        assertTrue(candidate.conflicts.isEmpty())
+    }
+
+    @Test fun laterMidwayThanSameDayEndRequiresConfirmation() {
+        assertTrue(
+            TimePlanCandidateEngine.requiresEndBoundaryConfirmation(
+                existing=base(),
+                eventId="m",
+                proposedSpec=EventTimeSpec.Single(ClockValue.explicit(c(22,0)))
+            )
+        )
+    }
+
+    @Test fun confirmedEventEditShiftsDownstreamBySameDelta() {
+        val candidate=TimePlanCandidateEngine.createEventTimeWithDownstreamShift(
+            existing=base(),
+            eventId="m",
+            proposedSpec=EventTimeSpec.Single(ClockValue.explicit(c(10,0)))
+        )
+        val midway=(candidate.proposed.midwayEvents.first().timeSpec as EventTimeSpec.Single).value
+        assertEquals(c(10,0),midway.time)
+        assertEquals(ValueOrigin.EXPLICIT,midway.origin)
+        assertEquals(c(11,20),candidate.proposed.end.value.time)
+        assertEquals(60,candidate.proposed.links[0].duration?.minutes)
+        assertEquals(80,candidate.proposed.links[1].duration?.minutes)
+        assertTrue(candidate.conflicts.isEmpty())
     }
 
     @Test fun cancelCanDiscardCandidateBecauseExistingIsRetained() {
