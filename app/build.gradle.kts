@@ -12,8 +12,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 28
-        versionName = "0.3.28-range-wheel-fix"
+        versionCode = 29
+        versionName = "0.3.29-range-overlap-guard"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
