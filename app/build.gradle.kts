@@ -4,6 +4,17 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val signingStoreFile = System.getenv("ARMYRIST_SIGNING_STORE_FILE")
+val signingStorePassword = System.getenv("ARMYRIST_SIGNING_STORE_PASSWORD")
+val signingKeyAlias = System.getenv("ARMYRIST_SIGNING_KEY_ALIAS")
+val signingKeyPassword = System.getenv("ARMYRIST_SIGNING_KEY_PASSWORD")
+
+val stableSigningAvailable =
+    !signingStoreFile.isNullOrBlank() &&
+        !signingStorePassword.isNullOrBlank() &&
+        !signingKeyAlias.isNullOrBlank() &&
+        !signingKeyPassword.isNullOrBlank()
+
 android {
     namespace = "com.seolhwa.armyrist"
     compileSdk = 36
@@ -12,10 +23,21 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 31
-        versionName = "0.3.31-inspection-rework1"
+        versionCode = 32
+        versionName = "0.3.32-stable-signing"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        if (stableSigningAvailable) {
+            create("stableRelease") {
+                storeFile = file(signingStoreFile!!)
+                storePassword = signingStorePassword
+                keyAlias = signingKeyAlias
+                keyPassword = signingKeyPassword
+            }
+        }
     }
 
     buildTypes {
@@ -25,6 +47,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+
+            signingConfigs.findByName("stableRelease")?.let {
+                signingConfig = it
+            }
         }
     }
 
