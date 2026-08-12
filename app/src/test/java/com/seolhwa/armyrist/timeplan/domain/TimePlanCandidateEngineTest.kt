@@ -159,6 +159,51 @@ class TimePlanCandidateEngineTest {
         assertEquals(c(10,0),spec.end.time)
     }
 
+
+    @Test fun fullEventEditPersistsNameAndNote() {
+        val existing = base()
+        val old = existing.midwayEvents.first()
+        val changed = old.copy(
+            name = "새 지점명",
+            note = "새 비고",
+            timeSpec = EventTimeSpec.Single(ClockValue.explicit(c(10,0)))
+        )
+
+        val candidate = TimePlanCandidateEngine.createEventEdit(
+            existing = existing,
+            changedEvent = changed
+        )
+
+        val saved = candidate.proposed.midwayEvents.first()
+        assertEquals("새 지점명", saved.name)
+        assertEquals("새 비고", saved.note)
+        assertEquals(
+            c(10,0),
+            (saved.timeSpec as EventTimeSpec.Single).value.time
+        )
+    }
+
+    @Test fun fullEventEditWithDownstreamShiftAlsoPersistsMetadata() {
+        val existing = base()
+        val old = existing.midwayEvents.first()
+        val changed = old.copy(
+            name = "이동 완료",
+            note = "장비 확인",
+            timeSpec = EventTimeSpec.Single(ClockValue.explicit(c(10,0)))
+        )
+
+        val candidate = TimePlanCandidateEngine.createEventEditWithDownstreamShift(
+            existing = existing,
+            changedEvent = changed
+        )
+
+        val saved = candidate.proposed.midwayEvents.first()
+        assertEquals("이동 완료", saved.name)
+        assertEquals("장비 확인", saved.note)
+        assertEquals(c(10,0), (saved.timeSpec as EventTimeSpec.Single).value.time)
+        assertEquals(c(11,20), candidate.proposed.end.value.time)
+    }
+
     @Test fun cancelCanDiscardCandidateBecauseExistingIsRetained() {
         val existing=base()
         val candidate=TimePlanCandidateEngine.create(
