@@ -1,7 +1,6 @@
 package com.seolhwa.armyrist.timeplan.domain
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -62,15 +61,21 @@ class TimePlanNo011Test {
         assertEquals(old.timeSpec, converted.timeSpec)
     }
 
-    @Test fun newFinalStartsUnspecifiedAndTopologyExists() {
+    @Test fun newFinalInheritsCurrentEndTimeAndTopologyExists() {
         val old = finalPoint(h = 12, m = 0)
         val result = TimePlanCandidateEngine.appendFinalPoint(base(old), "new-final")
-        assertEquals(EventTimeSpec.Unspecified, result.finalPoint?.timeSpec)
+
+        val newFinalSpec = result.finalPoint?.timeSpec as EventTimeSpec.Single
+        assertEquals(t(16, 0), newFinalSpec.value.time)
+        assertEquals(ValueOrigin.DERIVED, newFinalSpec.value.origin)
+
         assertEquals(3, result.links.size)
+
         val toNewFinal = result.links.first { it.toNodeId == "new-final" }
         val fromNewFinal = result.links.first { it.fromNodeId == "new-final" }
-        assertNull(toNewFinal.duration)
-        assertNull(fromNewFinal.duration)
+
+        assertEquals(240, toNewFinal.duration?.minutes)
+        assertEquals(0, fromNewFinal.duration?.minutes)
     }
 
     @Test fun repeatedAddsKeepOnlyOneFinal() {
@@ -83,52 +88,4 @@ class TimePlanNo011Test {
         assertEquals("final-4", p.finalPoint?.id)
         assertTrue(p.midwayEvents.all { it.kind == TimeEventKind.MIDWAY })
     }
-
-    @Test
-    fun newFinalInheritsFinalEndClockAsDerived() {
-        val previousFinal = TimeEvent(
-            id = "old-final",
-            kind = TimeEventKind.FINAL,
-            order = 0,
-            name = "종료지점",
-            timeSpec = EventTimeSpec.Single(
-                ClockValue.explicit(ClockTime.requireMinuteOfDay(22 * 60))
-            )
-        )
-        val plan = RevisedTimePlan(
-            id = "p",
-            title = "x",
-            start = TimeAnchor(
-                ClockValue.explicit(ClockTime.requireMinuteOfDay(20 * 60))
-            ),
-            finalPoint = previousFinal,
-            end = TimeAnchor(
-                ClockValue.explicit(ClockTime.requireMinuteOfDay(0))
-            ),
-            createdAt = "0",
-            updatedAt = "0"
-        )
-
-        val result = TimePlanCandidateEngine.appendFinalPoint(
-            plan = plan,
-            newFinalId = "new-final"
-        )
-
-        val converted = result.midwayEvents.single()
-        val newFinal = requireNotNull(result.finalPoint)
-
-        assertEquals(
-            ClockTime.requireMinuteOfDay(22 * 60),
-            (converted.timeSpec as EventTimeSpec.Single).value.time
-        )
-        assertEquals(
-            ClockTime.requireMinuteOfDay(0),
-            (newFinal.timeSpec as EventTimeSpec.Single).value.time
-        )
-        assertEquals(
-            ValueOrigin.DERIVED,
-            (newFinal.timeSpec as EventTimeSpec.Single).value.origin
-        )
-    }
-
 }
