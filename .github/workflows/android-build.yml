@@ -70,9 +70,106 @@ jobs:
       - name: Build debug APK
         run: ./gradlew assembleDebug --stacktrace
 
-      - name: Upload APK
+      - name: Validate stable signing secrets
+        shell: bash
+        env:
+          SIGNING_KEYSTORE_B64: ${{ secrets.ARMYRIST_SIGNING_KEYSTORE_B64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.ARMYRIST_SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.ARMYRIST_SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.ARMYRIST_SIGNING_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$SIGNING_KEYSTORE_B64" ] || \
+             [ -z "$SIGNING_STORE_PASSWORD" ] || \
+             [ -z "$SIGNING_KEY_ALIAS" ] || \
+             [ -z "$SIGNING_KEY_PASSWORD" ]; then
+            echo "Stable signing secrets are not fully configured."
+            exit 1
+          fi
+
+          echo "Stable signing secrets are configured."
+
+      - name: Restore stable signing keystore
+        shell: bash
+        env:
+          SIGNING_KEYSTORE_B64: ${{ secrets.ARMYRIST_SIGNING_KEYSTORE_B64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.ARMYRIST_SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.ARMYRIST_SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.ARMYRIST_SIGNING_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          KEYSTORE_PATH="$RUNNER_TEMP/armyrist-stable-release.jks"
+
+          printf '%s' "$SIGNING_KEYSTORE_B64" | base64 --decode > "$KEYSTORE_PATH"
+          chmod 600 "$KEYSTORE_PATH"
+
+          echo "ARMYRIST_SIGNING_STORE_FILE=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+          echo "ARMYRIST_SIGNING_STORE_PASSWORD=$SIGNING_STORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "ARMYRIST_SIGNING_KEY_ALIAS=$SIGNING_KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "ARMYRIST_SIGNING_KEY_PASSWORD=$SIGNING_KEY_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Build stable distribution APK
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Verify distribution APK signature
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APK="app/build/outputs/apk/release/app-release.apk"
+          APKSIGNER="$SDK_ROOT/build-tools/36.0.0/apksigner"
+
+          test -f "$APK"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+
+          CERT_SHA256="$("$APKSIGNER" verify --print-certs "$APK" \
+            | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
+            | head -1)"
+
+          if [ -z "$CERT_SHA256" ]; then
+            echo "Unable to determine APK signing certificate fingerprint."
+            exit 1
+          fi
+
+          echo "Distribution certificate SHA-256: $CERT_SHA256"
+          printf 'SHA-256=%s\n' "$CERT_SHA256" \
+            > "$RUNNER_TEMP/armyrist-signing-certificate.txt"
+
+      - name: Prepare distribution artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p "$RUNNER_TEMP/armyrist-distribution"
+          cp \
+            app/build/outputs/apk/release/app-release.apk \
+            "$RUNNER_TEMP/armyrist-distribution/Armyrist-0.3.32-stable-signing.apk"
+
+      - name: Upload debug/test APK
         uses: actions/upload-artifact@v4
         with:
-          name: Armyrist-debug-apk
+          name: Armyrist-debug-test-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Upload stable distribution APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Armyrist-0.3.32-stable-distribution
+          path: ${{ runner.temp }}/armyrist-distribution/Armyrist-0.3.32-stable-signing.apk
+          if-no-files-found: error
+
+      - name: Upload signing certificate fingerprint
+        uses: actions/upload-artifact@v4
+        with:
+          name: Armyrist-signing-certificate
+          path: ${{ runner.temp }}/armyrist-signing-certificate.txt
+          if-no-files-found: error
+
+      - name: Remove temporary signing material
+        if: always()
+        shell: bash
+        run: |
+          rm -f "$RUNNER_TEMP/armyrist-stable-release.jks"
