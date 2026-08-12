@@ -57,7 +57,8 @@ object TimePlanCandidateEngine {
     ): Candidate {
         val edited = applyIntent(existing, intent)
         val propagated = when (intent) {
-            is EditIntent.SetLinkDuration -> propagateFromExplicitDuration(edited, intent)
+            is EditIntent.SetLinkDuration ->
+                shiftDownstreamForDurationChange(existing, edited, intent)
             else -> edited
         }
         val recalculated = recalculateLinksForIntent(propagated, intent)
@@ -121,6 +122,79 @@ object TimePlanCandidateEngine {
                 midwayEvents = newMidways,
                 finalPoint = newFinal
             )
+        )
+    }
+
+
+    /**
+     * True when a newly entered event clock would sit later than the current
+     * same-day END wall-clock.  The UI uses this as a confirmation boundary
+     * instead of silently reinterpreting END as next-day.
+     */
+    fun requiresEndBoundaryConfirmation(
+        existing: RevisedTimePlan,
+        eventId: String,
+        proposedSpec: EventTimeSpec
+    ): Boolean {
+        if (existing.orderedEvents().none { it.id == eventId }) return false
+
+        val endClock = existing.end.value.time ?: return false
+        val eventClock = TimePlanCalculator.arrivalClock(proposedSpec)?.time ?: return false
+
+        val resolved = TimePlanConflictEngine.resolveReferences(
+            TimePlanConflictEngine.nodeReferences(existing)
+        ) as? TimePlanCalculator.Calculation.Success ?: return false
+        val endAbsolute = resolved.value
+            .firstOrNull { it.nodeId == TimePlanConflictEngine.END_ID }
+            ?.arrival
+            ?: return false
+
+        // Existing overnight plans already have an explicit midnight context.
+        // Warn only when END currently belongs to the same day and the newly
+        // entered event wall-clock overtakes it.
+        return endAbsolute.dayOffset == 0 &&
+            eventClock.minuteOfDay > endClock.minuteOfDay
+    }
+
+    /**
+     * Applies an explicit event-clock edit and shifts every downstream clock by
+     * the same delta.  This is used only after the user confirms the boundary
+     * warning.  The edited event remains EXPLICIT; automatically moved clocks
+     * become DERIVED.
+     */
+    fun createEventTimeWithDownstreamShift(
+        existing: RevisedTimePlan,
+        eventId: String,
+        proposedSpec: EventTimeSpec
+    ): Candidate {
+        val oldEvent = existing.orderedEvents().firstOrNull { it.id == eventId }
+            ?: return create(existing, EditIntent.SetEventTime(eventId, proposedSpec))
+
+        val oldArrival = TimePlanCalculator.arrivalClock(oldEvent.timeSpec)?.time
+            ?: return create(existing, EditIntent.SetEventTime(eventId, proposedSpec))
+        val newArrival = TimePlanCalculator.arrivalClock(proposedSpec)?.time
+            ?: return create(existing, EditIntent.SetEventTime(eventId, proposedSpec))
+
+        val delta = newArrival.minuteOfDay - oldArrival.minuteOfDay
+        val edited = applyIntent(
+            existing,
+            EditIntent.SetEventTime(eventId, proposedSpec)
+        )
+        val shifted = shiftNodesAfter(
+            plan = edited,
+            anchorNodeId = eventId,
+            deltaMinutes = delta,
+            includeAnchor = false
+        )
+        val recalculated = recalculateLinksForIntent(
+            shifted,
+            EditIntent.SetEventTime(eventId, proposedSpec)
+        )
+        return Candidate(
+            existing = existing,
+            proposed = recalculated,
+            impacts = detectImpacts(existing, recalculated),
+            conflicts = TimePlanConflictEngine.detect(recalculated)
         )
     }
 
@@ -230,90 +304,86 @@ object TimePlanCandidateEngine {
     }
 
     /**
-     * An explicit duration edit may move only DERIVED/UNSET downstream clocks.
-     * Propagation stops at an EXPLICIT clock; conflict detection then reports
-     * any mismatch instead of silently overwriting user-entered clock values.
+     * A duration edit changes the relationship between two adjacent points.
+     * The target point and every later point move by the duration delta so the
+     * rest of the timeline keeps its relative spacing.
+     *
+     * This intentionally does NOT stop at EXPLICIT clocks.  EXPLICIT means
+     * "entered by the user", not "locked".  A future dedicated lock feature,
+     * if introduced, must use a separate state.
      */
-    private fun propagateFromExplicitDuration(
-        plan: RevisedTimePlan,
+    private fun shiftDownstreamForDurationChange(
+        existing: RevisedTimePlan,
+        edited: RevisedTimePlan,
         intent: EditIntent.SetLinkDuration
     ): RevisedTimePlan {
-        val duration = intent.duration ?: return plan
-        val refs = TimePlanConflictEngine.nodeReferences(plan)
-        val index = refs.indexOfFirst { it.nodeId == intent.fromNodeId }
-        if (index < 0 || index + 1 >= refs.size) return plan
+        val newDuration = intent.duration ?: return edited
+        val oldDuration = existing.links.firstOrNull {
+            it.fromNodeId == intent.fromNodeId &&
+                it.toNodeId == intent.toNodeId
+        }?.duration
 
-        fun departureAbsolute(nodeIndex: Int): TimePlanCalculator.AbsoluteClock? {
-            val clocks = refs.take(nodeIndex + 1).flatMap { ref ->
-                buildList {
-                    ref.arrival?.time?.let { add(it) }
-                    if (ref.departure?.time != ref.arrival?.time) ref.departure?.time?.let { add(it) }
-                }
-            }
-            val resolved = TimePlanCalculator.resolveOrderedClocks(clocks)
-                as? TimePlanCalculator.Calculation.Success ?: return null
-            return resolved.value.lastOrNull()
-        }
+        val delta = newDuration.minutes - (oldDuration?.minutes ?: 0)
+        if (delta == 0) return edited
 
-        var current = plan
-        var fromAbs = departureAbsolute(index) ?: return plan
-        var linkIndex = index
-
-        while (linkIndex < refs.lastIndex) {
-            val fromId = refs[linkIndex].nodeId
-            val toId = refs[linkIndex + 1].nodeId
-            val link = current.links.firstOrNull { it.fromNodeId == fromId && it.toNodeId == toId }
-                ?: break
-            val stepDuration = if (fromId == intent.fromNodeId && toId == intent.toNodeId) duration
-                else link.duration ?: break
-            val target = TimePlanCalculator.forward(fromAbs, stepDuration)
-                as? TimePlanCalculator.Calculation.Success ?: break
-
-            val toRef = TimePlanConflictEngine.nodeReferences(current)
-                .firstOrNull { it.nodeId == toId } ?: break
-            val arrival = toRef.arrival
-            if (arrival?.origin == ValueOrigin.EXPLICIT) break
-
-            val derived = ClockValue.derived(target.value.time)
-            current = setNodeArrival(current, toId, derived)
-
-            val updatedRef = TimePlanConflictEngine.nodeReferences(current)
-                .firstOrNull { it.nodeId == toId } ?: break
-            val departure = updatedRef.departure
-            if (departure?.time != null) {
-                val resolved = TimePlanCalculator.resolveOrderedClocks(
-                    listOf(target.value.time, departure.time)
-                ) as? TimePlanCalculator.Calculation.Success
-                fromAbs = resolved?.value?.lastOrNull() ?: target.value
-            } else {
-                fromAbs = target.value
-            }
-            linkIndex++
-        }
-        return current
+        return shiftNodesAfter(
+            plan = edited,
+            anchorNodeId = intent.toNodeId,
+            deltaMinutes = delta,
+            includeAnchor = true
+        )
     }
 
-    private fun setNodeArrival(
+    private fun shiftNodesAfter(
         plan: RevisedTimePlan,
-        nodeId: String,
-        value: ClockValue
+        anchorNodeId: String,
+        deltaMinutes: Int,
+        includeAnchor: Boolean
     ): RevisedTimePlan {
-        if (nodeId == TimePlanConflictEngine.END_ID) {
-            return if (plan.end.value.origin == ValueOrigin.EXPLICIT) plan
-            else plan.copy(end = TimeAnchor(value))
+        if (deltaMinutes == 0) return plan
+
+        val refs = TimePlanConflictEngine.nodeReferences(plan)
+        val anchorIndex = refs.indexOfFirst { it.nodeId == anchorNodeId }
+        if (anchorIndex < 0) return plan
+
+        val affectedIds = refs
+            .drop(if (includeAnchor) anchorIndex else anchorIndex + 1)
+            .map { it.nodeId }
+            .toSet()
+
+        fun shifted(value: ClockValue): ClockValue {
+            val time = value.time ?: return value
+            val raw = (time.minuteOfDay + deltaMinutes) % MINUTES_PER_DAY
+            val normalized = if (raw < 0) raw + MINUTES_PER_DAY else raw
+            return ClockValue.derived(ClockTime.requireMinuteOfDay(normalized))
         }
-        fun update(event: TimeEvent): TimeEvent = when (val spec = event.timeSpec) {
-            EventTimeSpec.Unspecified -> event.copy(timeSpec = EventTimeSpec.Single(value))
-            is EventTimeSpec.Single ->
-                if (spec.value.origin == ValueOrigin.EXPLICIT) event
-                else event.copy(timeSpec = spec.copy(value = value))
-            is EventTimeSpec.Range ->
-                if (spec.start.origin == ValueOrigin.EXPLICIT) event
-                else event.copy(timeSpec = spec.copy(start = value))
+
+        fun shiftedSpec(spec: EventTimeSpec): EventTimeSpec = when (spec) {
+            EventTimeSpec.Unspecified -> spec
+            is EventTimeSpec.Single -> spec.copy(value = shifted(spec.value))
+            is EventTimeSpec.Range -> spec.copy(
+                start = shifted(spec.start),
+                end = shifted(spec.end)
+            )
         }
+
+        val shiftedMidways = plan.midwayEvents.map { event ->
+            if (event.id in affectedIds) event.copy(timeSpec = shiftedSpec(event.timeSpec))
+            else event
+        }
+        val shiftedFinal = plan.finalPoint?.let { event ->
+            if (event.id in affectedIds) event.copy(timeSpec = shiftedSpec(event.timeSpec))
+            else event
+        }
+        val shiftedEnd =
+            if (TimePlanConflictEngine.END_ID in affectedIds) {
+                TimeAnchor(shifted(plan.end.value))
+            } else plan.end
+
         return plan.copy(
-            midwayEvents = plan.midwayEvents.map { if (it.id == nodeId) update(it) else it },
-            finalPoint = plan.finalPoint?.let { if (it.id == nodeId) update(it) else it }
+            midwayEvents = shiftedMidways,
+            finalPoint = shiftedFinal,
+            end = shiftedEnd
         )
     }
 
