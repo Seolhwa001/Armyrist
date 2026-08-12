@@ -707,8 +707,7 @@ private fun CountingScreen(
                             }
                             .pointerInput(
                                 item.id,
-                                assignmentMode,
-                                sheet.items.map { it.id }
+                                assignmentMode
                             ) {
                                 if (!assignmentMode) {
                                     detectDragGesturesAfterLongPress(
