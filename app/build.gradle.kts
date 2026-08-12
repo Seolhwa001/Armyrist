@@ -12,8 +12,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 26
-        versionName = "0.3.26-visual-timeline"
+        versionCode = 27
+        versionName = "0.3.27-event-metadata-fix"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
