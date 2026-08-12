@@ -108,17 +108,24 @@ private fun TimePlanV2Detail(
             verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
             item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     OutlinedButton(
                         onClick = { },
                         modifier = Modifier.weight(1f),
                         shape = ArmyristPanelShape
-                    ) { Text("제목 수정") }
+                    ) {
+                        Text("제목 수정")
+                    }
                     OutlinedButton(
                         onClick = { },
                         modifier = Modifier.weight(1f),
                         shape = ArmyristPanelShape
-                    ) { Text("결과 전달") }
+                    ) {
+                        Text("결과 전달")
+                    }
                 }
             }
 
@@ -153,7 +160,13 @@ private fun TimePlanV2Detail(
                     label = "시작지점",
                     clock = plan.start.value,
                     onClock = { clock ->
-                        onCommit(plan.copy(start = TimeAnchor(ClockValue.explicit(clock))))
+                        onCommit(
+                            plan.copy(
+                                start = TimeAnchor(
+                                    ClockValue.explicit(clock)
+                                )
+                            )
+                        )
                     }
                 )
             }
@@ -187,7 +200,13 @@ private fun TimePlanV2Detail(
                     label = "종료지점",
                     clock = plan.end.value,
                     onClock = { clock ->
-                        onCommit(plan.copy(end = TimeAnchor(ClockValue.explicit(clock))))
+                        onCommit(
+                            plan.copy(
+                                end = TimeAnchor(
+                                    ClockValue.explicit(clock)
+                                )
+                            )
+                        )
                     }
                 )
             }
@@ -221,6 +240,20 @@ private fun CompactSection(title: String, content: @Composable ColumnScope.() ->
             content()
         }
     }
+}
+
+@Composable
+private fun AnchorCard(
+    label: String,
+    clock: ClockValue,
+    onClock: (ClockTime) -> Unit
+) {
+    AnchorTile(
+        modifier = Modifier.fillMaxWidth(),
+        label = label,
+        clock = clock,
+        onClock = onClock
+    )
 }
 
 @Composable
