@@ -49,6 +49,18 @@ class TimePlanV2Repository(context: Context) {
     }
 
     @Synchronized
+    fun createPlan(title: String = "새 시간계획"): RevisedTimePlan? {
+        val now = System.currentTimeMillis().toString()
+        val plan = RevisedTimePlan(
+            id = java.util.UUID.randomUUID().toString(),
+            title = title,
+            createdAt = now,
+            updatedAt = now
+        )
+        return if (upsertMigrated(plan)) plan else null
+    }
+
+    @Synchronized
     fun commit(plan: RevisedTimePlan): Boolean =
         upsertMigrated(plan)
 
