@@ -12,8 +12,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 23
-        versionName = "0.3.23-duration-wheel-fix"
+        versionCode = 26
+        versionName = "0.3.26-visual-timeline"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
