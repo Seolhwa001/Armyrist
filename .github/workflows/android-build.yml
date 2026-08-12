@@ -1,4 +1,4 @@
-name: Android Build and Wrapper Bootstrap
+name: Android Build
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -22,10 +22,9 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Gradle 8.13
+      - name: Set up Gradle cache
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: "8.13"
           cache-provider: basic
           validate-wrappers: false
 
@@ -62,25 +61,8 @@ jobs:
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Generate official Gradle Wrapper
-        shell: bash
-        run: |
-          gradle wrapper --gradle-version 8.13 --distribution-type bin
-          chmod +x gradlew
-
-      - name: Commit generated Wrapper if missing or changed
-        shell: bash
-        run: |
-          if ! git diff --quiet -- gradlew gradlew.bat gradle/wrapper/gradle-wrapper.jar gradle/wrapper/gradle-wrapper.properties || \
-             ! git ls-files --error-unmatch gradle/wrapper/gradle-wrapper.jar >/dev/null 2>&1; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add gradlew gradlew.bat gradle/wrapper/gradle-wrapper.jar gradle/wrapper/gradle-wrapper.properties
-            git commit -m "build: generate Gradle 8.13 wrapper [skip ci]"
-            git push
-          else
-            echo "Gradle wrapper is already up to date."
-          fi
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
 
       - name: Run unit tests
         run: ./gradlew test --stacktrace
@@ -94,13 +76,3 @@ jobs:
           name: Armyrist-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-
-      - name: Upload Gradle Wrapper files
-        uses: actions/upload-artifact@v4
-        with:
-          name: Gradle-wrapper-8.13
-          path: |
-            gradlew
-            gradlew.bat
-            gradle/wrapper/gradle-wrapper.jar
-            gradle/wrapper/gradle-wrapper.properties
