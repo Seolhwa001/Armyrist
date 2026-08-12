@@ -12,8 +12,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 29
-        versionName = "0.3.29-range-overlap-guard"
+        versionCode = 30
+        versionName = "0.3.30-regression-hardening"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
