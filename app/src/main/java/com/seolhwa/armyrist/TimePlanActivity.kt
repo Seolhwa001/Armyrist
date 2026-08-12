@@ -11,8 +11,9 @@ import com.seolhwa.armyrist.timeplan.ui.TimePlanV2App
 class TimePlanActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val repository =
-            (application as ArmyristApplication).timePlanV2Repository
+        val app = application as ArmyristApplication
+        val repository = app.timePlanV2Repository
+        val coreRepository = app.coreSuiteRepository
 
         setContent {
             ArmyristTheme {
@@ -22,6 +23,7 @@ class TimePlanActivity : ComponentActivity() {
                 ) {
                     TimePlanV2App(
                         repository = repository,
+                        coreRepository = coreRepository,
                         onHome = { finish() }
                     )
                 }
