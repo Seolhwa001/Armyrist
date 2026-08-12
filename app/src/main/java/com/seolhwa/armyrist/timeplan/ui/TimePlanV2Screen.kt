@@ -1,6 +1,7 @@
 package com.seolhwa.armyrist.timeplan.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -147,6 +148,9 @@ private fun TimePlanV2Detail(
     var editingLink by remember { mutableStateOf<Pair<String, String>?>(null) }
     var pendingBoundaryEdit by remember {
         mutableStateOf<Pair<String, EventTimeSpec>?>(null)
+    }
+    var pendingEventConflict by remember {
+        mutableStateOf<Triple<String, EventTimeSpec, List<TimePlanCandidateEngine.Conflict>>?>(null)
     }
     var editingStart by remember { mutableStateOf(false) }
     var editingEnd by remember { mutableStateOf(false) }
@@ -445,6 +449,12 @@ private fun TimePlanV2Detail(
                     )
                     if (candidate.conflicts.isEmpty()) {
                         onCommit(candidate.proposed)
+                    } else {
+                        pendingEventConflict = Triple(
+                            changed.id,
+                            changed.timeSpec,
+                            candidate.conflicts
+                        )
                     }
                 }
                 editingEvent = null
@@ -470,6 +480,76 @@ private fun TimePlanV2Detail(
                 )
                 if (candidate.conflicts.isEmpty()) onCommit(candidate.proposed)
                 editingLink = null
+            }
+        )
+    }
+
+    pendingEventConflict?.let { (eventId, proposedSpec, conflicts) ->
+        val hasHardRangeError = conflicts.any {
+            it.type == TimePlanCandidateEngine.ConflictType.RANGE_ORDER_INVALID
+        }
+        AlertDialog(
+            onDismissRequest = { pendingEventConflict = null },
+            title = {
+                Text(
+                    if (hasHardRangeError) "시간 범위 확인"
+                    else "일정 충돌 확인"
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        if (hasHardRangeError) {
+                            "입력한 시간 범위의 시작·종료 순서를 확인해 주세요."
+                        } else {
+                            "입력한 시각 또는 시간 범위가 앞뒤 일정과 겹치거나 현재 시간관계와 충돌합니다."
+                        }
+                    )
+                    if (!hasHardRangeError) {
+                        Text(
+                            "입력값을 유지하면서 이 지점 이후의 일정을 함께 이동할 수 있습니다.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = ArmyristColors.SecondaryText
+                        )
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingEventConflict = null }) {
+                    Text("취소")
+                }
+            },
+            confirmButton = {
+                if (!hasHardRangeError) {
+                    Button(
+                        onClick = {
+                            val adjusted =
+                                TimePlanCandidateEngine.createEventTimeWithDownstreamShift(
+                                    existing = plan,
+                                    eventId = eventId,
+                                    proposedSpec = proposedSpec
+                                )
+                            if (adjusted.conflicts.isEmpty()) {
+                                onCommit(adjusted.proposed)
+                                pendingEventConflict = null
+                            } else {
+                                // Keep the dialog open and replace the conflict list.
+                                // The user is never returned to the timeline as if save succeeded.
+                                pendingEventConflict = Triple(
+                                    eventId,
+                                    proposedSpec,
+                                    adjusted.conflicts
+                                )
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ArmyristColors.PrimaryControl,
+                            contentColor = ArmyristColors.OnDark
+                        )
+                    ) {
+                        Text("이후 일정 조정")
+                    }
+                }
             }
         )
     }
@@ -506,6 +586,12 @@ private fun TimePlanV2Detail(
                             )
                         if (candidate.conflicts.isEmpty()) {
                             onCommit(candidate.proposed)
+                        } else {
+                            pendingEventConflict = Triple(
+                                eventId,
+                                proposedSpec,
+                                candidate.conflicts
+                            )
                         }
                         pendingBoundaryEdit = null
                     },
@@ -548,7 +634,9 @@ private fun PointCard(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
-            Box { editor() }
+            Box(Modifier.width(38.dp), contentAlignment = Alignment.Center) {
+                TimelinePointGlyph(isRange = false, emphasized = emphasized)
+            }
         }
     }
 }
@@ -603,42 +691,88 @@ private fun EventPointCard(label: String, event: TimeEvent, onClick: () -> Unit)
                     )
                 }
             }
-            Text("편집", style = MaterialTheme.typography.labelMedium, color = ArmyristColors.PrimaryControl)
+            Box(Modifier.width(38.dp), contentAlignment = Alignment.Center) {
+                TimelinePointGlyph(
+                    isRange = event.timeSpec is EventTimeSpec.Range,
+                    emphasized = event.kind == TimeEventKind.FINAL
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun TimelinePointGlyph(isRange: Boolean, emphasized: Boolean) {
+    val color = ArmyristColors.PrimaryControl
+    Canvas(Modifier.width(34.dp).height(if (isRange) 54.dp else 34.dp)) {
+        val x = size.width / 2f
+        val radius = if (emphasized) 6.dp.toPx() else 5.dp.toPx()
+        if (isRange) {
+            val topY = 10.dp.toPx()
+            val bottomY = size.height - 10.dp.toPx()
+            drawLine(
+                color = color,
+                start = androidx.compose.ui.geometry.Offset(x, topY + radius),
+                end = androidx.compose.ui.geometry.Offset(x, bottomY - radius),
+                strokeWidth = 2.dp.toPx()
+            )
+            drawCircle(color = color, radius = radius, center = androidx.compose.ui.geometry.Offset(x, topY))
+            drawCircle(color = color, radius = radius, center = androidx.compose.ui.geometry.Offset(x, bottomY))
+        } else {
+            drawCircle(color = color, radius = radius, center = center)
+        }
+    }
+}
+
+@Composable
+private fun TimelineConnectorGlyph() {
+    Canvas(Modifier.width(34.dp).height(42.dp)) {
+        val x = size.width / 2f
+        drawLine(
+            color = ArmyristColors.Border,
+            start = androidx.compose.ui.geometry.Offset(x, 0f),
+            end = androidx.compose.ui.geometry.Offset(x, size.height),
+            strokeWidth = 2.dp.toPx()
+        )
     }
 }
 
 @Composable
 private fun ElapsedConnector(link: TimeLink?, onClick: () -> Unit) {
     val minutes = link?.duration?.minutes
-    Box(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 1.dp),
-        contentAlignment = Alignment.Center
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        OutlinedButton(
-            onClick = onClick,
-            modifier = Modifier.heightIn(min = 40.dp),
-            shape = ArmyristPanelShape,
-            border = BorderStroke(1.dp, ArmyristColors.Border),
-            colors = ButtonDefaults.outlinedButtonColors(
-                containerColor = ArmyristColors.AppBackground,
-                contentColor = ArmyristColors.PrimaryControl
-            ),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp)
-        ) {
-            val displayLabel = link?.label?.takeIf { it.isNotBlank() } ?: "경과"
-            Text(
-                if (minutes == null) {
-                    if (displayLabel == "경과") "+ 경과시간 입력"
-                    else "$displayLabel · 경과시간 입력  ▼"
-                } else {
-                    "$displayLabel ${durationText(minutes)}  ▼"
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold
-            )
+        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            OutlinedButton(
+                onClick = onClick,
+                modifier = Modifier.heightIn(min = 40.dp),
+                shape = ArmyristPanelShape,
+                border = BorderStroke(1.dp, ArmyristColors.Border),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = ArmyristColors.AppBackground,
+                    contentColor = ArmyristColors.PrimaryControl
+                ),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp)
+            ) {
+                val displayLabel = link?.label?.takeIf { it.isNotBlank() } ?: "경과"
+                Text(
+                    if (minutes == null) {
+                        if (displayLabel == "경과") "+ 경과시간 입력"
+                        else "$displayLabel · 경과시간 입력  ▼"
+                    } else {
+                        "$displayLabel ${durationText(minutes)}  ▼"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+        Box(Modifier.width(38.dp), contentAlignment = Alignment.Center) {
+            TimelineConnectorGlyph()
         }
     }
 }
@@ -707,7 +841,21 @@ private fun EventEditDialog(
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("시간 범위 사용", modifier = Modifier.weight(1f))
-                    Switch(checked = range, onCheckedChange = { range = it })
+                    Switch(
+                        checked = range,
+                        onCheckedChange = { enabled ->
+                            if (enabled && !range) {
+                                val base = single.time
+                                if (rangeStart.time == null && base != null) {
+                                    rangeStart = ClockValue.explicit(base)
+                                }
+                                if (rangeEnd.time == null && base != null) {
+                                    rangeEnd = ClockValue.explicit(base)
+                                }
+                            }
+                            range = enabled
+                        }
+                    )
                 }
                 if (range) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -718,6 +866,11 @@ private fun EventEditDialog(
                             TimeEditButton("종료", rangeEnd) { rangeEnd = ClockValue.explicit(it) }
                         }
                     }
+                    Text(
+                        "범위 시작은 도착, 범위 종료는 다음 일정으로 출발하는 시각입니다.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ArmyristColors.SecondaryText
+                    )
                 } else {
                     TimeEditButton("시각", single) { single = ClockValue.explicit(it) }
                 }
@@ -1312,11 +1465,13 @@ private fun generateTimePlanResult(plan: RevisedTimePlan): ToolResult {
     }
 
     fun appendLink(fromId: String, toId: String) {
-        val duration = plan.links.firstOrNull {
+        val link = plan.links.firstOrNull {
             it.fromNodeId == fromId && it.toNodeId == toId
-        }?.duration
-        if (duration != null) {
-            lines += "- ${formatDuration(duration.minutes)}"
+        }
+        val duration = link?.duration
+        if (duration != null && duration.minutes > 0) {
+            val label = link.label?.trim()?.takeIf { it.isNotEmpty() } ?: "경과"
+            lines += "- $label ${formatDuration(duration.minutes)}"
         }
     }
 
