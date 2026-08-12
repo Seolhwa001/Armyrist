@@ -16,14 +16,32 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.seolhwa.armyrist.*
 import com.seolhwa.armyrist.timeplan.data.TimePlanV2Repository
+import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
+import com.seolhwa.armyrist.stage2.domain.ToolResult
 import com.seolhwa.armyrist.timeplan.domain.*
 import java.util.UUID
 
 @Composable
-fun TimePlanV2App(repository: TimePlanV2Repository, onHome: () -> Unit) {
+fun TimePlanV2App(
+    repository: TimePlanV2Repository,
+    coreRepository: CoreSuiteRepository,
+    onHome: () -> Unit
+) {
     var selectedId by remember { mutableStateOf<String?>(null) }
+    var sharingId by remember { mutableStateOf<String?>(null) }
     var revision by remember { mutableIntStateOf(0) }
     @Suppress("UNUSED_VARIABLE") val observed = revision
+
+    val sharing = sharingId?.let(repository::getPlan)
+    if (sharing != null) {
+        CommonShareScreen(
+            repo = coreRepository,
+            result = generateTimePlanResult(sharing),
+            onBack = { sharingId = null }
+        )
+        return
+    }
+
     val selected = selectedId?.let(repository::getPlan)
 
     if (selected == null) {
@@ -42,6 +60,7 @@ fun TimePlanV2App(repository: TimePlanV2Repository, onHome: () -> Unit) {
         TimePlanV2Detail(
             plan = selected,
             onBack = { selectedId = null },
+            onResult = { sharingId = selected.id },
             onCommit = {
                 if (repository.commit(it.copy(updatedAt = System.currentTimeMillis().toString()))) revision++
             }
@@ -111,6 +130,7 @@ private fun TimePlanV2List(
 private fun TimePlanV2Detail(
     plan: RevisedTimePlan,
     onBack: () -> Unit,
+    onResult: () -> Unit,
     onCommit: (RevisedTimePlan) -> Unit
 ) {
     var titleEdit by remember { mutableStateOf(false) }
@@ -139,8 +159,8 @@ private fun TimePlanV2Detail(
             title = plan.title,
             onBack = onBack,
             onTitle = { titleEdit = true },
-            resultEnabled = false,
-            onResult = { }
+            resultEnabled = true,
+            onResult = onResult
         )
     }) { padding ->
         LazyColumn(
@@ -234,16 +254,20 @@ private fun TimePlanV2Detail(
 
                     OutlinedButton(
                         onClick = {
-                            onCommit(
-                                TimePlanCandidateEngine.appendFinalPoint(
-                                    plan = plan,
-                                    newFinalId = UUID.randomUUID().toString()
+                            if (plan.finalPoint == null) {
+                                val event = TimeEvent(
+                                    id = UUID.randomUUID().toString(),
+                                    kind = TimeEventKind.FINAL,
+                                    order = plan.midwayEvents.size,
+                                    name = "종료지점"
                                 )
-                            )
+                                onCommit(rebuildLinks(plan.copy(finalPoint = event)))
+                            }
                         },
+                        enabled = plan.finalPoint == null,
                         modifier = Modifier.weight(1f),
                         shape = ArmyristPanelShape
-                    ) { Text("+ 종료지점") }
+                    ) { Text(if (plan.finalPoint == null) "+ 종료지점" else "종료지점 있음") }
                 }
             }
 
@@ -887,6 +911,94 @@ private fun Armyrist24HourTimeDialog(
             }
         }
     }
+}
+
+
+private fun generateTimePlanResult(plan: RevisedTimePlan): ToolResult {
+    val orderedEvents = buildList {
+        addAll(plan.midwayEvents.sortedBy { it.order })
+        plan.finalPoint?.let { add(it) }
+    }
+
+    val lines = mutableListOf<String>()
+
+    plan.start.value.time?.let {
+        lines += "${formatClock(it)} 시작"
+    } ?: run {
+        lines += "시작"
+    }
+
+    fun appendLink(fromId: String, toId: String) {
+        val duration = plan.links.firstOrNull {
+            it.fromNodeId == fromId && it.toNodeId == toId
+        }?.duration
+        if (duration != null) {
+            lines += "- ${formatDuration(duration.minutes)}"
+        }
+    }
+
+    var previousId = TimePlanConflictEngine.START_ID
+
+    orderedEvents.forEach { event ->
+        appendLink(previousId, event.id)
+
+        val time = formatEventTimeForResult(event.timeSpec)
+        val heading = listOf(time, event.name)
+            .filter { it.isNotBlank() }
+            .joinToString(" ")
+
+        if (heading.isNotBlank()) {
+            lines += heading
+        }
+        event.note?.takeIf { it.isNotBlank() }?.let {
+            lines += it
+        }
+        previousId = event.id
+    }
+
+    appendLink(previousId, TimePlanConflictEngine.END_ID)
+
+    plan.end.value.time?.let {
+        lines += "${formatClock(it)} 종료"
+    } ?: run {
+        lines += "종료"
+    }
+
+    plan.memo?.takeIf { it.isNotBlank() }?.let {
+        lines += ""
+        lines += "[메모]"
+        lines += it
+    }
+
+    return ToolResult(
+        title = plan.title,
+        body = lines.joinToString("\n")
+    )
+}
+
+private fun formatEventTimeForResult(spec: EventTimeSpec): String = when (spec) {
+    EventTimeSpec.Unspecified -> ""
+    is EventTimeSpec.Single ->
+        spec.value.time?.let(::formatClock).orEmpty()
+    is EventTimeSpec.Range -> {
+        val start = spec.start.time?.let(::formatClock)
+        val end = spec.end.time?.let(::formatClock)
+        when {
+            start != null && end != null -> "$start ~ $end"
+            start != null -> start
+            end != null -> end
+            else -> ""
+        }
+    }
+}
+
+private fun formatClock(clock: ClockTime): String =
+    "%02d%02d".format(clock.minuteOfDay / 60, clock.minuteOfDay % 60)
+
+private fun formatDuration(minutes: Int): String = when {
+    minutes < 60 -> "${minutes}분"
+    minutes % 60 == 0 -> "${minutes / 60}시간"
+    else -> "${minutes / 60}시간 ${minutes % 60}분"
 }
 
 private fun clockText(value: ClockValue): String =
