@@ -477,7 +477,7 @@ private fun ElapsedConnector(link: TimeLink?, onClick: () -> Unit) {
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("│", color = ArmyristColors.Border)
+        Text("│", color = ArmyristColors.Border, modifier = Modifier.height(16.dp))
         OutlinedButton(
             onClick = onClick,
             shape = ArmyristPanelShape,
@@ -492,7 +492,7 @@ private fun ElapsedConnector(link: TimeLink?, onClick: () -> Unit) {
                 fontWeight = FontWeight.Bold
             )
         }
-        Text("│", color = ArmyristColors.Border)
+        Text("│", color = ArmyristColors.Border, modifier = Modifier.height(16.dp))
     }
 }
 
