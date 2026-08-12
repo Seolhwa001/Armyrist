@@ -1,5 +1,34 @@
-TimePlan Step 2 — Calculation Engine
-Prerequisite: Step 1 Revised Domain already applied.
-ADD the two files in this patch. No existing file is replaced or deleted.
-Scope: pure forward/reverse, range references/stay, zero duration, midnight and <24h boundary.
-No UI, persistence, migration, Candidate/Conflict or portable-data changes.
+Development Correction Directive No.010
+
+대상 파일:
+app/src/main/java/com/seolhwa/armyrist/MainActivity.kt
+
+적용:
+- 프로젝트 루트에 apply_no010.py를 놓고 `python apply_no010.py`
+- 변경된 MainActivity.kt를 반영
+- Actions 통과 확인
+- 실기기에서 계산 편집 검증
+
+변경:
+- Header 고정
+- Content만 Vertical Scroll
+- Footer 취소/확인 고정
+- 그룹 Choice를 FlowRow/Wrap으로 변경
+- Material FilterChip 기본 Selected 색 제거
+- Olive 기반 ArmyristChoiceChip 적용
+- 왼쪽 그룹 / 연산 / 오른쪽 그룹 계층 구분
+- 계산 Business Logic/Persistence 변경 없음
+
+원인 점검:
+1. 기존 AlertDialog text = 일반 Column → Overflow 처리 없음.
+2. 그룹 선택 = forEach + FilterChip → 항목당 한 줄 사용.
+3. FilterChip selected color를 명시하지 않아 Material 기본 선택 표현에 의존.
+4. Armyrist Theme/Panel/Button 규칙은 있으나 공통 Choice/Overflow 규칙은 아직 강제되지 않음.
+
+COMMON UI REVIEW:
+Selected State Rule: 부분적. 이번 패치에서 계산 선택은 Olive 공통 Choice로 통일.
+Button Style Rule: 존재하나 화면별 직접 구성이 혼재.
+Dialog Overflow Rule: 공통 규칙 없음.
+Spacing Rule: 화면별 dp 지정이 주류.
+
+No.010 범위를 넘어 앱 전체 디자인 시스템 리팩터링은 하지 않음.
