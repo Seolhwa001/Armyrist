@@ -310,7 +310,6 @@ object ArmyristPortableDataManager {
 
             validateCountingSnapshot(counting)
             validateCoreSnapshot(core)
-            validateTimePlanV2Snapshot(JSONObject(backup.timePlanV2Snapshot))
 
             val labelMap = linkedMapOf<String, String>()
             labels.keys().forEach { key ->
