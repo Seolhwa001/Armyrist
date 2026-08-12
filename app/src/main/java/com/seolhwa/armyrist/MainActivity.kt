@@ -17,6 +17,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
@@ -2103,6 +2105,7 @@ private data class CalcDraft(
     val name: String
 )
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CalculationDialog(
     sheet: CountingSheet,
@@ -2127,54 +2130,180 @@ private fun CalculationDialog(
         mutableStateOf(current?.name ?: "")
     }
 
+    val scrollState = rememberScrollState()
+
+    val selectedChipColors = FilterChipDefaults.filterChipColors(
+        containerColor = ArmyristColors.RaisedSurface,
+        labelColor = ArmyristColors.PrimaryText,
+        selectedContainerColor = ArmyristColors.PrimaryControl,
+        selectedLabelColor = ArmyristColors.OnDark
+    )
+
     AlertDialog(
         onDismissRequest = { done(null) },
+        shape = ArmyristPanelShape,
+        containerColor = ArmyristColors.WorkSurface,
+        titleContentColor = ArmyristColors.PrimaryText,
+        textContentColor = ArmyristColors.PrimaryText,
         title = {
-            Text(if (current == null) "계산 추가" else "계산 편집")
+            Column {
+                Text(
+                    if (current == null) "계산 추가" else "계산 편집",
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "COUNTING · CALCULATION",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ArmyristColors.SecondaryText
+                )
+            }
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("왼쪽 그룹")
-                sheet.groups.forEach { group ->
-                    FilterChip(
-                        selected = left == group.id,
-                        onClick = { left = group.id },
-                        label = { Text(group.name) }
-                    )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 460.dp)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text("왼쪽 그룹", fontWeight = FontWeight.SemiBold)
+
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    sheet.groups.sortedBy { it.order }.forEach { group ->
+                        val selected = left == group.id
+                        FilterChip(
+                            selected = selected,
+                            onClick = { left = group.id },
+                            label = {
+                                Text(
+                                    group.name,
+                                    fontWeight = if (selected) {
+                                        FontWeight.Bold
+                                    } else {
+                                        FontWeight.Medium
+                                    }
+                                )
+                            },
+                            colors = selectedChipColors,
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = selected,
+                                borderColor = ArmyristColors.Border,
+                                selectedBorderColor = ArmyristColors.PrimaryControl,
+                                borderWidth = 1.dp,
+                                selectedBorderWidth = 2.dp
+                            )
+                        )
+                    }
                 }
 
-                Text("연산")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                HorizontalDivider(color = ArmyristColors.Divider)
+
+                Text("연산", fontWeight = FontWeight.SemiBold)
+
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    val addSelected = operator == CalculationOperator.ADD
                     FilterChip(
-                        selected = operator == CalculationOperator.ADD,
+                        selected = addSelected,
                         onClick = { operator = CalculationOperator.ADD },
-                        label = { Text("+") }
+                        label = { Text("+", fontWeight = FontWeight.Bold) },
+                        colors = selectedChipColors,
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = addSelected,
+                            borderColor = ArmyristColors.Border,
+                            selectedBorderColor = ArmyristColors.PrimaryControl,
+                            borderWidth = 1.dp,
+                            selectedBorderWidth = 2.dp
+                        )
                     )
+
+                    val subtractSelected =
+                        operator == CalculationOperator.SUBTRACT
                     FilterChip(
-                        selected = operator == CalculationOperator.SUBTRACT,
-                        onClick = { operator = CalculationOperator.SUBTRACT },
-                        label = { Text("−") }
+                        selected = subtractSelected,
+                        onClick = {
+                            operator = CalculationOperator.SUBTRACT
+                        },
+                        label = { Text("−", fontWeight = FontWeight.Bold) },
+                        colors = selectedChipColors,
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = subtractSelected,
+                            borderColor = ArmyristColors.Border,
+                            selectedBorderColor = ArmyristColors.PrimaryControl,
+                            borderWidth = 1.dp,
+                            selectedBorderWidth = 2.dp
+                        )
                     )
                 }
 
-                Text("오른쪽 그룹")
-                sheet.groups.forEach { group ->
-                    FilterChip(
-                        selected = right == group.id,
-                        onClick = { right = group.id },
-                        label = { Text(group.name) }
-                    )
+                HorizontalDivider(color = ArmyristColors.Divider)
+
+                Text("오른쪽 그룹", fontWeight = FontWeight.SemiBold)
+
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    sheet.groups.sortedBy { it.order }.forEach { group ->
+                        val selected = right == group.id
+                        FilterChip(
+                            selected = selected,
+                            onClick = { right = group.id },
+                            label = {
+                                Text(
+                                    group.name,
+                                    fontWeight = if (selected) {
+                                        FontWeight.Bold
+                                    } else {
+                                        FontWeight.Medium
+                                    }
+                                )
+                            },
+                            colors = selectedChipColors,
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = selected,
+                                borderColor = ArmyristColors.Border,
+                                selectedBorderColor = ArmyristColors.PrimaryControl,
+                                borderWidth = 1.dp,
+                                selectedBorderWidth = 2.dp
+                            )
+                        )
+                    }
                 }
+
+                HorizontalDivider(color = ArmyristColors.Divider)
 
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("계산명 (선택)") }
+                    label = { Text("계산명 (선택)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = ArmyristColors.InputSurface,
+                        unfocusedContainerColor = ArmyristColors.InputSurface,
+                        focusedBorderColor = ArmyristColors.PrimaryControl,
+                        unfocusedBorderColor = ArmyristColors.Border
+                    )
                 )
+
+                Spacer(Modifier.height(2.dp))
             }
         },
         confirmButton = {
-            TextButton(
+            Button(
                 onClick = {
                     done(
                         CalcDraft(
@@ -2184,13 +2313,26 @@ private fun CalculationDialog(
                             name = name.trim()
                         )
                     )
-                }
+                },
+                shape = ArmyristPanelShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ArmyristColors.PrimaryControl,
+                    contentColor = ArmyristColors.OnDark
+                )
             ) {
-                Text("확인")
+                Text("확인", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
-            TextButton(onClick = { done(null) }) {
+            OutlinedButton(
+                onClick = { done(null) },
+                shape = ArmyristPanelShape,
+                border = BorderStroke(1.dp, ArmyristColors.Border),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = ArmyristColors.WorkSurface,
+                    contentColor = ArmyristColors.PrimaryText
+                )
+            ) {
                 Text("취소")
             }
         }
