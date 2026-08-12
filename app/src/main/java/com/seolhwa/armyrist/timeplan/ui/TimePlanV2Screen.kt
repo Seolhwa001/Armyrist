@@ -234,20 +234,16 @@ private fun TimePlanV2Detail(
 
                     OutlinedButton(
                         onClick = {
-                            if (plan.finalPoint == null) {
-                                val event = TimeEvent(
-                                    id = UUID.randomUUID().toString(),
-                                    kind = TimeEventKind.FINAL,
-                                    order = plan.midwayEvents.size,
-                                    name = "종료지점"
+                            onCommit(
+                                TimePlanCandidateEngine.appendFinalPoint(
+                                    plan = plan,
+                                    newFinalId = UUID.randomUUID().toString()
                                 )
-                                onCommit(rebuildLinks(plan.copy(finalPoint = event)))
-                            }
+                            )
                         },
-                        enabled = plan.finalPoint == null,
                         modifier = Modifier.weight(1f),
                         shape = ArmyristPanelShape
-                    ) { Text(if (plan.finalPoint == null) "+ 종료지점" else "종료지점 있음") }
+                    ) { Text("+ 종료지점") }
                 }
             }
 
