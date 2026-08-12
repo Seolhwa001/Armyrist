@@ -66,6 +66,46 @@ object TimePlanCandidateEngine {
         return Candidate(existing, recalculated, impacts, conflicts)
     }
 
+    /**
+     * Rebuilds the Point -> Interval -> Point topology after waypoint/final-point
+     * insertion or deletion. Interval is a relationship between adjacent points,
+     * never a child of a waypoint.
+     *
+     * Existing adjacent links are preserved. Newly adjacent points receive a link
+     * immediately, and when both clocks resolve its duration is derived at once.
+     */
+    fun normalizeTopology(plan: RevisedTimePlan): RevisedTimePlan {
+        val refs = TimePlanConflictEngine.nodeReferences(plan)
+        val old = plan.links.associateBy { it.fromNodeId to it.toNodeId }
+        val rebuilt = refs.zipWithNext().map { (from, to) ->
+            old[from.nodeId to to.nodeId] ?: TimeLink(
+                fromNodeId = from.nodeId,
+                toNodeId = to.nodeId,
+                duration = null,
+                origin = ValueOrigin.UNSET
+            )
+        }
+        val topology = plan.copy(links = rebuilt)
+        return recalculateAllResolvableLinks(topology)
+    }
+
+    private fun recalculateAllResolvableLinks(plan: RevisedTimePlan): RevisedTimePlan {
+        val refs = TimePlanConflictEngine.nodeReferences(plan)
+        val resolved = TimePlanConflictEngine.resolveReferences(refs)
+            as? TimePlanCalculator.Calculation.Success ?: return plan
+        val absolute = resolved.value.associateBy { it.nodeId }
+        return plan.copy(
+            links = plan.links.map { link ->
+                val from = absolute[link.fromNodeId]?.departure
+                val to = absolute[link.toNodeId]?.arrival
+                val calculated = TimePlanCalculator.durationBetween(from, to)
+                if (calculated is TimePlanCalculator.Calculation.Success) {
+                    link.copy(duration = calculated.value, origin = ValueOrigin.DERIVED)
+                } else link
+            }
+        )
+    }
+
     private fun applyIntent(
         plan: RevisedTimePlan,
         intent: EditIntent
