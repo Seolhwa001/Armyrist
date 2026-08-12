@@ -481,6 +481,11 @@ private fun TimePlanV2Detail(
         val hasHardRangeError = conflicts.any {
             it.type == TimePlanCandidateEngine.ConflictType.RANGE_ORDER_INVALID
         }
+        val needsPrefixReflow =
+            TimePlanCandidateEngine.eventEditNeedsPrefixReflow(
+                existing = plan,
+                changedEvent = changedEvent
+            )
         AlertDialog(
             onDismissRequest = { pendingEventConflict = null },
             title = {
@@ -500,7 +505,11 @@ private fun TimePlanV2Detail(
                     )
                     if (!hasHardRangeError) {
                         Text(
-                            "입력값을 유지하면서 이 지점 이후의 일정을 함께 이동할 수 있습니다.",
+                            if (needsPrefixReflow) {
+                                "시간범위 시작이 앞 일정과 겹칩니다. 앞 일정은 필요한 만큼 당기고, 이후 일정은 범위 종료 변화량만큼 이동합니다."
+                            } else {
+                                "입력값을 유지하면서 이 지점 이후의 일정을 함께 이동할 수 있습니다."
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = ArmyristColors.SecondaryText
                         )
@@ -517,7 +526,7 @@ private fun TimePlanV2Detail(
                     Button(
                         onClick = {
                             val adjusted =
-                                TimePlanCandidateEngine.createEventEditWithDownstreamShift(
+                                TimePlanCandidateEngine.createEventEditWithTimelineReflow(
                                     existing = plan,
                                     changedEvent = changedEvent
                                 )
@@ -535,7 +544,7 @@ private fun TimePlanV2Detail(
                             contentColor = ArmyristColors.OnDark
                         )
                     ) {
-                        Text("이후 일정 조정")
+                        Text(if (needsPrefixReflow) "앞·뒤 일정 조정" else "이후 일정 조정")
                     }
                 }
             }
@@ -567,7 +576,7 @@ private fun TimePlanV2Detail(
                 Button(
                     onClick = {
                         val candidate =
-                            TimePlanCandidateEngine.createEventEditWithDownstreamShift(
+                            TimePlanCandidateEngine.createEventEditWithTimelineReflow(
                                 existing = plan,
                                 changedEvent = changedEvent
                             )
@@ -1336,54 +1345,68 @@ private fun ArmyristWheelPicker(
     val cycles = 1000
     val middle = cycles / 2
     val selectedIndex = values.indexOf(selectedValue).coerceAtLeast(0)
-    val initialIndex = middle * values.size + selectedIndex
+    val initialCenteredIndex = middle * values.size + selectedIndex
 
-    val state = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
+    // With one item-height of top padding, centered item N is positioned by
+    // firstVisibleItem = N - 1.
+    val state = rememberLazyListState(
+        initialFirstVisibleItemIndex = (initialCenteredIndex - 1).coerceAtLeast(0)
+    )
     val flingBehavior = rememberSnapFlingBehavior(lazyListState = state)
-    var ignoreProgrammaticScroll by remember { mutableStateOf(false) }
-    var lastUserIndex by remember { mutableIntStateOf(initialIndex) }
 
-    // Keep the visual wheel synchronized with the one authoritative selected time.
-    LaunchedEffect(selectedValue) {
-        val visibleCenter = state.layoutInfo.visibleItemsInfo.minByOrNull { item ->
-            kotlin.math.abs(
-                (item.offset + item.size / 2) -
-                    (state.layoutInfo.viewportStartOffset + state.layoutInfo.viewportEndOffset) / 2
-            )
-        }
-        val currentNormalized = visibleCenter?.index?.let {
-            ((it % values.size) + values.size) % values.size
-        }
-        if (currentNormalized != selectedIndex) {
-            val currentIndex = visibleCenter?.index ?: state.firstVisibleItemIndex
-            val cycle = currentIndex / values.size
-            val target = cycle * values.size + selectedIndex
-            ignoreProgrammaticScroll = true
-            state.scrollToItem((target - 1).coerceAtLeast(0))
-            lastUserIndex = target
-            ignoreProgrammaticScroll = false
-        }
+    var centeredIndex by remember { mutableIntStateOf(initialCenteredIndex) }
+    var programmaticSync by remember { mutableStateOf(false) }
+
+    // External changes (direct text input / the other control) may need to move
+    // this wheel. Never recenter while THIS wheel is under the user's finger or
+    // fling animation: doing so cancels/rebases the scroll and was the source of
+    // the "white value / jumps to 23 or 08" bug.
+    LaunchedEffect(selectedValue, state.isScrollInProgress) {
+        if (state.isScrollInProgress) return@LaunchedEffect
+
+        val currentNormalized =
+            ((centeredIndex % values.size) + values.size) % values.size
+        if (currentNormalized == selectedIndex) return@LaunchedEffect
+
+        val currentCycle = centeredIndex / values.size
+        var target = currentCycle * values.size + selectedIndex
+
+        // Keep the programmatic move close to the current cycle.
+        if (target - centeredIndex > values.size / 2) target -= values.size
+        if (centeredIndex - target > values.size / 2) target += values.size
+
+        target = target.coerceIn(1, cycles * values.size - 2)
+
+        programmaticSync = true
+        state.scrollToItem(target - 1)
+        centeredIndex = target
+        programmaticSync = false
     }
 
     LaunchedEffect(state) {
         snapshotFlow {
             val info = state.layoutInfo
-            val viewportCenter = (info.viewportStartOffset + info.viewportEndOffset) / 2
+            val viewportCenter =
+                (info.viewportStartOffset + info.viewportEndOffset) / 2
             val centered = info.visibleItemsInfo.minByOrNull { item ->
-                kotlin.math.abs((item.offset + item.size / 2) - viewportCenter)
+                kotlin.math.abs(
+                    (item.offset + item.size / 2) - viewportCenter
+                )
             }
-            Triple(centered?.index, state.isScrollInProgress, ignoreProgrammaticScroll)
-        }.collect { (centeredIndex, scrolling, ignored) ->
-            if (centeredIndex == null || !scrolling || ignored) return@collect
+            Triple(centered?.index, state.isScrollInProgress, programmaticSync)
+        }.collect { (newCenteredIndex, scrolling, syncing) ->
+            if (newCenteredIndex == null) return@collect
 
-            if (centeredIndex != lastUserIndex) {
-                // One selection tick per detent crossed. performHapticFeedback respects
-                // the platform's haptic policy; no direct vibrator is used.
-                view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                lastUserIndex = centeredIndex
+            // Always keep visual selection attached to the actual center row.
+            if (newCenteredIndex != centeredIndex) {
+                centeredIndex = newCenteredIndex
 
-                val normalized = ((centeredIndex % values.size) + values.size) % values.size
-                onUserSelected(values[normalized])
+                if (scrolling && !syncing) {
+                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                    val normalized =
+                        ((newCenteredIndex % values.size) + values.size) % values.size
+                    onUserSelected(values[normalized])
+                }
             }
         }
     }
@@ -1394,7 +1417,6 @@ private fun ArmyristWheelPicker(
             .height(132.dp),
         contentAlignment = Alignment.Center
     ) {
-        // Thin selection band: it reads as a wheel focus area, not as a large button.
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1419,13 +1441,15 @@ private fun ArmyristWheelPicker(
                         .height(itemHeight),
                     contentAlignment = Alignment.Center
                 ) {
-                    val normalizedIndex = ((lastUserIndex % values.size) + values.size) % values.size
-                    val isSelectedValue = values[normalizedIndex] == value
+                    val isCentered = index == centeredIndex
                     Text(
                         valueText(value),
-                        fontSize = if (isSelectedValue) 21.sp else 17.sp,
-                        fontWeight = if (isSelectedValue) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isSelectedValue) Color.White else ArmyristColors.SecondaryText
+                        fontSize = if (isCentered) 21.sp else 17.sp,
+                        fontWeight =
+                            if (isCentered) FontWeight.Bold else FontWeight.Medium,
+                        color =
+                            if (isCentered) Color.White
+                            else ArmyristColors.SecondaryText
                     )
                 }
             }
