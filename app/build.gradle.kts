@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 32
-        versionName = "0.3.32-stable-signing"
+        versionCode = 33
+        versionName = "0.3.33-timeplan-dial-sync"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
