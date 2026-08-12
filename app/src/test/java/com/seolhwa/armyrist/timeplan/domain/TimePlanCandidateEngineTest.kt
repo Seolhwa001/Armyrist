@@ -124,6 +124,41 @@ class TimePlanCandidateEngineTest {
     }
 
 
+    @Test fun rangeExtensionShiftsDownstreamFromRangeEnd() {
+        val existing=base()
+        val candidate=TimePlanCandidateEngine.createEventTimeWithDownstreamShift(
+            existing=existing,
+            eventId="m",
+            proposedSpec=EventTimeSpec.Range(
+                ClockValue.explicit(c(9,40)),
+                ClockValue.explicit(c(10,10))
+            )
+        )
+        val event=candidate.proposed.midwayEvents.first()
+        val spec=event.timeSpec as EventTimeSpec.Range
+        assertEquals(c(9,40),spec.start.time)
+        assertEquals(c(10,10),spec.end.time)
+        // Old departure was 09:40, new departure is 10:10 => downstream +30m.
+        assertEquals(c(11,30),candidate.proposed.end.value.time)
+    }
+
+    @Test fun rangeConflictCandidateRetainsProposedRangeForPreview() {
+        val existing=base()
+        val candidate=TimePlanCandidateEngine.create(
+            existing,
+            TimePlanCandidateEngine.EditIntent.SetEventTime(
+                "m",
+                EventTimeSpec.Range(
+                    ClockValue.explicit(c(8,30)),
+                    ClockValue.explicit(c(10,0))
+                )
+            )
+        )
+        val spec=candidate.proposed.midwayEvents.first().timeSpec as EventTimeSpec.Range
+        assertEquals(c(8,30),spec.start.time)
+        assertEquals(c(10,0),spec.end.time)
+    }
+
     @Test fun cancelCanDiscardCandidateBecauseExistingIsRetained() {
         val existing=base()
         val candidate=TimePlanCandidateEngine.create(
