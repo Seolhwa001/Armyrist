@@ -55,6 +55,7 @@ object ArmyristPortableDataManager {
     const val FORMAT_IDENTIFIER = "ARMYRIST_DATA"
     const val FORMAT_VERSION = 1
     const val PAYLOAD_SCHEMA_VERSION = 1
+    const val TIME_PLAN_SCHEMA_VERSION = 1
 
     private const val COUNTING_PREFS = "armyrist_stage1"
     private const val COUNTING_KEY = "snapshot_v1"
@@ -148,6 +149,14 @@ object ArmyristPortableDataManager {
 
             val payloadObject = JSONObject()
                 .put("schemaVersion", PAYLOAD_SCHEMA_VERSION)
+                .put(
+                    "toolSchemas",
+                    JSONObject()
+                        .put(
+                            "timePlan",
+                            TIME_PLAN_SCHEMA_VERSION
+                        )
+                )
                 .put("countingSnapshot", countingRoot)
                 .put("coreSnapshot", coreRoot)
                 .put(
@@ -244,9 +253,16 @@ object ArmyristPortableDataManager {
             val payload = JSONObject(
                 plaintext.toString(Charsets.UTF_8)
             )
+            val payloadSchemaVersion =
+                payload.getInt("schemaVersion")
             require(
-                payload.getInt("schemaVersion") ==
+                payloadSchemaVersion ==
                     PAYLOAD_SCHEMA_VERSION
+            )
+
+            validateBackupTimePlanSchema(
+                payload = payload,
+                payloadSchemaVersion = payloadSchemaVersion
             )
 
             val counting =
@@ -289,9 +305,15 @@ object ArmyristPortableDataManager {
         }.fold(
             onSuccess = { PortableResult.Success(it) },
             onFailure = {
-                PortableResult.Error(
-                    "암호가 올바르지 않거나 파일이 손상되었습니다."
-                )
+                if (it is UnsupportedTimePlanSchemaException) {
+                    PortableResult.Error(
+                        "이 파일의 시간계획 데이터 버전은 현재 Armyrist에서 지원하지 않습니다."
+                    )
+                } else {
+                    PortableResult.Error(
+                        "암호가 올바르지 않거나 파일이 손상되었습니다."
+                    )
+                }
             }
         )
     }
@@ -879,6 +901,17 @@ object ArmyristPortableDataManager {
 
             val payload = JSONObject()
                 .put("schemaVersion", PAYLOAD_SCHEMA_VERSION)
+                .apply {
+                    if (
+                        dataType ==
+                            ArmyristPortableDataType.TIME_PLAN
+                    ) {
+                        put(
+                            "toolSchemaVersion",
+                            TIME_PLAN_SCHEMA_VERSION
+                        )
+                    }
+                }
                 .put("document", JSONObject(source.toString()))
 
             createContainerBytes(
@@ -920,8 +953,22 @@ object ArmyristPortableDataManager {
                 encoded
             }
 
-            val payload = JSONObject(plain.toString(Charsets.UTF_8))
-            require(payload.getInt("schemaVersion") == PAYLOAD_SCHEMA_VERSION)
+            val payload = JSONObject(
+                plain.toString(Charsets.UTF_8)
+            )
+            val payloadSchemaVersion =
+                payload.getInt("schemaVersion")
+            require(
+                payloadSchemaVersion ==
+                    PAYLOAD_SCHEMA_VERSION
+            )
+
+            validateIndividualToolSchema(
+                type = type,
+                payload = payload,
+                payloadSchemaVersion = payloadSchemaVersion
+            )
+
             val document = payload.getJSONObject("document")
 
             validateIndividualDocument(type, document)
@@ -935,7 +982,15 @@ object ArmyristPortableDataManager {
                 )
             )
         }.getOrElse {
-            PortableResult.Error("암호가 올바르지 않거나 파일이 손상되었습니다.")
+            if (it is UnsupportedTimePlanSchemaException) {
+                PortableResult.Error(
+                    "이 시간계획 데이터 버전은 현재 Armyrist에서 지원하지 않습니다."
+                )
+            } else {
+                PortableResult.Error(
+                    "암호가 올바르지 않거나 파일이 손상되었습니다."
+                )
+            }
         }
     }
 
@@ -994,6 +1049,74 @@ object ArmyristPortableDataManager {
             onFailure = { PortableResult.Error("가져오기에 실패했습니다. 기존 데이터는 변경되지 않았습니다.") }
         )
     }
+
+    /**
+     * Amendment A:
+     * Container version and TimePlan domain schema are independent.
+     *
+     * Legacy Stage 3 payload schema v1 did not contain toolSchemas.
+     * That exact, known legacy payload is explicitly migrated as
+     * TimePlan schema v1. This is not heuristic guessing.
+     */
+    private fun validateBackupTimePlanSchema(
+        payload: JSONObject,
+        payloadSchemaVersion: Int
+    ) {
+        val version =
+            if (payload.has("toolSchemas")) {
+                val schemas =
+                    payload.getJSONObject("toolSchemas")
+                if (!schemas.has("timePlan")) {
+                    throw UnsupportedTimePlanSchemaException()
+                }
+                schemas.getInt("timePlan")
+            } else {
+                migrateLegacyTimePlanSchemaVersion(
+                    payloadSchemaVersion
+                )
+            }
+
+        if (version != TIME_PLAN_SCHEMA_VERSION) {
+            throw UnsupportedTimePlanSchemaException()
+        }
+    }
+
+    private fun validateIndividualToolSchema(
+        type: ArmyristPortableDataType,
+        payload: JSONObject,
+        payloadSchemaVersion: Int
+    ) {
+        if (type != ArmyristPortableDataType.TIME_PLAN) {
+            return
+        }
+
+        val version =
+            if (payload.has("toolSchemaVersion")) {
+                payload.getInt("toolSchemaVersion")
+            } else {
+                migrateLegacyTimePlanSchemaVersion(
+                    payloadSchemaVersion
+                )
+            }
+
+        if (version != TIME_PLAN_SCHEMA_VERSION) {
+            throw UnsupportedTimePlanSchemaException()
+        }
+    }
+
+    private fun migrateLegacyTimePlanSchemaVersion(
+        payloadSchemaVersion: Int
+    ): Int {
+        // Explicitly documented legacy Stage 3 payload:
+        // payload schema v1 == current TimePlan portable schema v1.
+        if (payloadSchemaVersion == 1) {
+            return 1
+        }
+        throw UnsupportedTimePlanSchemaException()
+    }
+
+    private class UnsupportedTimePlanSchemaException :
+        IllegalArgumentException()
 
     private fun findById(array: JSONArray?, id: String): JSONObject? {
         if (array == null) return null
