@@ -4,12 +4,17 @@ import android.app.Application
 import com.seolhwa.armyrist.data.CountingRepository
 import com.seolhwa.armyrist.notification.ChecklistNotificationManager
 import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
+import com.seolhwa.armyrist.timeplan.data.TimePlanV2MigrationCoordinator
+import com.seolhwa.armyrist.timeplan.data.TimePlanV2Repository
 
 class ArmyristApplication : Application() {
     lateinit var repository: CountingRepository
         private set
 
     lateinit var coreSuiteRepository: CoreSuiteRepository
+        private set
+
+    lateinit var timePlanV2Repository: TimePlanV2Repository
         private set
 
     override fun onCreate() {
@@ -19,6 +24,12 @@ class ArmyristApplication : Application() {
         ArmyristPortableDataManager.recoverInterruptedRestore(this)
 
         reloadRepositories()
+
+        timePlanV2Repository = TimePlanV2Repository(this)
+        TimePlanV2MigrationCoordinator.sync(
+            legacyRepository = coreSuiteRepository,
+            v2Repository = timePlanV2Repository
+        )
 
         ChecklistNotificationManager.reconcile(
             this,
@@ -31,6 +42,11 @@ class ArmyristApplication : Application() {
         // hold these instances immediately see imported/restored data.
         repository.reloadFromPersistence()
         coreSuiteRepository.reloadFromPersistence()
+        timePlanV2Repository.reloadFromPersistence()
+        TimePlanV2MigrationCoordinator.sync(
+            legacyRepository = coreSuiteRepository,
+            v2Repository = timePlanV2Repository
+        )
 
         ChecklistNotificationManager.reconcile(
             this,
