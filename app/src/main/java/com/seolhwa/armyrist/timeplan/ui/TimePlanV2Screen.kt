@@ -118,9 +118,7 @@ private fun TimePlanV2Detail(
                 title = plan.title,
                 subtitle = "TIME PLAN · V2",
                 leadingLabel = "목록",
-                onLeading = onBack,
-                actionLabel = "홈",
-                onAction = onHome
+                onLeading = onBack
             )
         }
     ) { padding ->
@@ -129,6 +127,16 @@ private fun TimePlanV2Detail(
             contentPadding = PaddingValues(12.dp, 10.dp, 12.dp, 28.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            item {
+                OutlinedButton(
+                    onClick = onHome,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = ArmyristPanelShape,
+                    border = BorderStroke(1.dp, ArmyristColors.Border)
+                ) {
+                    Text("홈")
+                }
+            }
             item {
                 OutlinedTextField(
                     value = title,
