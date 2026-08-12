@@ -14,6 +14,11 @@ class CountingRepository(context: Context) {
     private var sheets: List<CountingSheet> = load()
 
     @Synchronized
+    fun reloadFromPersistence() {
+        sheets = load()
+    }
+
+    @Synchronized
     fun getSheets(): List<CountingSheet> =
         sheets.sortedByDescending { it.updatedAt }
 
