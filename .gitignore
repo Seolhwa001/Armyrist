@@ -1,0 +1,19 @@
+# Android local configuration
+local.properties
+
+# Signing credentials / keystores
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.key
+*.pem
+
+# Gradle / Android generated files
+.gradle/
+build/
+**/build/
+
+# IDE
+.idea/
+*.iml
