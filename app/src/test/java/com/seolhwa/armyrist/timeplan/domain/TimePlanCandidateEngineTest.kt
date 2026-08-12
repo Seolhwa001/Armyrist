@@ -360,6 +360,157 @@ class TimePlanCandidateEngineTest {
         assertEquals("교육", TimePlanCandidateEngine.occupiedRangeConflict(existing, changed)?.eventName)
     }
 
+
+    @Test fun newRangeContainingExistingSingleIsHardConflict() {
+        val existing = RevisedTimePlan(
+            id = "p", title = "x",
+            start = TimeAnchor(ClockValue.explicit(c(8,0))),
+            midwayEvents = listOf(
+                TimeEvent(
+                    id = "single", kind = TimeEventKind.MIDWAY,
+                    order = 0, name = "집결",
+                    timeSpec = EventTimeSpec.Single(
+                        ClockValue.explicit(c(9,30))
+                    )
+                ),
+                TimeEvent(
+                    id = "edit", kind = TimeEventKind.MIDWAY,
+                    order = 1, name = "교육",
+                    timeSpec = EventTimeSpec.Single(
+                        ClockValue.explicit(c(10,30))
+                    )
+                )
+            ),
+            end = TimeAnchor(ClockValue.explicit(c(12,0))),
+            links = emptyList(), createdAt = "0", updatedAt = "0"
+        )
+
+        val changed = existing.midwayEvents[1].copy(
+            timeSpec = EventTimeSpec.Range(
+                ClockValue.explicit(c(9,0)),
+                ClockValue.explicit(c(10,0))
+            )
+        )
+
+        val conflict =
+            TimePlanCandidateEngine.occupiedRangeConflict(existing, changed)
+
+        assertEquals("집결", conflict?.eventName)
+    }
+
+    @Test fun existingSingleExactlyAtNewRangeEndIsAllowed() {
+        val existing = RevisedTimePlan(
+            id = "p", title = "x",
+            start = TimeAnchor(ClockValue.explicit(c(8,0))),
+            midwayEvents = listOf(
+                TimeEvent(
+                    id = "single", kind = TimeEventKind.MIDWAY,
+                    order = 0, name = "집결",
+                    timeSpec = EventTimeSpec.Single(
+                        ClockValue.explicit(c(10,0))
+                    )
+                ),
+                TimeEvent(
+                    id = "edit", kind = TimeEventKind.MIDWAY,
+                    order = 1, name = "교육",
+                    timeSpec = EventTimeSpec.Single(
+                        ClockValue.explicit(c(10,30))
+                    )
+                )
+            ),
+            end = TimeAnchor(ClockValue.explicit(c(12,0))),
+            links = emptyList(), createdAt = "0", updatedAt = "0"
+        )
+
+        val changed = existing.midwayEvents[1].copy(
+            timeSpec = EventTimeSpec.Range(
+                ClockValue.explicit(c(9,0)),
+                ClockValue.explicit(c(10,0))
+            )
+        )
+
+        assertEquals(
+            null,
+            TimePlanCandidateEngine.occupiedRangeConflict(existing, changed)
+        )
+    }
+
+    @Test fun existingSingleExactlyAtNewRangeStartIsConflict() {
+        val existing = RevisedTimePlan(
+            id = "p", title = "x",
+            start = TimeAnchor(ClockValue.explicit(c(8,0))),
+            midwayEvents = listOf(
+                TimeEvent(
+                    id = "single", kind = TimeEventKind.MIDWAY,
+                    order = 0, name = "집결",
+                    timeSpec = EventTimeSpec.Single(
+                        ClockValue.explicit(c(9,0))
+                    )
+                ),
+                TimeEvent(
+                    id = "edit", kind = TimeEventKind.MIDWAY,
+                    order = 1, name = "교육",
+                    timeSpec = EventTimeSpec.Single(
+                        ClockValue.explicit(c(10,30))
+                    )
+                )
+            ),
+            end = TimeAnchor(ClockValue.explicit(c(12,0))),
+            links = emptyList(), createdAt = "0", updatedAt = "0"
+        )
+
+        val changed = existing.midwayEvents[1].copy(
+            timeSpec = EventTimeSpec.Range(
+                ClockValue.explicit(c(9,0)),
+                ClockValue.explicit(c(10,0))
+            )
+        )
+
+        assertEquals(
+            "집결",
+            TimePlanCandidateEngine.occupiedRangeConflict(existing, changed)?.eventName
+        )
+    }
+
+    @Test fun touchingRangesAtBoundaryDoNotOverlap() {
+        val existing = RevisedTimePlan(
+            id = "p", title = "x",
+            start = TimeAnchor(ClockValue.explicit(c(8,0))),
+            midwayEvents = listOf(
+                TimeEvent(
+                    id = "r1", kind = TimeEventKind.MIDWAY,
+                    order = 0, name = "교육1",
+                    timeSpec = EventTimeSpec.Range(
+                        ClockValue.explicit(c(9,0)),
+                        ClockValue.explicit(c(10,0))
+                    )
+                ),
+                TimeEvent(
+                    id = "r2", kind = TimeEventKind.MIDWAY,
+                    order = 1, name = "교육2",
+                    timeSpec = EventTimeSpec.Range(
+                        ClockValue.explicit(c(10,30)),
+                        ClockValue.explicit(c(11,0))
+                    )
+                )
+            ),
+            end = TimeAnchor(ClockValue.explicit(c(12,0))),
+            links = emptyList(), createdAt = "0", updatedAt = "0"
+        )
+
+        val changed = existing.midwayEvents[1].copy(
+            timeSpec = EventTimeSpec.Range(
+                ClockValue.explicit(c(10,0)),
+                ClockValue.explicit(c(10,30))
+            )
+        )
+
+        assertEquals(
+            null,
+            TimePlanCandidateEngine.occupiedRangeConflict(existing, changed)
+        )
+    }
+
     @Test fun cancelCanDiscardCandidateBecauseExistingIsRetained() {
         val existing=base()
         val candidate=TimePlanCandidateEngine.create(
