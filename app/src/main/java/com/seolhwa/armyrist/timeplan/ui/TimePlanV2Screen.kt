@@ -155,6 +155,9 @@ private fun TimePlanV2Detail(
     var pendingOccupiedRangeConflict by remember {
         mutableStateOf<Pair<TimeEvent, TimePlanCandidateEngine.OccupiedRangeConflict>?>(null)
     }
+    var pendingSimpleConflict by remember {
+        mutableStateOf<Pair<String, List<TimePlanCandidateEngine.Conflict>>?>(null)
+    }
     var editingStart by remember { mutableStateOf(false) }
     var editingEnd by remember { mutableStateOf(false) }
 
@@ -374,7 +377,11 @@ private fun TimePlanV2Detail(
                     plan,
                     TimePlanCandidateEngine.EditIntent.SetStart(ClockValue.explicit(clock))
                 )
-                if (candidate.conflicts.isEmpty()) onCommit(candidate.proposed)
+                if (candidate.conflicts.isEmpty()) {
+                    onCommit(candidate.proposed)
+                } else {
+                    pendingSimpleConflict = "시작시간을 저장할 수 없습니다." to candidate.conflicts
+                }
                 editingStart = false
             }
         )
@@ -389,7 +396,11 @@ private fun TimePlanV2Detail(
                     plan,
                     TimePlanCandidateEngine.EditIntent.SetEnd(ClockValue.explicit(clock))
                 )
-                if (candidate.conflicts.isEmpty()) onCommit(candidate.proposed)
+                if (candidate.conflicts.isEmpty()) {
+                    onCommit(candidate.proposed)
+                } else {
+                    pendingSimpleConflict = "종료시간을 저장할 수 없습니다." to candidate.conflicts
+                }
                 editingEnd = false
             }
         )
@@ -481,8 +492,56 @@ private fun TimePlanV2Detail(
                         label = label
                     )
                 )
-                if (candidate.conflicts.isEmpty()) onCommit(candidate.proposed)
+                if (candidate.conflicts.isEmpty()) {
+                    onCommit(candidate.proposed)
+                } else {
+                    pendingSimpleConflict = "경과시간을 저장할 수 없습니다." to candidate.conflicts
+                }
                 editingLink = null
+            }
+        )
+    }
+
+    pendingSimpleConflict?.let { (heading, conflicts) ->
+        AlertDialog(
+            onDismissRequest = { pendingSimpleConflict = null },
+            title = { Text("시간 관계를 확인해 주세요") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(heading)
+                    Text(
+                        when {
+                            conflicts.any {
+                                it.type ==
+                                    TimePlanCandidateEngine.ConflictType.RANGE_ORDER_INVALID
+                            } ->
+                                "시간범위의 시작과 종료 순서를 확인해 주세요."
+
+                            conflicts.any {
+                                it.type ==
+                                    TimePlanCandidateEngine.ConflictType
+                                        .EXPLICIT_DURATION_CLOCK_MISMATCH
+                            } ->
+                                "입력한 경과시간과 지점 시각의 관계가 서로 맞지 않습니다. 지점 시각 또는 경과시간을 조정해 주세요."
+
+                            else ->
+                                "현재 입력값이 다른 시간 관계와 충돌합니다. 앞뒤 지점의 시각과 경과시간을 확인해 주세요."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ArmyristColors.SecondaryText
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { pendingSimpleConflict = null },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ArmyristColors.PrimaryControl,
+                        contentColor = ArmyristColors.OnDark
+                    )
+                ) {
+                    Text("확인")
+                }
             }
         )
     }
