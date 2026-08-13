@@ -13,7 +13,7 @@ import org.json.JSONObject
  * Container encryption/integrity semantics remain in ArmyristPortableDataManager.
  */
 object TimePlanPortableV3Bridge {
-    const val SCHEMA = 3
+    const val SCHEMA = 4
     const val V3_PREFS = DateAwareTimePlanRepository.PREFS
     const val V3_KEY = DateAwareTimePlanRepository.KEY
     const val V2_PREFS = "armyrist_timeplan_v2"
@@ -35,7 +35,8 @@ object TimePlanPortableV3Bridge {
     }
 
     fun validateV3(root: JSONObject) {
-        require(root.getInt("schemaVersion") == SCHEMA)
+        val schema = root.getInt("schemaVersion")
+        require(schema == 3 || schema == SCHEMA)
         val plans = root.optJSONArray("plans") ?: JSONArray()
         for (i in 0 until plans.length()) TimePlanPortableV3Codec.decode(plans.getJSONObject(i))
     }

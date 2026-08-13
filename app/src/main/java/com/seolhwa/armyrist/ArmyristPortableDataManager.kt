@@ -64,7 +64,7 @@ object ArmyristPortableDataManager {
     const val FORMAT_IDENTIFIER = "ARMYRIST_DATA"
     const val FORMAT_VERSION = 1
     const val PAYLOAD_SCHEMA_VERSION = 1
-    const val TIME_PLAN_SCHEMA_VERSION = 3
+    const val TIME_PLAN_SCHEMA_VERSION = 4
 
     private const val COUNTING_PREFS = "armyrist_stage1"
     private const val COUNTING_KEY = "snapshot_v1"
@@ -317,15 +317,15 @@ object ArmyristPortableDataManager {
                 else 1
 
             val timePlanV3Snapshot =
-                if (timePlanSchema == 3) {
+                if (timePlanSchema == 3 || timePlanSchema == 4) {
                     payload.getJSONObject("timePlanV3Snapshot")
                 } else {
-                    JSONObject().put("schemaVersion", 3).put("plans", JSONArray())
+                    JSONObject().put("schemaVersion", 4).put("plans", JSONArray())
                 }
             TimePlanPortableV3Bridge.validateV3(timePlanV3Snapshot)
 
             val timePlanV2Snapshot = when (timePlanSchema) {
-                3 -> payload.optJSONObject("timePlanV2Snapshot")
+                3, 4 -> payload.optJSONObject("timePlanV2Snapshot")
                     ?: JSONObject().put("schemaVersion", 2).put("plans", JSONArray())
                 2 -> payload.getJSONObject("timePlanV2Snapshot")
                 else -> migrateLegacyBackupTimePlansToV2(core)
@@ -1108,7 +1108,7 @@ object ArmyristPortableDataManager {
                             is TimePlanPortableV1Migrator.Result.Failure -> error(migrated.reason)
                         }
                         2 -> TimePlanPortableV2Codec.encode(TimePlanPortableV2Codec.decode(rawDocument))
-                        3 -> TimePlanPortableV3Codec.encode(TimePlanPortableV3Codec.decode(rawDocument))
+                        3, 4 -> TimePlanPortableV3Codec.encode(TimePlanPortableV3Codec.decode(rawDocument))
                         else -> throw UnsupportedTimePlanSchemaException()
                     }
                 } else JSONObject(rawDocument.toString())
@@ -1174,7 +1174,7 @@ object ArmyristPortableDataManager {
                     )
                 }
                 ArmyristPortableDataType.TIME_PLAN -> {
-                    if (validated.timePlanSchemaVersion == 3) {
+                    if (validated.timePlanSchemaVersion == 3 || validated.timePlanSchemaVersion == 4) {
                         val revised = TimePlanPortableV3Codec.decode(validated.document)
                         val importedId = DateAwareTimePlanRepository(context).importAsNew(revised)
                             ?: error("TimePlan v3 import commit failed.")
@@ -1240,7 +1240,7 @@ object ArmyristPortableDataManager {
                 )
             }
 
-        if (version !in setOf(1, 2, TIME_PLAN_SCHEMA_VERSION)) {
+        if (version !in setOf(1, 2, 3, TIME_PLAN_SCHEMA_VERSION)) {
             throw UnsupportedTimePlanSchemaException()
         }
     }
@@ -1263,7 +1263,7 @@ object ArmyristPortableDataManager {
                 )
             }
 
-        if (version !in setOf(1, 2, TIME_PLAN_SCHEMA_VERSION)) {
+        if (version !in setOf(1, 2, 3, TIME_PLAN_SCHEMA_VERSION)) {
             throw UnsupportedTimePlanSchemaException()
         }
     }
