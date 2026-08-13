@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 43
-        versionName = "0.4.3-timeplan-constraint-rework"
+        versionCode = 44
+        versionName = "0.4.4-timeplan-ui-voice-session"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
