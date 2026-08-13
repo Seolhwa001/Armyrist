@@ -63,11 +63,27 @@ object KoreanVoiceStructurer {
             .split(Regex("[,，]| 그리고 | 그리고|,?\\s*및\\s*"))
             .map { it.trim() }
             .filter { it.isNotEmpty() }
-        val pattern = Regex("^(.+?)\\s+(\\d+|[가-힣]+)\\s*([가-힣A-Za-z]+)$")
+        // Keep Korean quantity words as whole tokens. A missing unit such as
+        // "건전지 여섯" must not backtrack into quantity="여", unit="섯".
+        val separatedPattern = Regex("^(.+?)\\s+(\\d+|[가-힣]+)\\s+([가-힣A-Za-z]+)$")
+        // Numeric quantity + unit is commonly spoken/transcribed without a space (e.g. "6개").
+        // This alternative is intentionally numeric-only so Hangul quantity words are never split.
+        val attachedNumericPattern = Regex("^(.+?)\\s+(\\d+)([가-힣A-Za-z]+)$")
         return chunks.map { chunk ->
-            val m = pattern.find(chunk)
+            val m = separatedPattern.matchEntire(chunk) ?: attachedNumericPattern.matchEntire(chunk)
             if (m == null) {
-                CountingVoiceDraft(chunk, null, null, state = DraftState.UNRESOLVED)
+                val tokens = chunk.split(Regex("\\s+"))
+                val trailingQuantity = tokens.lastOrNull()?.let(::numberOf)
+                if (tokens.size >= 2 && trailingQuantity != null) {
+                    CountingVoiceDraft(
+                        tokens.dropLast(1).joinToString(" "),
+                        trailingQuantity,
+                        null,
+                        state = DraftState.UNRESOLVED
+                    )
+                } else {
+                    CountingVoiceDraft(chunk, null, null, state = DraftState.UNRESOLVED)
+                }
             } else {
                 val q = numberOf(m.groupValues[2])
                 CountingVoiceDraft(
