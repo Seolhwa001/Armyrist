@@ -43,6 +43,7 @@ import com.seolhwa.armyrist.data.CountingRepository
 import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
 import com.seolhwa.armyrist.stage2.domain.ToolResult
 import com.seolhwa.armyrist.domain.*
+import com.seolhwa.armyrist.voice.*
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -450,6 +451,8 @@ private fun CountingScreen(
     var memoEdit by remember { mutableStateOf(false) }
     var groupManager by remember { mutableStateOf(false) }
     var menuTarget by remember { mutableStateOf<CountingItem?>(null) }
+    var voiceDrafts by remember { mutableStateOf<List<CountingVoiceDraft>?>(null) }
+    var voiceMessage by remember { mutableStateOf<String?>(null) }
 
     var groupPickerOpen by remember { mutableStateOf(false) }
     var assignmentGroupId by remember { mutableStateOf<String?>(null) }
@@ -529,6 +532,14 @@ private fun CountingScreen(
                 }
 
             }
+
+            OfflineVoiceButton(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                onTranscript = { transcript ->
+                    voiceDrafts = KoreanVoiceStructurer.counting(transcript)
+                },
+                onMessage = { voiceMessage = it }
+            )
 
             AggregateSummary(sheet)
             CalculationSummary(sheet)
@@ -1106,6 +1117,30 @@ private fun CountingScreen(
             memoEdit = false
             if (it != null) onMemo(it)
         }
+    }
+
+    voiceDrafts?.let { drafts ->
+        CountingVoiceReviewDialog(
+            initial = drafts,
+            onDismiss = { voiceDrafts = null },
+            onApply = { applied ->
+                applied.forEach { d ->
+                    val q = d.quantity ?: return@forEach
+                    val u = d.unit?.takeIf { it.isNotBlank() } ?: return@forEach
+                    onAddItem(d.name, q, u, d.note, null)
+                }
+                voiceDrafts = null
+            }
+        )
+    }
+
+    voiceMessage?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { voiceMessage = null },
+            title = { Text("음성 입력") },
+            text = { Text(msg) },
+            confirmButton = { TextButton(onClick = { voiceMessage = null }) { Text("확인") } }
+        )
     }
 }
 

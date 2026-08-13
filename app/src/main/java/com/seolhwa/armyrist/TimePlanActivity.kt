@@ -6,24 +6,19 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import com.seolhwa.armyrist.timeplan.ui.TimePlanV2App
+import com.seolhwa.armyrist.timeplan.v3.ui.DateAwareTimePlanApp
 
 class TimePlanActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val app = application as ArmyristApplication
-        val repository = app.timePlanV2Repository
-        val coreRepository = app.coreSuiteRepository
-
         setContent {
             ArmyristTheme {
-                Surface(
-                    Modifier.fillMaxSize(),
-                    color = ArmyristColors.AppBackground
-                ) {
-                    TimePlanV2App(
-                        repository = repository,
-                        coreRepository = coreRepository,
+                Surface(Modifier.fillMaxSize(), color = ArmyristColors.AppBackground) {
+                    DateAwareTimePlanApp(
+                        repository = app.dateAwareTimePlanRepository,
+                        legacyRepository = app.timePlanV2Repository,
+                        coreRepository = app.coreSuiteRepository,
                         onHome = { finish() }
                     )
                 }

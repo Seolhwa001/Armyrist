@@ -50,6 +50,7 @@ import androidx.compose.ui.zIndex
 import com.seolhwa.armyrist.notification.ChecklistNotificationManager
 import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
 import com.seolhwa.armyrist.stage2.domain.*
+import com.seolhwa.armyrist.voice.*
 import kotlin.math.roundToInt
 
 class ChecklistActivity : ComponentActivity() {
@@ -548,6 +549,8 @@ private fun ChecklistDetailScreen(
     var trashOpen by remember { mutableStateOf(false) }
     var permanentDeleteTarget by remember { mutableStateOf<ChecklistItem?>(null) }
     var viewMode by remember { mutableStateOf(ChecklistViewMode.DETAIL) }
+    var voiceDrafts by remember { mutableStateOf<List<ChecklistVoiceDraft>?>(null) }
+    var voiceMessage by remember { mutableStateOf<String?>(null) }
 
     var assignmentGroupId by remember { mutableStateOf<String?>(null) }
     var assignmentUngroup by remember { mutableStateOf(false) }
@@ -623,6 +626,14 @@ private fun ChecklistDetailScreen(
                 }
 
             }
+
+            OfflineVoiceButton(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                onTranscript = { transcript ->
+                    voiceDrafts = KoreanVoiceStructurer.checklist(transcript)
+                },
+                onMessage = { voiceMessage = it }
+            )
 
             ChecklistProgressSummary(checklist)
 
@@ -1063,6 +1074,35 @@ private fun ChecklistDetailScreen(
             dismissButton = {
                 TextButton(onClick = { permanentDeleteTarget = null }) { Text("취소") }
             }
+        )
+    }
+
+    voiceDrafts?.let { drafts ->
+        ChecklistVoiceReviewDialog(
+            initial = drafts,
+            onDismiss = { voiceDrafts = null },
+            onApply = { applied ->
+                applied.forEach { d ->
+                    onAddItem(
+                        d.name,
+                        d.note,
+                        null,
+                        false,
+                        d.scheduledTimeMinutes,
+                        null
+                    )
+                }
+                voiceDrafts = null
+            }
+        )
+    }
+
+    voiceMessage?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { voiceMessage = null },
+            title = { Text("음성 입력") },
+            text = { Text(msg) },
+            confirmButton = { TextButton(onClick = { voiceMessage = null }) { Text("확인") } }
         )
     }
 }

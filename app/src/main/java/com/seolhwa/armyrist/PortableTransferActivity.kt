@@ -471,6 +471,18 @@ class PortableTransferActivity : ComponentActivity() {
                                     "기존 문서는 변경하지 않고 새로운 문서로 추가됩니다.",
                                     color = ArmyristColors.SecondaryText
                                 )
+                                if (
+                                    p.dataType == ArmyristPortableDataType.TIME_PLAN &&
+                                    data.timePlanSchemaVersion != null &&
+                                    data.timePlanSchemaVersion < ArmyristPortableDataManager.TIME_PLAN_SCHEMA_VERSION
+                                ) {
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        "날짜 기능 이전 시간계획입니다. 가져온 뒤 처음 열 때 기준 날짜를 직접 지정해야 합니다.",
+                                        color = ArmyristColors.PrimaryControl,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                                 Spacer(Modifier.height(14.dp))
                                 Button(
                                     onClick = {

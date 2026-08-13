@@ -5,6 +5,10 @@ import android.util.Base64
 import com.seolhwa.armyrist.timeplan.data.TimePlanV2Repository
 import com.seolhwa.armyrist.timeplan.portable.TimePlanPortableV1Migrator
 import com.seolhwa.armyrist.timeplan.portable.TimePlanPortableV2Codec
+import com.seolhwa.armyrist.timeplan.v3.data.DateAwareTimePlanRepository
+import com.seolhwa.armyrist.timeplan.v3.data.LegacyDateMigration
+import com.seolhwa.armyrist.timeplan.v3.portable.TimePlanPortableV3Codec
+import java.time.LocalDate
 import org.json.JSONArray
 import org.json.JSONObject
 import java.security.MessageDigest
@@ -40,6 +44,7 @@ data class ValidatedBackup(
     val countingSnapshot: String,
     val coreSnapshot: String,
     val timePlanV2Snapshot: String,
+    val timePlanV3Snapshot: String,
     val intervalLabels: Map<String, String>
 )
 
@@ -59,7 +64,7 @@ object ArmyristPortableDataManager {
     const val FORMAT_IDENTIFIER = "ARMYRIST_DATA"
     const val FORMAT_VERSION = 1
     const val PAYLOAD_SCHEMA_VERSION = 1
-    const val TIME_PLAN_SCHEMA_VERSION = 2
+    const val TIME_PLAN_SCHEMA_VERSION = 3
 
     private const val COUNTING_PREFS = "armyrist_stage1"
     private const val COUNTING_KEY = "snapshot_v1"
@@ -71,6 +76,8 @@ object ArmyristPortableDataManager {
         "armyrist_timeplan_interval_labels"
     private const val TIMEPLAN_V2_PREFS = "armyrist_timeplan_v2"
     private const val TIMEPLAN_V2_KEY = "snapshot_v2"
+    private const val TIMEPLAN_V3_PREFS = "armyrist_timeplan_v3"
+    private const val TIMEPLAN_V3_KEY = "snapshot_v3"
 
     private const val JOURNAL_PREFS =
         "armyrist_stage3_restore_journal"
@@ -118,6 +125,12 @@ object ArmyristPortableDataManager {
                 TIMEPLAN_V2_KEY,
                 old.optStringOrNull("timePlanV2")
             )
+            restoreStringPreference(
+                context,
+                TIMEPLAN_V3_PREFS,
+                TIMEPLAN_V3_KEY,
+                old.optStringOrNull("timePlanV3")
+            )
             restoreStringMap(
                 context,
                 TIMEPLAN_LABEL_PREFS,
@@ -141,7 +154,9 @@ object ArmyristPortableDataManager {
             checklists =
                 core.optJSONArray("checklists")?.length() ?: 0,
             timePlans =
-                TimePlanV2Repository(context).getPlans().size,
+                DateAwareTimePlanRepository(context).getPlans().size +
+                    TimePlanPortableV3Bridge.unmigratedV2Snapshot(context)
+                        .optJSONArray("plans")!!.length(),
             reportTemplates =
                 core.optJSONArray("reportTemplates")?.length() ?: 0,
             userProfileIncluded = true,
@@ -162,7 +177,9 @@ object ArmyristPortableDataManager {
                 readStringMap(context, TIMEPLAN_LABEL_PREFS)
 
             val timePlanV2Snapshot =
-                JSONObject(TimePlanV2Repository(context).exportPortableSnapshot())
+                TimePlanPortableV3Bridge.unmigratedV2Snapshot(context)
+            val timePlanV3Snapshot =
+                TimePlanPortableV3Bridge.v3Snapshot(context)
 
             val payloadObject = JSONObject()
                 .put("schemaVersion", PAYLOAD_SCHEMA_VERSION)
@@ -174,6 +191,7 @@ object ArmyristPortableDataManager {
                 .put("countingSnapshot", countingRoot)
                 .put("coreSnapshot", coreRoot)
                 .put("timePlanV2Snapshot", timePlanV2Snapshot)
+                .put("timePlanV3Snapshot", timePlanV3Snapshot)
                 .put(
                     "intervalLabels",
                     JSONObject(intervalLabels as Map<*, *>)
@@ -298,12 +316,20 @@ object ArmyristPortableDataManager {
                     payload.getJSONObject("toolSchemas").getInt("timePlan")
                 else 1
 
-            val timePlanV2Snapshot =
-                if (timePlanSchema == 2) {
-                    payload.getJSONObject("timePlanV2Snapshot")
+            val timePlanV3Snapshot =
+                if (timePlanSchema == 3) {
+                    payload.getJSONObject("timePlanV3Snapshot")
                 } else {
-                    migrateLegacyBackupTimePlansToV2(core)
+                    JSONObject().put("schemaVersion", 3).put("plans", JSONArray())
                 }
+            TimePlanPortableV3Bridge.validateV3(timePlanV3Snapshot)
+
+            val timePlanV2Snapshot = when (timePlanSchema) {
+                3 -> payload.optJSONObject("timePlanV2Snapshot")
+                    ?: JSONObject().put("schemaVersion", 2).put("plans", JSONArray())
+                2 -> payload.getJSONObject("timePlanV2Snapshot")
+                else -> migrateLegacyBackupTimePlansToV2(core)
+            }
             validateTimePlanV2Snapshot(timePlanV2Snapshot)
             val labels =
                 payload.optJSONObject("intervalLabels") ?: JSONObject()
@@ -325,9 +351,8 @@ object ArmyristPortableDataManager {
                         core.optJSONArray("checklists")
                             ?.length() ?: 0,
                     timePlans =
-                        validatedRestorableTimePlanCount(
-                            timePlanV2Snapshot
-                        ),
+                        TimePlanPortableV3Bridge.v3Count(timePlanV3Snapshot) +
+                            validatedRestorableTimePlanCount(timePlanV2Snapshot),
                     reportTemplates =
                         core.optJSONArray("reportTemplates")
                             ?.length() ?: 0,
@@ -338,6 +363,7 @@ object ArmyristPortableDataManager {
                 countingSnapshot = counting.toString(),
                 coreSnapshot = core.toString(),
                 timePlanV2Snapshot = timePlanV2Snapshot.toString(),
+                timePlanV3Snapshot = timePlanV3Snapshot.toString(),
                 intervalLabels = labelMap
             )
         }.fold(
@@ -369,8 +395,12 @@ object ArmyristPortableDataManager {
             // Re-validate before any mutation.
             val counting = JSONObject(backup.countingSnapshot)
             val core = JSONObject(backup.coreSnapshot)
+            val timePlanV2 = JSONObject(backup.timePlanV2Snapshot)
+            val timePlanV3 = JSONObject(backup.timePlanV3Snapshot)
             validateCountingSnapshot(counting)
             validateCoreSnapshot(core)
+            validateTimePlanV2Snapshot(timePlanV2)
+            TimePlanPortableV3Bridge.validateV3(timePlanV3)
 
             val oldCounting = context.getSharedPreferences(
                 COUNTING_PREFS,
@@ -385,6 +415,10 @@ object ArmyristPortableDataManager {
                 TIMEPLAN_V2_PREFS,
                 Context.MODE_PRIVATE
             ).getString(TIMEPLAN_V2_KEY, null)
+            val oldTimePlanV3 = context.getSharedPreferences(
+                TIMEPLAN_V3_PREFS,
+                Context.MODE_PRIVATE
+            ).getString(TIMEPLAN_V3_KEY, null)
 
             val oldLabels =
                 readStringMap(context, TIMEPLAN_LABEL_PREFS)
@@ -401,6 +435,10 @@ object ArmyristPortableDataManager {
                 .put(
                     "timePlanV2",
                     oldTimePlanV2 ?: JSONObject.NULL
+                )
+                .put(
+                    "timePlanV3",
+                    oldTimePlanV3 ?: JSONObject.NULL
                 )
                 .put(
                     "intervalLabels",
@@ -456,6 +494,17 @@ object ArmyristPortableDataManager {
                         .putString(
                             TIMEPLAN_V2_KEY,
                             backup.timePlanV2Snapshot
+                        )
+                        .commit()
+                )
+                require(
+                    context.getSharedPreferences(
+                        TIMEPLAN_V3_PREFS,
+                        Context.MODE_PRIVATE
+                    ).edit()
+                        .putString(
+                            TIMEPLAN_V3_KEY,
+                            backup.timePlanV3Snapshot
                         )
                         .commit()
                 )
@@ -945,7 +994,8 @@ object ArmyristPortableDataManager {
 
     data class ValidatedPortableDocument(
         val preview: PortableDocumentPreview,
-        val document: JSONObject
+        val document: JSONObject,
+        val timePlanSchemaVersion: Int? = null
     )
 
     /**
@@ -967,8 +1017,8 @@ object ArmyristPortableDataManager {
                 ArmyristPortableDataType.CHECKLIST ->
                     findById(readCoreRoot(context).optJSONArray("checklists"), rootId)
                 ArmyristPortableDataType.TIME_PLAN ->
-                    TimePlanV2Repository(context).getPlan(rootId)
-                        ?.let(TimePlanPortableV2Codec::encode)
+                    DateAwareTimePlanRepository(context).getPlan(rootId)
+                        ?.let(TimePlanPortableV3Codec::encode)
                 ArmyristPortableDataType.REPORT_TEMPLATE ->
                     findById(readCoreRoot(context).optJSONArray("reportTemplates"), rootId)
                 ArmyristPortableDataType.BACKUP -> error("unsupported")
@@ -1046,27 +1096,22 @@ object ArmyristPortableDataManager {
             )
 
             val rawDocument = payload.getJSONObject("document")
+            val timePlanVersion = if (type == ArmyristPortableDataType.TIME_PLAN) {
+                if (payload.has("toolSchemaVersion")) payload.getInt("toolSchemaVersion")
+                else migrateLegacyTimePlanSchemaVersion(payloadSchemaVersion)
+            } else null
             val document =
                 if (type == ArmyristPortableDataType.TIME_PLAN) {
-                    val version =
-                        if (payload.has("toolSchemaVersion"))
-                            payload.getInt("toolSchemaVersion")
-                        else migrateLegacyTimePlanSchemaVersion(payloadSchemaVersion)
-
-                    val revised = when (version) {
-                        1 -> when (val migrated =
-                            TimePlanPortableV1Migrator.migrate(rawDocument)) {
-                            is TimePlanPortableV1Migrator.Result.Success -> migrated.value
-                            is TimePlanPortableV1Migrator.Result.Failure ->
-                                error(migrated.reason)
+                    when (timePlanVersion) {
+                        1 -> when (val migrated = TimePlanPortableV1Migrator.migrate(rawDocument)) {
+                            is TimePlanPortableV1Migrator.Result.Success -> TimePlanPortableV2Codec.encode(migrated.value)
+                            is TimePlanPortableV1Migrator.Result.Failure -> error(migrated.reason)
                         }
-                        2 -> TimePlanPortableV2Codec.decode(rawDocument)
+                        2 -> TimePlanPortableV2Codec.encode(TimePlanPortableV2Codec.decode(rawDocument))
+                        3 -> TimePlanPortableV3Codec.encode(TimePlanPortableV3Codec.decode(rawDocument))
                         else -> throw UnsupportedTimePlanSchemaException()
                     }
-                    TimePlanPortableV2Codec.encode(revised)
-                } else {
-                    JSONObject(rawDocument.toString())
-                }
+                } else JSONObject(rawDocument.toString())
 
             if (type != ArmyristPortableDataType.TIME_PLAN) {
                 validateIndividualDocument(type, document)
@@ -1077,7 +1122,8 @@ object ArmyristPortableDataManager {
                     preview = buildPortablePreview(
                         type, document, encrypted, outer.getString("createdAt")
                     ),
-                    document = document
+                    document = document,
+                    timePlanSchemaVersion = timePlanVersion
                 )
             )
         }.getOrElse {
@@ -1128,11 +1174,19 @@ object ArmyristPortableDataManager {
                     )
                 }
                 ArmyristPortableDataType.TIME_PLAN -> {
-                    val revised = TimePlanPortableV2Codec.decode(validated.document)
-                    val importedId =
-                        TimePlanV2Repository(context).importPortableAsNew(revised)
-                            ?: error("TimePlan v2 import commit failed.")
-                    return@runCatching importedId
+                    if (validated.timePlanSchemaVersion == 3) {
+                        val revised = TimePlanPortableV3Codec.decode(validated.document)
+                        val importedId = DateAwareTimePlanRepository(context).importAsNew(revised)
+                            ?: error("TimePlan v3 import commit failed.")
+                        return@runCatching importedId
+                    } else {
+                        // Legacy portable material remains date-less by contract.
+                        // Import it as a new legacy v2 plan; first opening in TimePlan asks the user for a base date.
+                        val revised = TimePlanPortableV2Codec.decode(validated.document)
+                        val importedId = TimePlanV2Repository(context).importPortableAsNew(revised)
+                            ?: error("Legacy TimePlan import commit failed.")
+                        return@runCatching importedId
+                    }
                 }
                 ArmyristPortableDataType.CHECKLIST,
                 ArmyristPortableDataType.REPORT_TEMPLATE -> {
@@ -1186,7 +1240,7 @@ object ArmyristPortableDataManager {
                 )
             }
 
-        if (version !in setOf(1, TIME_PLAN_SCHEMA_VERSION)) {
+        if (version !in setOf(1, 2, TIME_PLAN_SCHEMA_VERSION)) {
             throw UnsupportedTimePlanSchemaException()
         }
     }
@@ -1209,7 +1263,7 @@ object ArmyristPortableDataManager {
                 )
             }
 
-        if (version !in setOf(1, TIME_PLAN_SCHEMA_VERSION)) {
+        if (version !in setOf(1, 2, TIME_PLAN_SCHEMA_VERSION)) {
             throw UnsupportedTimePlanSchemaException()
         }
     }
