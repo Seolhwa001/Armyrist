@@ -45,4 +45,20 @@ class VoiceStructuringTest {
         assertEquals(DraftState.UNRESOLVED,d.single().state)
         assertNull(d.single().dateTime)
     }
+
+    @Test
+    fun countingNumericQuantityWithSeparatedUnitIsReady() {
+        val d = KoreanVoiceStructurer.counting("건전지 6 개").single()
+        assertEquals(6, d.quantity)
+        assertEquals("개", d.unit)
+        assertEquals(DraftState.READY, d.state)
+    }
+
+    @Test
+    fun countingNumericQuantityWithAttachedUnitIsReady() {
+        val d = KoreanVoiceStructurer.counting("건전지 6개").single()
+        assertEquals(6, d.quantity)
+        assertEquals("개", d.unit)
+        assertEquals(DraftState.READY, d.state)
+    }
 }
