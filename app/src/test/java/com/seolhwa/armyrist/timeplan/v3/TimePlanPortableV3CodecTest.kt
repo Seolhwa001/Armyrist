@@ -29,4 +29,46 @@ class TimePlanPortableV3CodecTest {
         assertEquals(p.start.value.value,fresh.start.value.value)
         assertEquals(p.end.value.value,fresh.end.value.value)
     }
+
+
+    @Test fun roundTripPreservesLockState() {
+        val mid=DateTimeEvent(
+            "m",TimeEventKind.MIDWAY,0,"locked",
+            EventDateTimeSpec.Single(DateTimeValue.explicit(LocalDateTime.of(2026,8,14,10,0))),
+            dateTimeLocked=true
+        )
+        var p=DateTimePlanRules.normalizeTopology(DateAwareTimePlan(
+            "p","locks",
+            start=DateTimeAnchor(DateTimeValue.explicit(LocalDateTime.of(2026,8,14,9,0)),dateTimeLocked=true),
+            midwayEvents=listOf(mid),
+            end=DateTimeAnchor(DateTimeValue.explicit(LocalDateTime.of(2026,8,14,11,0))),
+            createdAt="0",updatedAt="0"
+        ))
+        p=DateTimePlanRules.setLinkLock(p,DateTimePlanRules.START_ID,"m",true)
+        val encoded=TimePlanPortableV3Codec.encode(p)
+        assertEquals(4,encoded.getInt("schemaVersion"))
+        val decoded=TimePlanPortableV3Codec.decode(encoded)
+        assertTrue(decoded.start.dateTimeLocked)
+        assertTrue(decoded.midwayEvents.first().dateTimeLocked)
+        assertTrue(decoded.links.first().durationLocked)
+    }
+
+    @Test fun legacySchema3DefaultsLocksFalse() {
+        val p=DateAwareTimePlan(
+            "p","legacy-v3",
+            start=DateTimeAnchor(DateTimeValue.explicit(LocalDateTime.of(2026,8,14,9,0))),
+            end=DateTimeAnchor(DateTimeValue.explicit(LocalDateTime.of(2026,8,14,10,0))),
+            createdAt="0",updatedAt="0"
+        )
+        val legacy=TimePlanPortableV3Codec.encode(p)
+        legacy.put("schemaVersion",3)
+        legacy.getJSONObject("start").remove("dateTimeLocked")
+        legacy.getJSONObject("end").remove("dateTimeLocked")
+        val links=legacy.getJSONArray("links")
+        for(i in 0 until links.length()) links.getJSONObject(i).remove("durationLocked")
+        val decoded=TimePlanPortableV3Codec.decode(legacy)
+        assertFalse(decoded.start.dateTimeLocked)
+        assertFalse(decoded.end.dateTimeLocked)
+        assertTrue(decoded.links.all{!it.durationLocked})
+    }
 }
