@@ -33,12 +33,15 @@ import com.seolhwa.armyrist.ArmyristPanelShape
 enum class VoiceUiState { IDLE, LISTENING, RECOGNIZING, STRUCTURING, REVIEW, ERROR, UNAVAILABLE }
 class OfflineSpeechSession(private val context: Context) {
     private var recognizer: SpeechRecognizer? = null
+    private var keepListening = false
+    private var accumulated = mutableListOf<String>()
+    private var stateCallback: ((VoiceUiState) -> Unit)? = null
+    private var transcriptCallback: ((String) -> Unit)? = null
+    private var errorCallback: ((String) -> Unit)? = null
 
     fun available(): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            runCatching {
-                SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
-            }.getOrDefault(false)
+            runCatching { SpeechRecognizer.isOnDeviceRecognitionAvailable(context) }.getOrDefault(false)
 
     fun start(
         onState: (VoiceUiState) -> Unit,
@@ -50,40 +53,54 @@ class OfflineSpeechSession(private val context: Context) {
             onError("이 기기에서 오프라인 음성인식을 사용할 수 없습니다.")
             return
         }
-        destroy()
-        val sr = runCatching {
-            SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
-        }.getOrNull()
+        destroyRecognizer()
+        accumulated.clear()
+        keepListening = true
+        stateCallback = onState
+        transcriptCallback = onTranscript
+        errorCallback = onError
+        beginRecognition()
+    }
+
+    private fun beginRecognition() {
+        if (!keepListening) return
+        val sr = runCatching { SpeechRecognizer.createOnDeviceSpeechRecognizer(context) }.getOrNull()
         if (sr == null) {
-            onState(VoiceUiState.UNAVAILABLE)
-            onError("이 기기에서 오프라인 음성인식을 시작할 수 없습니다.")
+            keepListening = false
+            stateCallback?.invoke(VoiceUiState.UNAVAILABLE)
+            errorCallback?.invoke("이 기기에서 오프라인 음성인식을 시작할 수 없습니다.")
             return
         }
         recognizer = sr
         sr.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) { onState(VoiceUiState.LISTENING) }
-            override fun onBeginningOfSpeech() { onState(VoiceUiState.LISTENING) }
+            override fun onReadyForSpeech(params: Bundle?) { stateCallback?.invoke(VoiceUiState.LISTENING) }
+            override fun onBeginningOfSpeech() { stateCallback?.invoke(VoiceUiState.LISTENING) }
             override fun onRmsChanged(rmsdB: Float) = Unit
             override fun onBufferReceived(buffer: ByteArray?) = Unit
-            override fun onEndOfSpeech() { onState(VoiceUiState.RECOGNIZING) }
+            override fun onEndOfSpeech() { stateCallback?.invoke(VoiceUiState.RECOGNIZING) }
             override fun onError(error: Int) {
-                onState(VoiceUiState.ERROR)
-                onError("음성인식에 실패했습니다. 다시 시도해주세요.")
-                destroy()
+                destroyRecognizer()
+                if (keepListening && (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)) {
+                    beginRecognition()
+                } else if (keepListening) {
+                    keepListening = false
+                    stateCallback?.invoke(VoiceUiState.ERROR)
+                    errorCallback?.invoke("음성인식에 실패했습니다. 다시 시도해주세요.")
+                } else {
+                    finishAccumulated()
+                }
             }
             override fun onResults(results: Bundle?) {
-                val text = results
-                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    ?.firstOrNull()
-                    ?.trim()
-                if (text.isNullOrEmpty()) {
-                    onState(VoiceUiState.ERROR)
-                    onError("인식된 음성이 없습니다.")
+                results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    ?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let(accumulated::add)
+                destroyRecognizer()
+                if (keepListening) {
+                    // Android recognizers normally finish after a phrase. Keep the Armyrist voice
+                    // session alive by starting the next offline recognition turn and accumulating it.
+                    beginRecognition()
                 } else {
-                    onState(VoiceUiState.STRUCTURING)
-                    onTranscript(text)
+                    finishAccumulated()
                 }
-                destroy()
             }
             override fun onPartialResults(partialResults: Bundle?) = Unit
             override fun onEvent(eventType: Int, params: Bundle?) = Unit
@@ -97,9 +114,34 @@ class OfflineSpeechSession(private val context: Context) {
         })
     }
 
-    fun stop() { recognizer?.stopListening() }
-    fun cancel() { recognizer?.cancel(); destroy() }
-    fun destroy() { recognizer?.destroy(); recognizer = null }
+    private fun finishAccumulated() {
+        val text = accumulated.joinToString(", ").trim()
+        if (text.isEmpty()) {
+            stateCallback?.invoke(VoiceUiState.ERROR)
+            errorCallback?.invoke("인식된 음성이 없습니다.")
+        } else {
+            stateCallback?.invoke(VoiceUiState.STRUCTURING)
+            transcriptCallback?.invoke(text)
+        }
+        accumulated.clear()
+    }
+
+    fun stop() {
+        if (!keepListening) return
+        keepListening = false
+        stateCallback?.invoke(VoiceUiState.RECOGNIZING)
+        recognizer?.stopListening() ?: finishAccumulated()
+    }
+
+    fun cancel() {
+        keepListening = false
+        accumulated.clear()
+        recognizer?.cancel()
+        destroyRecognizer()
+    }
+
+    private fun destroyRecognizer() { recognizer?.destroy(); recognizer = null }
+    fun destroy() { cancel(); stateCallback = null; transcriptCallback = null; errorCallback = null }
 }
 
 @Composable
