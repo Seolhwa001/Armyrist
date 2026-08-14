@@ -534,6 +534,7 @@ private fun CountingScreen(
             }
 
             OfflineVoiceButton(
+                toolContext = VoiceToolContext.COUNTING,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                 onTranscript = { transcript ->
                     voiceDrafts = KoreanVoiceStructurer.counting(transcript)

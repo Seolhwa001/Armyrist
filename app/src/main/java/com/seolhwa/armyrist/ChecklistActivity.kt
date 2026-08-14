@@ -665,6 +665,7 @@ private fun ChecklistDetailScreen(
             }
 
             OfflineVoiceButton(
+                toolContext = VoiceToolContext.CHECKLIST,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                 onTranscript = { transcript ->
                     voiceDrafts = KoreanVoiceStructurer.checklist(transcript)
