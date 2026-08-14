@@ -169,7 +169,7 @@ class VoiceStructuringTest {
 
     @Test
     fun rawTranscriptIsPreservedPerDraft() {
-        val d = KoreanVoiceStructurer.counting("고양이 세 마리\\n강아지 세 마리")
+        val d = KoreanVoiceStructurer.counting("고양이 세 마리\n강아지 세 마리")
         assertEquals(listOf("고양이 세 마리", "강아지 세 마리"), d.map { it.rawTranscript })
     }
 
