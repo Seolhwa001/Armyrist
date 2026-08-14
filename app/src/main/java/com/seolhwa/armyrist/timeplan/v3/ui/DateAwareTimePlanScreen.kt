@@ -513,7 +513,7 @@ private fun DateAwarePlanDetail(
     message?.let { AlertDialog(onDismissRequest={message=null},title={Text("확인")},text={Text(it)},confirmButton={TextButton(onClick={message=null}){Text("확인")}}) }
     voiceDrafts?.let { drafts ->
         TimePlanVoiceReviewDialog(drafts, onDismiss={voiceDrafts=null}) { applied ->
-            val ready=applied.filter{it.state!=DraftState.UNRESOLVED && it.dateTime!=null}
+            val ready=applied.filter{it.state!=VoiceDraftState.INVALID && it.dateTime!=null}
             if(ready.isEmpty()) { message="적용 가능한 일정이 없습니다."; return@TimePlanVoiceReviewDialog }
             val existing=plan.midwayEvents.sortedBy{it.order}.toMutableList()
             ready.forEach { d ->
@@ -1094,46 +1094,92 @@ private fun TimePlanVoiceReviewDialog(
     var drafts by remember { mutableStateOf(initial) }
     var editingDateIndex by remember { mutableStateOf<Int?>(null) }
     var editingRangeEndIndex by remember { mutableStateOf<Int?>(null) }
+
+    fun update(index: Int, draft: TimePlanVoiceDraft) {
+        drafts = drafts.toMutableList().also { it[index] = KoreanVoiceStructurer.revalidate(draft) }
+    }
+
     Dialog(onDismissRequest = onDismiss) {
-        Card(Modifier.fillMaxWidth().fillMaxHeight(.86f), shape = ArmyristPanelShape) {
+        Card(Modifier.fillMaxWidth().fillMaxHeight(.88f).imePadding(), shape = ArmyristPanelShape) {
             Column(Modifier.padding(14.dp)) {
                 Text("음성 입력 검토", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Text(
-                    "적용 전에는 기존 시간계획이 변경되지 않습니다. 날짜/시간이 불확실한 항목은 직접 확인해주세요.",
+                    "아래 Draft를 확인하고 필요한 항목을 수정하세요. 적용 전에는 기존 시간계획이 변경되지 않습니다.",
                     style = MaterialTheme.typography.bodySmall,
                     color = ArmyristColors.SecondaryText
                 )
+                Spacer(Modifier.height(8.dp))
+
                 LazyColumn(
                     Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(drafts.indices.toList(), key = { it }) { i ->
                         val d = drafts[i]
+                        val timeFieldState = when {
+                            d.dateTimeState == VoiceFieldState.INVALID || d.rangeEndState == VoiceFieldState.INVALID -> VoiceFieldState.INVALID
+                            d.dateTimeState == VoiceFieldState.REVIEW_REQUIRED || d.rangeEndState == VoiceFieldState.REVIEW_REQUIRED -> VoiceFieldState.REVIEW_REQUIRED
+                            else -> VoiceFieldState.VALID
+                        }
+                        val borderColor = when (d.state) {
+                            VoiceDraftState.VALID -> ArmyristColors.Border
+                            VoiceDraftState.REVIEW_REQUIRED -> Color(0xFFC77800)
+                            VoiceDraftState.INVALID -> ArmyristColors.Danger
+                        }
                         Card(
                             Modifier.fillMaxWidth(),
-                            border = BorderStroke(
-                                1.dp,
-                                if (d.state == DraftState.READY && d.dateTime != null) ArmyristColors.Border
-                                else ArmyristColors.PrimaryControl
-                            )
+                            border = BorderStroke(1.dp, borderColor)
                         ) {
-                            Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                VoiceDraftStatusHeader(d.state)
+
                                 OutlinedTextField(
-                                    d.name,
-                                    { v -> drafts = drafts.toMutableList().also { it[i] = d.copy(name = v) } },
+                                    value = d.name,
+                                    onValueChange = { v ->
+                                        update(i, d.copy(
+                                            name = v,
+                                            nameState = if (v.isBlank()) VoiceFieldState.INVALID else VoiceFieldState.VALID
+                                        ))
+                                    },
                                     label = { Text("일정명") },
+                                    trailingIcon = { VoiceFieldMarker(d.nameState) },
+                                    colors = voiceReviewFieldColors(d.nameState),
                                     modifier = Modifier.fillMaxWidth()
                                 )
-                                Text(
-                                    when {
-                                        d.dateTime == null -> "날짜/시간 확인 필요"
-                                        d.rangeEnd != null ->
-                                            "${d.dateTime.format(DateTimeFormatter.ofPattern("yyyy.MM.dd HH:mm"))} ~ " +
-                                                d.rangeEnd.format(DateTimeFormatter.ofPattern("yyyy.MM.dd HH:mm"))
-                                        else -> d.dateTime.format(DateTimeFormatter.ofPattern("yyyy.MM.dd HH:mm"))
-                                    },
-                                    color = if (d.dateTime == null) MaterialTheme.colorScheme.error else ArmyristColors.PrimaryText
-                                )
+
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = ArmyristPanelShape,
+                                    color = ArmyristColors.WorkSurface,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        when (timeFieldState) {
+                                            VoiceFieldState.VALID -> ArmyristColors.Border
+                                            VoiceFieldState.REVIEW_REQUIRED -> Color(0xFFC77800)
+                                            VoiceFieldState.INVALID -> ArmyristColors.Danger
+                                        }
+                                    )
+                                ) {
+                                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text("날짜 / 시간", style = MaterialTheme.typography.labelMedium)
+                                        Text(
+                                            when {
+                                                d.dateTime == null -> "날짜/시간 확인 필요"
+                                                d.rangeEnd != null ->
+                                                    "${d.dateTime.format(DateTimeFormatter.ofPattern("yyyy.MM.dd HH:mm"))} ~ " +
+                                                        d.rangeEnd.format(DateTimeFormatter.ofPattern("yyyy.MM.dd HH:mm"))
+                                                else -> d.dateTime.format(DateTimeFormatter.ofPattern("yyyy.MM.dd HH:mm"))
+                                            },
+                                            fontWeight = FontWeight.Bold,
+                                            color = when (timeFieldState) {
+                                                VoiceFieldState.VALID -> ArmyristColors.PrimaryText
+                                                VoiceFieldState.REVIEW_REQUIRED -> Color(0xFFC77800)
+                                                VoiceFieldState.INVALID -> ArmyristColors.Danger
+                                            }
+                                        )
+                                    }
+                                }
+
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     OutlinedButton(onClick = { editingDateIndex = i }) {
                                         Text(if (d.rangeEnd != null) "시작 수정" else "날짜/시간 수정")
@@ -1145,18 +1191,18 @@ private fun TimePlanVoiceReviewDialog(
                                         drafts = drafts.filterIndexed { idx, _ -> idx != i }
                                     }) { Text("삭제") }
                                 }
+
+                                VoiceTranscriptDisclosure(d.rawTranscript)
                             }
                         }
                     }
                 }
+
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("전체 취소") }
                     Button(
                         onClick = { onApply(drafts) },
-                        enabled = drafts.isNotEmpty() && drafts.all {
-                            it.name.isNotBlank() && it.dateTime != null &&
-                                (it.rangeEnd == null || !it.rangeEnd.isBefore(it.dateTime))
-                        },
+                        enabled = drafts.isNotEmpty() && drafts.none { it.state == VoiceDraftState.INVALID },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(containerColor = ArmyristColors.PrimaryControl)
                     ) { Text("적용") }
@@ -1173,13 +1219,16 @@ private fun TimePlanVoiceReviewDialog(
                 initial = current.dateTime,
                 onDismiss = { editingDateIndex = null },
                 onConfirm = { dt ->
-                    drafts = drafts.toMutableList().also {
-                        val old = it[index]
-                        it[index] = old.copy(
-                            dateTime = dt,
-                            state = if (old.rangeEnd == null || !old.rangeEnd.isBefore(dt)) DraftState.READY else DraftState.REVIEW_REQUIRED
-                        )
+                    val endState = when {
+                        current.rangeEnd == null -> current.rangeEndState
+                        current.rangeEnd.isBefore(dt) -> VoiceFieldState.INVALID
+                        else -> current.rangeEndState
                     }
+                    update(index, current.copy(
+                        dateTime = dt,
+                        dateTimeState = VoiceFieldState.VALID,
+                        rangeEndState = endState
+                    ))
                     editingDateIndex = null
                 }
             )
@@ -1194,13 +1243,11 @@ private fun TimePlanVoiceReviewDialog(
                 initial = current.rangeEnd ?: current.dateTime,
                 onDismiss = { editingRangeEndIndex = null },
                 onConfirm = { dt ->
-                    drafts = drafts.toMutableList().also {
-                        val old = it[index]
-                        it[index] = old.copy(
-                            rangeEnd = dt,
-                            state = if (old.dateTime != null && !dt.isBefore(old.dateTime)) DraftState.READY else DraftState.REVIEW_REQUIRED
-                        )
-                    }
+                    update(index, current.copy(
+                        rangeEnd = dt,
+                        rangeEndState = if (current.dateTime != null && !dt.isBefore(current.dateTime))
+                            VoiceFieldState.VALID else VoiceFieldState.INVALID
+                    ))
                     editingRangeEndIndex = null
                 }
             )
