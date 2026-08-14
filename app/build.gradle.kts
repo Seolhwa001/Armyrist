@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 48
-        versionName = "0.4.8-voice-uncertainty-review"
+        versionCode = 49
+        versionName = "0.4.9-voice-raw-transcript-fix"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
