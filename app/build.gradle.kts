@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 44
-        versionName = "0.4.4-ui-stabilization"
+        versionCode = 45
+        versionName = "0.4.5-voice-session"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
