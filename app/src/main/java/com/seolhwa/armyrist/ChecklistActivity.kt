@@ -238,6 +238,12 @@ private fun ChecklistApp(
                     refresh()
                 },
                 onOpen = { selectedId = it },
+                onRename = { checklistId, title ->
+                    if (title.isNotBlank()) {
+                        repo.updateChecklist(checklistId) { it.copy(title = title.trim()) }
+                        refresh()
+                    }
+                },
                 onDelete = { checklistId ->
                     repo.getChecklist(checklistId)?.let {
                         onCancelChecklistNotifications(it)
@@ -379,8 +385,10 @@ private fun ChecklistListScreen(
     onHome: () -> Unit,
     onCreate: () -> Unit,
     onOpen: (String) -> Unit,
+    onRename: (String, String) -> Unit,
     onDelete: (String) -> Unit
 ) {
+    var renameTarget by remember { mutableStateOf<Checklist?>(null) }
     var deleteTarget by remember { mutableStateOf<Checklist?>(null) }
 
     Scaffold(
@@ -481,12 +489,41 @@ private fun ChecklistListScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+                            TextButton(onClick = { renameTarget = checklist }) { Text("이름") }
                             TextButton(onClick = { deleteTarget = checklist }) { Text("삭제") }
                         }
                     }
                 }
             }
         }
+    }
+
+    renameTarget?.let { target ->
+        var renameValue by remember(target.id) { mutableStateOf(target.title) }
+        AlertDialog(
+            onDismissRequest = { renameTarget = null },
+            title = { Text("체크리스트 이름 변경") },
+            text = {
+                OutlinedTextField(
+                    value = renameValue,
+                    onValueChange = { renameValue = it },
+                    label = { Text("이름") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (renameValue.isNotBlank()) onRename(target.id, renameValue)
+                        renameTarget = null
+                    }
+                ) { Text("확인") }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameTarget = null }) { Text("취소") }
+            }
+        )
     }
 
     deleteTarget?.let { target ->
