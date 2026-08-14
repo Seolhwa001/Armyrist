@@ -5,6 +5,9 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -33,8 +36,11 @@ import com.seolhwa.armyrist.ArmyristPanelShape
 enum class VoiceUiState { IDLE, LISTENING, RECOGNIZING, STRUCTURING, REVIEW, ERROR, UNAVAILABLE }
 class OfflineSpeechSession(private val context: Context) {
     private var recognizer: SpeechRecognizer? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var active = false
     private var finishRequested = false
+    private var restartPending = false
+    private var cycleGeneration = 0L
     private val transcriptParts = mutableListOf<String>()
     private var stateCallback: ((VoiceUiState) -> Unit)? = null
     private var transcriptCallback: ((String) -> Unit)? = null
@@ -63,12 +69,30 @@ class OfflineSpeechSession(private val context: Context) {
         stateCallback = onState
         transcriptCallback = onTranscript
         errorCallback = onError
-        startRecognizerCycle()
+        scheduleRecognizerCycle(0L, "session-start")
     }
 
-    private fun startRecognizerCycle() {
-        if (!active || finishRequested) return
+    /**
+     * One Android SpeechRecognizer cycle is not the Armyrist user voice session.
+     * A new cycle is posted after the previous callback has unwound so OEM recognizers
+     * are not destroyed/recreated synchronously inside onResults()/onError().
+     */
+    private fun scheduleRecognizerCycle(delayMs: Long, reason: String) {
+        if (!active || finishRequested || restartPending) return
+        restartPending = true
+        val expectedGeneration = ++cycleGeneration
+        Log.d(TAG, "voice restart scheduled reason=$reason generation=$expectedGeneration hasTranscript=${transcriptParts.isNotEmpty()} userFinish=$finishRequested")
+        mainHandler.postDelayed({
+            restartPending = false
+            if (!active || finishRequested || expectedGeneration != cycleGeneration) return@postDelayed
+            startRecognizerCycle(expectedGeneration)
+        }, delayMs)
+    }
+
+    private fun startRecognizerCycle(generation: Long) {
+        if (!active || finishRequested || generation != cycleGeneration) return
         recognizer?.destroy()
+        recognizer = null
         val sr = runCatching {
             SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
         }.getOrNull()
@@ -77,67 +101,119 @@ class OfflineSpeechSession(private val context: Context) {
             return
         }
         recognizer = sr
+        Log.d(TAG, "voice cycle start generation=$generation hasTranscript=${transcriptParts.isNotEmpty()} userFinish=$finishRequested")
         sr.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) { stateCallback?.invoke(VoiceUiState.LISTENING) }
-            override fun onBeginningOfSpeech() { stateCallback?.invoke(VoiceUiState.LISTENING) }
+            override fun onReadyForSpeech(params: Bundle?) {
+                if (isCurrentCycle(sr, generation)) stateCallback?.invoke(VoiceUiState.LISTENING)
+            }
+            override fun onBeginningOfSpeech() {
+                if (isCurrentCycle(sr, generation)) stateCallback?.invoke(VoiceUiState.LISTENING)
+            }
             override fun onRmsChanged(rmsdB: Float) = Unit
             override fun onBufferReceived(buffer: ByteArray?) = Unit
-            override fun onEndOfSpeech() { stateCallback?.invoke(VoiceUiState.RECOGNIZING) }
+            override fun onEndOfSpeech() {
+                if (isCurrentCycle(sr, generation)) stateCallback?.invoke(VoiceUiState.RECOGNIZING)
+            }
             override fun onError(error: Int) {
-                recognizer?.destroy()
-                recognizer = null
+                if (!isCurrentCycle(sr, generation)) return
+                Log.w(TAG, "voice callback=onError errorCode=$error generation=$generation sessionActive=$active userFinish=$finishRequested hasTranscript=${transcriptParts.isNotEmpty()} restartPending=$restartPending")
+                releaseCycle(sr)
                 if (!active) return
                 if (finishRequested) {
                     finishWithAccumulatedTranscript()
                     return
                 }
-                if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
-                    // A short pause ends one Android recognition cycle, not the Armyrist voice session.
-                    startRecognizerCycle()
+                if (isRecoverableError(error)) {
+                    // Do not turn a recoverable Android recognition-cycle failure into a
+                    // user-session failure. Back off slightly for BUSY/CLIENT style races.
+                    val delay = when (error) {
+                        SpeechRecognizer.ERROR_RECOGNIZER_BUSY, SpeechRecognizer.ERROR_CLIENT -> 600L
+                        else -> 250L
+                    }
+                    stateCallback?.invoke(VoiceUiState.LISTENING)
+                    scheduleRecognizerCycle(delay, "recoverable-error-$error")
                 } else {
-                    fail("음성인식에 실패했습니다. 다시 시도해주세요.")
+                    fail("음성인식에 실패했습니다. 다시 시도해주세요. (오류 $error)")
                 }
             }
             override fun onResults(results: Bundle?) {
+                if (!isCurrentCycle(sr, generation)) return
                 val text = results
                     ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     ?.firstOrNull()
                     ?.trim()
                 if (!text.isNullOrEmpty()) transcriptParts += text
-                recognizer?.destroy()
-                recognizer = null
+                Log.d(TAG, "voice callback=onResults generation=$generation resultPresent=${!text.isNullOrEmpty()} accumulatedParts=${transcriptParts.size} userFinish=$finishRequested")
+                releaseCycle(sr)
                 if (!active) return
                 if (finishRequested) {
                     finishWithAccumulatedTranscript()
                 } else {
-                    // Keep the Armyrist session alive and collect the next utterance.
-                    startRecognizerCycle()
+                    stateCallback?.invoke(VoiceUiState.LISTENING)
+                    scheduleRecognizerCycle(250L, "results-complete")
                 }
             }
             override fun onPartialResults(partialResults: Bundle?) = Unit
             override fun onEvent(eventType: Int, params: Bundle?) = Unit
         })
-        sr.startListening(android.content.Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")
-            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-        })
+        runCatching {
+            sr.startListening(android.content.Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")
+                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+            })
+        }.onFailure {
+            Log.e(TAG, "voice startListening failed generation=$generation", it)
+            releaseCycle(sr)
+            if (active && !finishRequested) scheduleRecognizerCycle(600L, "startListening-exception")
+        }
     }
 
-    /** Explicit user finish. The final recognition cycle is allowed to return before structuring. */
+    private fun isCurrentCycle(sr: SpeechRecognizer, generation: Long): Boolean =
+        active && recognizer === sr && generation == cycleGeneration
+
+    private fun releaseCycle(sr: SpeechRecognizer) {
+        if (recognizer === sr) recognizer = null
+        runCatching { sr.destroy() }
+    }
+
+    private fun isRecoverableError(error: Int): Boolean = when (error) {
+        SpeechRecognizer.ERROR_NO_MATCH,
+        SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY,
+        SpeechRecognizer.ERROR_CLIENT -> true
+        else -> false
+    }
+
+    /** Explicit user finish. No later recognition cycle may be started. */
     fun finish() {
         if (!active) return
         finishRequested = true
+        restartPending = false
+        mainHandler.removeCallbacksAndMessages(null)
         stateCallback?.invoke(VoiceUiState.RECOGNIZING)
-        if (recognizer != null) recognizer?.stopListening() else finishWithAccumulatedTranscript()
+        val current = recognizer
+        if (current != null) {
+            runCatching { current.stopListening() }
+                .onFailure {
+                    Log.w(TAG, "voice stopListening failed; finalizing accumulated transcript", it)
+                    releaseCycle(current)
+                    finishWithAccumulatedTranscript()
+                }
+        } else {
+            cycleGeneration++ // invalidate a posted cycle when no recognizer is active
+            finishWithAccumulatedTranscript()
+        }
     }
 
     private fun finishWithAccumulatedTranscript() {
         if (!active) return
         val fullTranscript = transcriptParts.joinToString(" ").trim()
         active = false
+        restartPending = false
+        mainHandler.removeCallbacksAndMessages(null)
         recognizer?.destroy()
         recognizer = null
         if (fullTranscript.isEmpty()) {
@@ -151,14 +227,23 @@ class OfflineSpeechSession(private val context: Context) {
 
     private fun fail(message: String, unavailable: Boolean = false) {
         active = false
+        finishRequested = false
+        restartPending = false
+        cycleGeneration++
+        mainHandler.removeCallbacksAndMessages(null)
         recognizer?.destroy()
         recognizer = null
+        Log.e(TAG, "voice session failed unavailable=$unavailable hasTranscript=${transcriptParts.isNotEmpty()}")
         stateCallback?.invoke(if (unavailable) VoiceUiState.UNAVAILABLE else VoiceUiState.ERROR)
         errorCallback?.invoke(message)
     }
 
     fun cancel() {
         active = false
+        finishRequested = false
+        restartPending = false
+        cycleGeneration++
+        mainHandler.removeCallbacksAndMessages(null)
         recognizer?.cancel()
         destroy()
     }
@@ -166,12 +251,19 @@ class OfflineSpeechSession(private val context: Context) {
     fun destroy() {
         active = false
         finishRequested = false
+        restartPending = false
+        cycleGeneration++
+        mainHandler.removeCallbacksAndMessages(null)
         recognizer?.destroy()
         recognizer = null
         transcriptParts.clear()
         stateCallback = null
         transcriptCallback = null
         errorCallback = null
+    }
+
+    companion object {
+        private const val TAG = "ArmyristVoice"
     }
 }
 
