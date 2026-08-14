@@ -96,6 +96,19 @@ fun DateAwareTimePlanApp(
                 selectedId = plan.id
             },
             onOpen = { selectedId = it },
+            onRename = { id, title ->
+                repository.getPlan(id)?.let { current ->
+                    if (title.isNotBlank()) {
+                        repository.commit(current.copy(title = title.trim(), updatedAt = System.currentTimeMillis().toString()))
+                        revision++
+                    }
+                }
+            },
+            onDelete = { id ->
+                repository.delete(id)
+                if (selectedId == id) selectedId = null
+                revision++
+            },
             onOpenLegacy = { selectedLegacyId = it }
         )
     } else {
@@ -118,55 +131,157 @@ private fun DateAwarePlanList(
     onHome: () -> Unit,
     onCreate: () -> Unit,
     onOpen: (String) -> Unit,
+    onRename: (String, String) -> Unit,
+    onDelete: (String) -> Unit,
     onOpenLegacy: (String) -> Unit
 ) {
-    Scaffold(topBar = { ArmyristTopBar("시간계획", "TIME PLAN · DATE / MULTI-DAY", "홈", onHome) }) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            Button(
-                onClick = onCreate,
-                modifier = Modifier.fillMaxWidth().padding(10.dp),
-                shape = ArmyristPanelShape,
-                colors = ButtonDefaults.buttonColors(containerColor = ArmyristColors.PrimaryControl)
-            ) { Text("+ 새 시간계획", fontWeight = FontWeight.Bold) }
-            LazyColumn(
-                Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(10.dp,0.dp,10.dp,24.dp),
-                verticalArrangement = Arrangement.spacedBy(7.dp)
+    var renameTarget by remember { mutableStateOf<DateAwareTimePlan?>(null) }
+    var deleteTarget by remember { mutableStateOf<DateAwareTimePlan?>(null) }
+
+    Scaffold(
+        topBar = {
+            ArmyristTopBar(
+                "시간계획",
+                "TIME PLAN · DATE / MULTI-DAY",
+                "홈",
+                onHome
+            )
+        },
+        floatingActionButton = {
+            if (datePlans.isNotEmpty() || legacyPlans.isNotEmpty()) {
+                ExtendedFloatingActionButton(
+                    onClick = onCreate,
+                    modifier = Modifier.heightIn(min = 58.dp),
+                    shape = ArmyristPanelShape,
+                    containerColor = ArmyristColors.PrimaryControl,
+                    contentColor = ArmyristColors.OnDark
+                ) {
+                    Text("+ 새 시간계획", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    ) { padding ->
+        if (datePlans.isEmpty() && legacyPlans.isEmpty()) {
+            Box(
+                Modifier.fillMaxSize().padding(padding).padding(24.dp),
+                contentAlignment = Alignment.Center
             ) {
-                items(datePlans, key={"v3-${it.id}"}) { plan ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = ArmyristPanelShape,
+                    colors = CardDefaults.cardColors(containerColor = ArmyristColors.WorkSurface),
+                    border = BorderStroke(1.dp, ArmyristColors.Border)
+                ) {
+                    Column(
+                        Modifier.padding(28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("저장된 시간계획이 없습니다", style = MaterialTheme.typography.titleLarge)
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "새 시간계획을 만들어 일정을 정리하세요.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(20.dp))
+                        Button(
+                            onClick = onCreate,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
+                            shape = ArmyristPanelShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = ArmyristColors.PrimaryControl,
+                                contentColor = ArmyristColors.OnDark
+                            )
+                        ) { Text("새 시간계획 만들기", fontWeight = FontWeight.Bold) }
+                    }
+                }
+            }
+        } else {
+            LazyColumn(
+                Modifier.fillMaxSize().padding(padding),
+                contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 96.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(datePlans, key = { "v3-${it.id}" }) { plan ->
                     Card(
-                        Modifier.fillMaxWidth().clickable { onOpen(plan.id) },
+                        onClick = { onOpen(plan.id) },
+                        modifier = Modifier.fillMaxWidth(),
                         shape = ArmyristPanelShape,
                         border = BorderStroke(1.dp, ArmyristColors.Border),
                         colors = CardDefaults.cardColors(containerColor = ArmyristColors.RaisedSurface)
                     ) {
-                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Column(Modifier.weight(1f)) {
-                                Text(plan.title, fontWeight = FontWeight.Bold)
-                                Text(planSpanText(plan), style = MaterialTheme.typography.bodySmall, color = ArmyristColors.SecondaryText)
+                                Text(
+                                    plan.title,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(Modifier.height(3.dp))
+                                Text(
+                                    planSpanText(plan),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
-                            Text("›", style = MaterialTheme.typography.titleLarge)
+                            TextButton(onClick = { renameTarget = plan }) { Text("이름") }
+                            TextButton(onClick = { deleteTarget = plan }) { Text("삭제") }
                         }
                     }
                 }
-                items(legacyPlans, key={"legacy-${it.first}"}) { (id,title) ->
+
+                items(legacyPlans, key = { "legacy-${it.first}" }) { (id,title) ->
                     Card(
-                        Modifier.fillMaxWidth().clickable { onOpenLegacy(id) },
+                        onClick = { onOpenLegacy(id) },
+                        modifier = Modifier.fillMaxWidth(),
                         shape = ArmyristPanelShape,
                         border = BorderStroke(1.dp, ArmyristColors.PrimaryControl),
                         colors = CardDefaults.cardColors(containerColor = ArmyristColors.WorkSurface)
                     ) {
-                        Column(Modifier.padding(12.dp)) {
+                        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
                             Text(title, fontWeight = FontWeight.Bold)
-                            Text("날짜 기능 이전 계획 · 기준 날짜 지정 필요", style=MaterialTheme.typography.bodySmall, color=ArmyristColors.PrimaryControl)
+                            Spacer(Modifier.height(3.dp))
+                            Text(
+                                "날짜 기능 이전 계획 · 기준 날짜 지정 필요",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = ArmyristColors.PrimaryControl
+                            )
                         }
                     }
                 }
-                if (datePlans.isEmpty() && legacyPlans.isEmpty()) item {
-                    Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) { Text("저장된 시간계획이 없습니다.", color=ArmyristColors.SecondaryText) }
-                }
             }
         }
+    }
+
+    renameTarget?.let { target ->
+        SimpleTextDialog(
+            "시간계획 이름 변경",
+            target.title,
+            true,
+            { renameTarget = null }
+        ) { value ->
+            renameTarget = null
+            if (value.isNotBlank()) onRename(target.id, value)
+        }
+    }
+
+    deleteTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("시간계획 삭제") },
+            text = { Text("'${target.title}'을 삭제합니다. 이 작업은 복구할 수 없습니다.") },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) { Text("취소") }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleteTarget = null
+                    onDelete(target.id)
+                }) { Text("삭제") }
+            }
+        )
     }
 }
 
@@ -441,20 +556,46 @@ private fun SelectionActionPanel(
     onUnlock: () -> Unit,
     onDone: () -> Unit
 ) {
-    Card(
-        Modifier.fillMaxWidth().padding(horizontal=8.dp, vertical=4.dp),
-        shape=ArmyristPanelShape,
-        border=BorderStroke(1.dp,ArmyristColors.PrimaryControl)
+    Surface(
+        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+        shape = ArmyristPanelShape,
+        border = BorderStroke(1.dp, ArmyristColors.PrimaryControl),
+        color = ArmyristColors.RaisedSurface
     ) {
-        Column(Modifier.padding(8.dp), verticalArrangement=Arrangement.spacedBy(6.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically) {
-                Text("선택 ${selectedKeys.size}개", fontWeight=FontWeight.Bold, modifier=Modifier.weight(1f))
-                TextButton(onClick=onDone) { Text("완료") }
+        Column(
+            Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 38.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("✓ ${selectedKeys.size}개 선택", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                TextButton(onClick = onDone) { Text("완료") }
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                if (canBatchDate) OutlinedButton(onClick=onBatchDate, modifier=Modifier.weight(1f)) { Text("날짜 변경") }
-                OutlinedButton(onClick=onLock, enabled=selectedKeys.isNotEmpty(), modifier=Modifier.weight(1f)) { Text("고정") }
-                OutlinedButton(onClick=onUnlock, enabled=selectedKeys.isNotEmpty(), modifier=Modifier.weight(1f)) { Text("고정 해제") }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                if (canBatchDate) {
+                    OutlinedButton(
+                        onClick = onBatchDate,
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                    ) { Text("날짜 변경") }
+                }
+                OutlinedButton(
+                    onClick = onLock,
+                    enabled = selectedKeys.isNotEmpty(),
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                ) { Text("고정") }
+                OutlinedButton(
+                    onClick = onUnlock,
+                    enabled = selectedKeys.isNotEmpty(),
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                ) { Text("고정 해제") }
             }
         }
     }
@@ -482,6 +623,17 @@ private fun BatchDateDialog(
                 }
                 TextButton(onClick={calendar=true}, modifier=Modifier.fillMaxWidth()) { Text("달력") }
                 Text("기존 시각은 유지됩니다.", style=MaterialTheme.typography.bodySmall, color=ArmyristColors.SecondaryText)
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = ArmyristPanelShape,
+                    color = ArmyristColors.WorkSurface,
+                    border = BorderStroke(1.dp, ArmyristColors.Border)
+                ) {
+                    Column(Modifier.padding(10.dp)) {
+                        Text("변경 후", style = MaterialTheme.typography.labelSmall, color = ArmyristColors.SecondaryText)
+                        Text("${date.format(DateTimeFormatter.ofPattern("MM.dd"))} / 일정 ${count}개", fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         },
         dismissButton={TextButton(onClick=onDismiss){Text("취소")}},
@@ -714,18 +866,51 @@ private fun LinkRow(
     onWarning: (TimePlanConflict) -> Unit,
     onClick: () -> Unit
 ) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 40.dp),verticalAlignment = Alignment.CenterVertically) {
-        if(selectionMode) Checkbox(checked=selected,onCheckedChange={onToggle()})
-        Row(Modifier.weight(1f),verticalAlignment=Alignment.CenterVertically) {
-            HorizontalDivider(Modifier.weight(1f),color=ArmyristColors.Border)
-            TextButton(onClick={if(selectionMode) onToggle() else onClick()}, enabled=link!=null || selectionMode) {
-                Text("${link?.label?.takeIf { it.isNotBlank() }?.plus(" · ") ?: "경과 · "}${durationText(link?.durationMinutes)} ▼",fontWeight=FontWeight.Medium)
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 44.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (selectionMode) Checkbox(checked = selected, onCheckedChange = { onToggle() })
+
+        Row(
+            Modifier
+                .weight(1f)
+                .clickable(enabled = link != null || selectionMode) {
+                    if (selectionMode) onToggle() else onClick()
+                },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            HorizontalDivider(Modifier.weight(1f), color = ArmyristColors.Border)
+            Surface(
+                modifier = Modifier.padding(horizontal = 8.dp),
+                shape = ArmyristPanelShape,
+                color = if (selected && selectionMode) ArmyristColors.WorkSurface else Color.Transparent
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "${link?.label?.takeIf { it.isNotBlank() } ?: "경과"} · ${durationText(link?.durationMinutes)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    if (!selectionMode) Text(" ▼", color = ArmyristColors.SecondaryText)
+                    if (link?.durationLocked == true) {
+                        Spacer(Modifier.width(4.dp))
+                        LockBadge()
+                    }
+                    conflict?.let {
+                        Spacer(Modifier.width(2.dp))
+                        WarningButton { onWarning(it) }
+                    }
+                }
             }
-            HorizontalDivider(Modifier.weight(1f),color=ArmyristColors.Border)
+            HorizontalDivider(Modifier.weight(1f), color = ArmyristColors.Border)
         }
-        if(link?.durationLocked==true) LockBadge()
-        conflict?.let { WarningButton { onWarning(it) } }
-        Box(Modifier.width(38.dp), contentAlignment = Alignment.Center) { TimelineConnectorGlyph() }
+        Box(Modifier.width(38.dp), contentAlignment = Alignment.Center) {
+            TimelineConnectorGlyph()
+        }
     }
 }
 
@@ -748,11 +933,29 @@ private fun DateTimeEditorDialog(title:String,initial:LocalDateTime?,onDismiss:(
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween){OutlinedButton(onClick={candidate=candidate.minusDays(1)}){Text("-1일")};Text(candidate.toLocalDate().format(DateTimeFormatter.ofPattern("yyyy.MM.dd")),fontWeight=FontWeight.Bold);OutlinedButton(onClick={candidate=candidate.plusDays(1)}){Text("+1일")}}
         TextButton(onClick={calendar=true},modifier=Modifier.fillMaxWidth()){Text("달력에서 선택")}
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(18.dp)){
-            Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally){Text("시간",style=MaterialTheme.typography.labelMedium,color=ArmyristColors.SecondaryText);Wheel((0..23).toList(),candidate.hour,{ value -> val next=candidate.withHour(value); candidate=next; raw="%02d%02d".format(next.hour,next.minute)},Modifier.fillMaxWidth())}
-            Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally){Text("분",style=MaterialTheme.typography.labelMedium,color=ArmyristColors.SecondaryText);Wheel((0..55 step 5).toList(),nearestFive(candidate.minute),{ value -> val next=candidate.withMinute(value); candidate=next; raw="%02d%02d".format(next.hour,next.minute)},Modifier.fillMaxWidth())}
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("시간", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Wheel((0..23).toList(),candidate.hour,{ value -> val next=candidate.withHour(value); candidate=next; raw="%02d%02d".format(next.hour,next.minute)},Modifier.fillMaxWidth())
+            }
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("분", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Wheel((0..55 step 5).toList(),nearestFive(candidate.minute),{ value -> val next=candidate.withMinute(value); candidate=next; raw="%02d%02d".format(next.hour,next.minute)},Modifier.fillMaxWidth())
+            }
         }
         OutlinedTextField(value=raw,onValueChange={v->val d=v.filter(Char::isDigit).take(4);raw=d;parseHHMM(d)?.let{candidate=candidate.withHour(it.first).withMinute(it.second)}},label={Text("직접입력 · HHMM")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),modifier=Modifier.fillMaxWidth())
-        Text(candidate.format(DateTimeFormatter.ofPattern("MM.dd HH:mm")),fontWeight=FontWeight.Bold,color=ArmyristColors.PrimaryControl)
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = ArmyristPanelShape,
+            color = ArmyristColors.WorkSurface,
+            border = BorderStroke(1.dp, ArmyristColors.Border)
+        ) {
+            Column(Modifier.padding(10.dp)) {
+                Text("변경값", style = MaterialTheme.typography.labelSmall, color = ArmyristColors.SecondaryText)
+                Text(candidate.format(DateTimeFormatter.ofPattern("MM.dd HH:mm")),fontWeight=FontWeight.Bold,color=ArmyristColors.PrimaryControl)
+            }
+        }
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){OutlinedButton(onClick=onDismiss,modifier=Modifier.weight(1f)){Text("취소")};Button(onClick={onConfirm(candidate)},modifier=Modifier.weight(1f),colors=ButtonDefaults.buttonColors(containerColor=ArmyristColors.PrimaryControl)){Text("적용")}}
     }}}
     if(calendar){val state=rememberDatePickerState(initialSelectedDateMillis=candidate.toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli());DatePickerDialog(onDismissRequest={calendar=false},confirmButton={TextButton(onClick={state.selectedDateMillis?.let{ms->candidate=LocalDateTime.of(Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate(),candidate.toLocalTime())};calendar=false}){Text("확인")}},dismissButton={TextButton(onClick={calendar=false}){Text("취소")}}){DatePicker(state=state)}}
@@ -855,7 +1058,18 @@ private fun parseHHMM(raw:String):Pair<Int,Int>?{if(raw.length !in 3..4)return n
 @Composable
 private fun DateDurationDialog(initial:Long?,initialLabel:String,onDismiss:()->Unit,onConfirm:(Long,String)->Unit){
     var total by remember{mutableLongStateOf(initial?:0L)};var label by remember{mutableStateOf(initialLabel)};var raw by remember{mutableStateOf(total.toString())};val h=(total/60).toInt();val m=(total%60).toInt()
-    Dialog(onDismissRequest=onDismiss){Card(Modifier.fillMaxWidth(),shape=ArmyristPanelShape){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){Text("경과시간",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold);OutlinedTextField(label,{label=it},label={Text("경과 명칭")},modifier=Modifier.fillMaxWidth());Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(18.dp)){Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally){Text("시간",style=MaterialTheme.typography.labelMedium,color=ArmyristColors.SecondaryText);Wheel((0..maxOf(999,h)).toList(),h,{nh->val next=nh*60L+(total%60);total=next;raw=next.toString()},Modifier.fillMaxWidth())};Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally){Text("분",style=MaterialTheme.typography.labelMedium,color=ArmyristColors.SecondaryText);Wheel((0..55 step 5).toList(),nearestFive(m),{nm->val next=(total/60)*60+nm;total=next;raw=next.toString()},Modifier.fillMaxWidth())}};OutlinedTextField(raw,{v->val d=v.filter(Char::isDigit);raw=d;d.toLongOrNull()?.let{total=it}},label={Text("직접입력 · 분")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),modifier=Modifier.fillMaxWidth());Text(durationText(total),fontWeight=FontWeight.Bold);Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){OutlinedButton(onClick=onDismiss,modifier=Modifier.weight(1f)){Text("취소")};Button(onClick={onConfirm(total,label)},modifier=Modifier.weight(1f),colors=ButtonDefaults.buttonColors(containerColor=ArmyristColors.PrimaryControl)){Text("확인")}}}}}
+    Dialog(onDismissRequest=onDismiss){Card(Modifier.fillMaxWidth(),shape=ArmyristPanelShape){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){Text("경과시간",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold);OutlinedTextField(label,{label=it},label={Text("경과 명칭")},modifier=Modifier.fillMaxWidth());Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(18.dp)){
+        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("시간", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Wheel((0..maxOf(999,h)).toList(),h,{nh->val next=nh*60L+(total%60);total=next;raw=next.toString()},Modifier.fillMaxWidth())
+        }
+        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("분", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Wheel((0..55 step 5).toList(),nearestFive(m),{nm->val next=(total/60)*60+nm;total=next;raw=next.toString()},Modifier.fillMaxWidth())
+        }
+    };OutlinedTextField(raw,{v->val d=v.filter(Char::isDigit);raw=d;d.toLongOrNull()?.let{total=it}},label={Text("직접입력 · 전체 분")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),modifier=Modifier.fillMaxWidth());Surface(Modifier.fillMaxWidth(),shape=ArmyristPanelShape,color=ArmyristColors.WorkSurface,border=BorderStroke(1.dp,ArmyristColors.Border)){Column(Modifier.padding(10.dp)){Text("변경값",style=MaterialTheme.typography.labelSmall,color=ArmyristColors.SecondaryText);Text("${label.ifBlank { "경과" }} · ${durationText(total)}",fontWeight=FontWeight.Bold)}};Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){OutlinedButton(onClick=onDismiss,modifier=Modifier.weight(1f)){Text("취소")};Button(onClick={onConfirm(total,label)},modifier=Modifier.weight(1f),colors=ButtonDefaults.buttonColors(containerColor=ArmyristColors.PrimaryControl)){Text("적용")}}}}}
 }
 
 @Composable
@@ -1003,14 +1217,66 @@ private fun rangeDisplay(start: LocalDateTime?, end: LocalDateTime?): String {
     }
 }
 
-fun generateDateAwareResult(plan:DateAwareTimePlan):ToolResult{
-    val lines=mutableListOf<String>();var day:LocalDate?=null
-    fun header(dt:LocalDateTime?){val d=dt?.toLocalDate()?:return;if(d!=day){day=d;val dow=d.dayOfWeek.getDisplayName(TextStyle.SHORT,Locale.KOREAN);lines += "[${d.format(DateTimeFormatter.ofPattern("MM.dd"))} ($dow)]"}}
-    plan.start.value.value?.let{header(it);lines += "- ${it.format(DateTimeFormatter.ofPattern("HH:mm"))} 시작"}
-    plan.orderedEvents().forEach { e->val a=DateTimePlanRules.arrival(e.timeSpec);header(a);val time=when(val s=e.timeSpec){EventDateTimeSpec.Unspecified->"--:--";is EventDateTimeSpec.Single->s.value.value?.format(DateTimeFormatter.ofPattern("HH:mm"))?:"--:--";is EventDateTimeSpec.Range->rangeDisplay(s.start.value, s.end.value)};lines += "- $time ${e.name}${e.note?.takeIf{it.isNotBlank()}?.let{" · $it"}?:""}"}
-    plan.end.value.value?.let{header(it);lines += "- ${it.format(DateTimeFormatter.ofPattern("HH:mm"))} 종료"}
-    val linkLines=plan.links.filter{(it.durationMinutes?:0)>0}.mapNotNull{l->l.durationMinutes?.let{m->"- ${l.label?.takeIf{it.isNotBlank()}?:"경과"} ${durationText(m)}"}}
-    if(linkLines.isNotEmpty()){lines += "";lines += "[경과]";lines += linkLines}
-    plan.memo?.takeIf{it.isNotBlank()}?.let{lines += "";lines += "메모: $it"}
-    return ToolResult(plan.title,lines.joinToString("\n"))
+fun generateDateAwareResult(plan: DateAwareTimePlan): ToolResult {
+    val lines = mutableListOf<String>()
+    var day: LocalDate? = null
+
+    fun header(dt: LocalDateTime?) {
+        val d = dt?.toLocalDate() ?: return
+        if (d != day) {
+            day = d
+            val dow = d.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.KOREAN)
+            lines += "[${d.format(DateTimeFormatter.ofPattern("MM.dd"))} ($dow)]"
+        }
+    }
+
+    val nodes = DateTimePlanRules.nodeIds(plan)
+    val events = plan.orderedEvents().associateBy { it.id }
+
+    nodes.forEachIndexed { index, nodeId ->
+        when (nodeId) {
+            DateTimePlanRules.START_ID -> {
+                plan.start.value.value?.let {
+                    header(it)
+                    lines += "- ${it.format(DateTimeFormatter.ofPattern("HH:mm"))} 시작"
+                }
+            }
+            DateTimePlanRules.END_ID -> {
+                plan.end.value.value?.let {
+                    header(it)
+                    lines += "- ${it.format(DateTimeFormatter.ofPattern("HH:mm"))} 종료"
+                }
+            }
+            else -> {
+                events[nodeId]?.let { e ->
+                    val arrival = DateTimePlanRules.arrival(e.timeSpec)
+                    header(arrival)
+                    val time = when (val spec = e.timeSpec) {
+                        EventDateTimeSpec.Unspecified -> "--:--"
+                        is EventDateTimeSpec.Single ->
+                            spec.value.value?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: "--:--"
+                        is EventDateTimeSpec.Range ->
+                            rangeDisplay(spec.start.value, spec.end.value)
+                    }
+                    lines += "- $time ${e.name}${e.note?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""}"
+                }
+            }
+        }
+
+        if (index < nodes.lastIndex) {
+            val next = nodes[index + 1]
+            plan.links.firstOrNull { it.fromNodeId == nodeId && it.toNodeId == next }?.let { link ->
+                val minutes = link.durationMinutes
+                if (minutes != null && minutes > 0L) {
+                    lines += "  ↳ ${link.label?.takeIf { it.isNotBlank() } ?: "경과"} · ${durationText(minutes)}"
+                }
+            }
+        }
+    }
+
+    plan.memo?.takeIf { it.isNotBlank() }?.let {
+        lines += ""
+        lines += "메모: $it"
+    }
+    return ToolResult(plan.title, lines.joinToString("\n"))
 }
