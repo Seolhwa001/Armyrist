@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 51
-        versionName = "0.4.11-voice-contextual-guide"
+        versionCode = 52
+        versionName = "0.4.12-voice-dedicated-recording"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
