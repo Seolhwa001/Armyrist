@@ -61,4 +61,78 @@ class VoiceStructuringTest {
         assertEquals("개", d.unit)
         assertEquals(DraftState.READY, d.state)
     }
+
+    @Test
+    fun checklistRecognitionSegmentsBecomeSeparateDraftHints() {
+        val d = KoreanVoiceStructurer.checklist(
+            "차량 상태 확인\n통신 상태 확인\n인원 점검"
+        )
+        assertEquals(
+            listOf("차량 상태 확인", "통신 상태 확인", "인원 점검"),
+            d.map { it.name }
+        )
+    }
+
+    @Test
+    fun countingRecognitionSegmentsRemainSeparateItems() {
+        val d = KoreanVoiceStructurer.counting("고양이 세 마리\n강아지 한 마리")
+        assertEquals(2, d.size)
+        assertEquals("고양이", d[0].name)
+        assertEquals(3, d[0].quantity)
+        assertEquals("마리", d[0].unit)
+        assertEquals("강아지", d[1].name)
+        assertEquals(1, d[1].quantity)
+        assertEquals("마리", d[1].unit)
+    }
+
+    @Test
+    fun timePlanKoreanSpokenHourIsRecognizedWhenDateIsExplicit() {
+        val d = KoreanVoiceStructurer.timePlan(
+            "14일 오후 세 시 작업",
+            LocalDate.of(2026, 8, 14)
+        ).single()
+        assertEquals(LocalDateTime.of(2026, 8, 14, 15, 0), d.dateTime)
+        assertEquals("작업", d.name)
+        assertEquals(DraftState.READY, d.state)
+    }
+
+    @Test
+    fun timePlanRecognitionSegmentsCreateMultipleDrafts() {
+        val d = KoreanVoiceStructurer.timePlan(
+            "14일 오전 아홉 시 출발\n15일 새벽 한 시 작업\n16일 오전 여덟 시 복귀",
+            LocalDate.of(2026, 8, 14)
+        )
+        assertEquals(3, d.size)
+        assertEquals(LocalDateTime.of(2026, 8, 14, 9, 0), d[0].dateTime)
+        assertEquals(LocalDateTime.of(2026, 8, 15, 1, 0), d[1].dateTime)
+        assertEquals(LocalDateTime.of(2026, 8, 16, 8, 0), d[2].dateTime)
+    }
+
+
+    @Test
+    fun countingSingleUtteranceWithoutPunctuationCanSplitRepeatedStructures() {
+        val d = KoreanVoiceStructurer.counting("생수 스물네 병 전투식량 열세 개 건전지 여섯 개")
+        assertEquals(3, d.size)
+        assertEquals(listOf("생수", "전투식량", "건전지"), d.map { it.name })
+        assertEquals(listOf(24, 13, 6), d.map { it.quantity })
+    }
+
+    @Test
+    fun checklistSingleUtteranceWithoutPunctuationUsesActionEndings() {
+        val d = KoreanVoiceStructurer.checklist("차량 상태 확인 통신장비 확인 인원 점검")
+        assertEquals(listOf("차량 상태 확인", "통신장비 확인", "인원 점검"), d.map { it.name })
+    }
+
+    @Test
+    fun timePlanSingleUtteranceWithoutPunctuationUsesExplicitDayBoundaries() {
+        val d = KoreanVoiceStructurer.timePlan(
+            "14일 오전 아홉 시 출발 15일 새벽 한 시 작업 16일 오전 여덟 시 복귀",
+            LocalDate.of(2026, 8, 14)
+        )
+        assertEquals(3, d.size)
+        assertEquals(LocalDateTime.of(2026, 8, 14, 9, 0), d[0].dateTime)
+        assertEquals(LocalDateTime.of(2026, 8, 15, 1, 0), d[1].dateTime)
+        assertEquals(LocalDateTime.of(2026, 8, 16, 8, 0), d[2].dateTime)
+    }
+
 }
