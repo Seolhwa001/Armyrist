@@ -30,6 +30,75 @@ data class TimePlanVoiceDraft(
 )
 
 object KoreanVoiceStructurer {
+    /**
+     * Recognition-cycle boundaries are preserved by OfflineSpeechSession as newlines.
+     * Each segment can still contain multiple items separated by punctuation/conjunctions.
+     */
+    private fun speechChunks(transcript: String): List<String> =
+        transcript
+            .split(Regex("\\n+|[,.，。;；]|\\s+그리고\\s+|\\s+및\\s+"))
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+
+    /**
+     * If STT removes punctuation from a single utterance, repeated
+     * <name> <quantity> <unit> structures can still be separated.
+     * This is only used when two or more quantity tokens are found.
+     */
+    private fun countingChunks(transcript: String): List<String> =
+        speechChunks(transcript).flatMap { segment ->
+            val tokens = segment.split(Regex("\\s+")).filter { it.isNotBlank() }
+            val quantityIndexes = tokens.indices.filter { index ->
+                numberOf(tokens[index]) != null ||
+                    Regex("^\\d+[가-힣A-Za-z]+$").matches(tokens[index])
+            }
+            if (quantityIndexes.size < 2) return@flatMap listOf(segment)
+
+            val parts = mutableListOf<String>()
+            var start = 0
+            quantityIndexes.forEachIndexed { qPos, qIndex ->
+                val attached = Regex("^(\\d+)([가-힣A-Za-z]+)$").matchEntire(tokens[qIndex])
+                val end = if (attached != null) qIndex else qIndex + 1
+                if (end >= tokens.size) return@forEachIndexed
+                val nextStart = if (qPos + 1 < quantityIndexes.size) {
+                    // The next item name begins after this item's unit and before its quantity.
+                    val nextQ = quantityIndexes[qPos + 1]
+                    // Keep at least one token for the next name.
+                    maxOf(end + 1, nextQ - 1)
+                } else tokens.size
+                val itemEndExclusive = if (qPos + 1 < quantityIndexes.size) nextStart else tokens.size
+                if (start < itemEndExclusive) {
+                    parts += tokens.subList(start, itemEndExclusive).joinToString(" ")
+                }
+                start = itemEndExclusive
+            }
+            parts.filter { it.isNotBlank() }.ifEmpty { listOf(segment) }
+        }
+
+    /** Checklist STT often drops commas; common action endings provide a safe hint. */
+    private fun checklistChunks(transcript: String): List<String> =
+        speechChunks(transcript).flatMap { segment ->
+            val matches = Regex(".+?(?:확인|점검|체크|검사|준비)(?=\\s|$)")
+                .findAll(segment)
+                .map { it.value.trim() }
+                .filter { it.isNotBlank() }
+                .toList()
+            if (matches.size >= 2 && matches.joinToString(" ").replace(Regex("\\s+"), " ").trim() ==
+                segment.replace(Regex("\\s+"), " ").trim()
+            ) matches else listOf(segment)
+        }
+
+    /** Explicit day markers are strong TimePlan event boundaries even if STT drops commas. */
+    private fun timePlanChunks(transcript: String): List<String> =
+        speechChunks(transcript).flatMap { segment ->
+            val starts = Regex("(?<!\\d)(\\d{1,2})일\\s*").findAll(segment).map { it.range.first }.toList()
+            if (starts.size < 2) listOf(segment)
+            else starts.mapIndexed { index, start ->
+                val end = starts.getOrNull(index + 1) ?: segment.length
+                segment.substring(start, end).trim()
+            }.filter { it.isNotBlank() }
+        }
+
     private val nativeNumbers = linkedMapOf(
         "스물아홉" to 29, "스물여덟" to 28, "스물일곱" to 27, "스물여섯" to 26, "스물다섯" to 25,
         "스물네" to 24, "스물세" to 23, "스물두" to 22, "스물한" to 21, "스물" to 20,
@@ -59,10 +128,7 @@ object KoreanVoiceStructurer {
     }
 
     fun counting(transcript: String): List<CountingVoiceDraft> {
-        val chunks = transcript
-            .split(Regex("[,，]| 그리고 | 그리고|,?\\s*및\\s*"))
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
+        val chunks = countingChunks(transcript)
         // Keep Korean quantity words as whole tokens. A missing unit such as
         // "건전지 여섯" must not backtrack into quantity="여", unit="섯".
         val separatedPattern = Regex("^(.+?)\\s+(\\d+|[가-힣]+)\\s+([가-힣A-Za-z]+)$")
@@ -97,26 +163,26 @@ object KoreanVoiceStructurer {
     }
 
     fun checklist(transcript: String): List<ChecklistVoiceDraft> =
-        transcript
-            .split(Regex("[,，]| 그리고 | 그리고|\\s+및\\s+"))
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .map { ChecklistVoiceDraft(it) }
+        checklistChunks(transcript).map { ChecklistVoiceDraft(it) }
 
     /** Deterministic offline structuring. Ambiguous/missing dates remain UNRESOLVED. */
     fun timePlan(transcript: String, referenceDate: LocalDate): List<TimePlanVoiceDraft> {
-        val chunks = transcript.split(Regex("[,，]| 그리고 | 그리고"))
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
+        val chunks = timePlanChunks(transcript)
         var inheritedDate: LocalDate? = null
-        val timeRegex = Regex("(?:(새벽|오전|오후)\\s*)?(\\d{1,2})시(?:\\s*(\\d{1,2})분)?")
+
+        // Android Korean STT commonly emits either "3시" or "세 시".
+        // Keep both numeric and Korean number words as valid clock-hour tokens.
+        val hourToken = "(?:\\d{1,2}|스물(?:한|두|세|네)?|열(?:한|두|세|네|다섯|여섯|일곱|여덟|아홉)?|한|두|세|네|다섯|여섯|일곱|여덟|아홉)"
+        val minuteToken = "(?:\\d{1,2}|십(?:일|이|삼|사|오|육|칠|팔|구)?|이십(?:일|이|삼|사|오|육|칠|팔|구)?|삼십(?:일|이|삼|사|오|육|칠|팔|구)?|사십(?:일|이|삼|사|오|육|칠|팔|구)?|오십(?:일|이|삼|사|오|육|칠|팔|구)?)"
+        val timeRegex = Regex("(?:(새벽|오전|오후)\\s*)?($hourToken)\\s*시(?:\\s*($minuteToken)\\s*분)?")
 
         fun resolveTime(match: MatchResult, date: LocalDate): LocalDateTime? {
-            var h = match.groupValues[2].toIntOrNull() ?: return null
+            var h = numberOf(match.groupValues[2]) ?: return null
             val marker = match.groupValues[1]
             if (marker == "오후" && h in 1..11) h += 12
             if ((marker == "새벽" || marker == "오전") && h == 12) h = 0
-            val minute = match.groupValues[3].toIntOrNull() ?: 0
+            val minute = match.groupValues[3].takeIf { it.isNotBlank() }?.let(::numberOf) ?: 0
+            if (h !in 0..23 || minute !in 0..59) return null
             return runCatching { LocalDateTime.of(date, LocalTime.of(h, minute)) }.getOrNull()
         }
 

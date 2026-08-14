@@ -210,7 +210,10 @@ class OfflineSpeechSession(private val context: Context) {
 
     private fun finishWithAccumulatedTranscript() {
         if (!active) return
-        val fullTranscript = transcriptParts.joinToString(" ").trim()
+        // Preserve recognition-cycle boundaries as structuring hints.
+        // A cycle is NOT forced to equal one Domain item; tool structurers may still
+        // split each segment further by punctuation/grammar.
+        val fullTranscript = transcriptParts.joinToString("\n").trim()
         active = false
         restartPending = false
         mainHandler.removeCallbacksAndMessages(null)
