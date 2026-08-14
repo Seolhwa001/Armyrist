@@ -13,12 +13,12 @@ class VoiceStructuringTest {
         assertEquals("병",d[0].unit)
         assertEquals(13,d[1].quantity)
         assertEquals(6,d[2].quantity)
-        assertTrue(d.all { it.state == DraftState.READY })
+        assertTrue(d.all { it.state == VoiceDraftState.VALID })
     }
 
     @Test fun countingMissingUnitNeedsReview() {
         val d=KoreanVoiceStructurer.counting("건전지 여섯")
-        assertEquals(DraftState.UNRESOLVED,d.single().state)
+        assertEquals(VoiceDraftState.INVALID,d.single().state)
     }
 
     @Test fun checklistCreatesMultipleNewDrafts() {
@@ -37,12 +37,12 @@ class VoiceStructuringTest {
         val d=KoreanVoiceStructurer.timePlan("14일 23시부터 1시까지 야간작업",LocalDate.of(2026,8,14)).single()
         assertEquals(LocalDateTime.of(2026,8,14,23,0),d.dateTime)
         assertEquals(LocalDateTime.of(2026,8,15,1,0),d.rangeEnd)
-        assertEquals(DraftState.READY,d.state)
+        assertEquals(VoiceDraftState.VALID,d.state)
     }
 
     @Test fun ambiguousTimeWithoutDateIsUnresolved() {
         val d=KoreanVoiceStructurer.timePlan("새벽 1시 작업",LocalDate.of(2026,8,14))
-        assertEquals(DraftState.UNRESOLVED,d.single().state)
+        assertEquals(VoiceDraftState.INVALID,d.single().state)
         assertNull(d.single().dateTime)
     }
 
@@ -51,7 +51,7 @@ class VoiceStructuringTest {
         val d = KoreanVoiceStructurer.counting("건전지 6 개").single()
         assertEquals(6, d.quantity)
         assertEquals("개", d.unit)
-        assertEquals(DraftState.READY, d.state)
+        assertEquals(VoiceDraftState.VALID, d.state)
     }
 
     @Test
@@ -59,7 +59,7 @@ class VoiceStructuringTest {
         val d = KoreanVoiceStructurer.counting("건전지 6개").single()
         assertEquals(6, d.quantity)
         assertEquals("개", d.unit)
-        assertEquals(DraftState.READY, d.state)
+        assertEquals(VoiceDraftState.VALID, d.state)
     }
 
     @Test
@@ -93,7 +93,7 @@ class VoiceStructuringTest {
         ).single()
         assertEquals(LocalDateTime.of(2026, 8, 14, 15, 0), d.dateTime)
         assertEquals("작업", d.name)
-        assertEquals(DraftState.READY, d.state)
+        assertEquals(VoiceDraftState.VALID, d.state)
     }
 
     @Test
@@ -133,6 +133,44 @@ class VoiceStructuringTest {
         assertEquals(LocalDateTime.of(2026, 8, 14, 9, 0), d[0].dateTime)
         assertEquals(LocalDateTime.of(2026, 8, 15, 1, 0), d[1].dateTime)
         assertEquals(LocalDateTime.of(2026, 8, 16, 8, 0), d[2].dateTime)
+    }
+
+
+    @Test
+    fun ambiguousAttachedKoreanQuantityUnitRequiresReview() {
+        val d = KoreanVoiceStructurer.counting("전차 세대").single()
+        assertEquals("전차", d.name)
+        assertEquals(3, d.quantity)
+        assertEquals("대", d.unit)
+        assertEquals(VoiceDraftState.REVIEW_REQUIRED, d.state)
+        assertEquals(VoiceFieldState.REVIEW_REQUIRED, d.quantityState)
+        assertEquals(VoiceFieldState.REVIEW_REQUIRED, d.unitState)
+        assertEquals("전차 세대", d.rawTranscript)
+    }
+
+    @Test
+    fun missingRequiredCountingUnitIsInvalid() {
+        val d = KoreanVoiceStructurer.counting("건전지 여섯").single()
+        assertEquals(VoiceDraftState.INVALID, d.state)
+        assertEquals(VoiceFieldState.INVALID, d.unitState)
+    }
+
+    @Test
+    fun userConfirmedAmbiguousCountingFieldsCanBecomeValid() {
+        val d = KoreanVoiceStructurer.counting("전차 세대").single()
+        val edited = KoreanVoiceStructurer.revalidate(
+            d.copy(
+                quantityState = VoiceFieldState.VALID,
+                unitState = VoiceFieldState.VALID
+            )
+        )
+        assertEquals(VoiceDraftState.VALID, edited.state)
+    }
+
+    @Test
+    fun rawTranscriptIsPreservedPerDraft() {
+        val d = KoreanVoiceStructurer.counting("고양이 세 마리\\n강아지 세 마리")
+        assertEquals(listOf("고양이 세 마리", "강아지 세 마리"), d.map { it.rawTranscript })
     }
 
 }
