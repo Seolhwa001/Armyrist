@@ -24,7 +24,7 @@ android {
         minSdk = 23
         targetSdk = 36
         versionCode = 44
-        versionName = "0.4.4-timeplan-ui-voice-session"
+        versionName = "0.4.4-ui-stabilization"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
