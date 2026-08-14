@@ -145,7 +145,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/armyrist-distribution"
           cp \
             app/build/outputs/apk/release/app-release.apk \
-            "$RUNNER_TEMP/armyrist-distribution/Armyrist-0.4.4-ui-stabilization.apk"
+            "$RUNNER_TEMP/armyrist-distribution/Armyrist-0.4.5-voice-session.apk"
 
       - name: Upload debug/test APK
         uses: actions/upload-artifact@v4
@@ -157,8 +157,8 @@ jobs:
       - name: Upload stable distribution APK
         uses: actions/upload-artifact@v4
         with:
-          name: Armyrist-0.4.4-stable-distribution
-          path: ${{ runner.temp }}/armyrist-distribution/Armyrist-0.4.4-ui-stabilization.apk
+          name: Armyrist-0.4.5-stable-distribution
+          path: ${{ runner.temp }}/armyrist-distribution/Armyrist-0.4.5-voice-session.apk
           if-no-files-found: error
 
       - name: Upload signing certificate fingerprint
