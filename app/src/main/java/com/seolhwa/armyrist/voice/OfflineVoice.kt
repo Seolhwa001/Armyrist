@@ -35,6 +35,34 @@ import com.seolhwa.armyrist.ArmyristPanelShape
 
 /** No network fallback is ever used. On-device SpeechRecognizer only. */
 enum class VoiceUiState { IDLE, LISTENING, RECOGNIZING, STRUCTURING, REVIEW, ERROR, UNAVAILABLE }
+
+enum class VoiceToolContext {
+    COUNTING,
+    CHECKLIST,
+    TIME_PLAN,
+    GENERIC
+}
+
+private data class VoiceContextGuide(
+    val example: String,
+    val helper: String
+)
+
+private fun guideFor(tool: VoiceToolContext): VoiceContextGuide? = when (tool) {
+    VoiceToolContext.COUNTING -> VoiceContextGuide(
+        example = "“생수 스물네 병, 전투식량 열세 개, 건전지 여섯 개.”",
+        helper = "여러 항목을 한 번에 말할 수 있어요."
+    )
+    VoiceToolContext.CHECKLIST -> VoiceContextGuide(
+        example = "“차량 상태 확인, 통신장비 확인, 인원 확인.”",
+        helper = "여러 점검 항목을 한 번에 말할 수 있어요."
+    )
+    VoiceToolContext.TIME_PLAN -> VoiceContextGuide(
+        example = "“8월 14일 9시 출발, 9시 40분 집결, 15일 새벽 1시 이동.”",
+        helper = "날짜가 바뀌는 일정도 한 번에 말할 수 있어요."
+    )
+    VoiceToolContext.GENERIC -> null
+}
 class OfflineSpeechSession(private val context: Context) {
     private var recognizer: SpeechRecognizer? = null
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -274,6 +302,7 @@ class OfflineSpeechSession(private val context: Context) {
 @Composable
 fun OfflineVoiceButton(
     modifier: Modifier = Modifier,
+    toolContext: VoiceToolContext = VoiceToolContext.GENERIC,
     onTranscript: (String) -> Unit,
     onStateChanged: (VoiceUiState) -> Unit = {},
     onMessage: (String) -> Unit = {}
@@ -305,34 +334,75 @@ fun OfflineVoiceButton(
         }
     }
 
-    Button(
-        onClick = {
-            when (state) {
-                VoiceUiState.LISTENING -> {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    session.finish()
-                }
-                VoiceUiState.UNAVAILABLE -> onMessage("이 기기에서 오프라인 음성인식을 사용할 수 없습니다.")
-                else -> {
-                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startSession()
-                    else permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    val guide = remember(toolContext) { guideFor(toolContext) }
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        if (state == VoiceUiState.LISTENING) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = ArmyristPanelShape,
+                color = ArmyristColors.WorkSurface,
+                border = BorderStroke(1.dp, ArmyristColors.Border)
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("●  듣는 중... 말하세요", fontWeight = FontWeight.Bold)
+                    if (guide != null) {
+                        HorizontalDivider(color = ArmyristColors.Border)
+                        Text("💡 말할 수 있어요 (예시)", fontWeight = FontWeight.Bold)
+                        Text(guide.example)
+                        Text(
+                            guide.helper,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
-        },
-        modifier = modifier.heightIn(min = 52.dp),
-        shape = ArmyristPanelShape,
-        colors = ButtonDefaults.buttonColors(containerColor = ArmyristColors.PrimaryControl)
-    ) {
-        Text(
-            when (state) {
-                VoiceUiState.LISTENING -> "듣는 중... · 눌러서 종료"
-                VoiceUiState.RECOGNIZING -> "인식 중..."
-                VoiceUiState.STRUCTURING -> "정리 중..."
-                VoiceUiState.UNAVAILABLE -> "음성 입력 사용 불가"
-                else -> "음성 입력"
+        }
+
+        Button(
+            onClick = {
+                when (state) {
+                    VoiceUiState.LISTENING -> {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        session.finish()
+                    }
+                    VoiceUiState.UNAVAILABLE -> onMessage("이 기기에서 오프라인 음성인식을 사용할 수 없습니다.")
+                    else -> {
+                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startSession()
+                        else permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                }
             },
-            fontWeight = FontWeight.Bold
-        )
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+            shape = ArmyristPanelShape,
+            colors = ButtonDefaults.buttonColors(containerColor = ArmyristColors.PrimaryControl)
+        ) {
+            Text(
+                when (state) {
+                    VoiceUiState.LISTENING -> "■  입력 종료"
+                    VoiceUiState.RECOGNIZING -> "인식 중..."
+                    VoiceUiState.STRUCTURING -> "정리 중..."
+                    VoiceUiState.UNAVAILABLE -> "음성 입력 사용 불가"
+                    else -> "음성 입력"
+                },
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        if (state == VoiceUiState.LISTENING) {
+            Text(
+                "말하기가 끝나면 '입력 종료'를 누르세요.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
