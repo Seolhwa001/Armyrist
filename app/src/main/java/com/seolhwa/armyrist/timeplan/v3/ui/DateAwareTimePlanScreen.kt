@@ -366,6 +366,7 @@ private fun DateAwarePlanDetail(
                     shape = ArmyristPanelShape
                 ) { Text("편집 · 여러 항목 선택") }
                 OfflineVoiceButton(
+                toolContext = VoiceToolContext.TIME_PLAN,
                     modifier=Modifier.fillMaxWidth().padding(horizontal=8.dp),
                     onTranscript={ voiceDrafts = KoreanVoiceStructurer.timePlan(it, plan.start.value.value?.toLocalDate() ?: LocalDate.now()) },
                     onMessage={message=it}
