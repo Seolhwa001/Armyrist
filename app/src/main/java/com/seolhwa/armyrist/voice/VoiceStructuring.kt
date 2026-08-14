@@ -4,21 +4,40 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 
-enum class DraftState { READY, REVIEW_REQUIRED, UNRESOLVED }
+enum class VoiceDraftState {
+    VALID,
+    REVIEW_REQUIRED,
+    INVALID;
+
+    // Compatibility aliases for older call sites while the project transitions.
+    companion object {
+        val READY: VoiceDraftState = VALID
+        val UNRESOLVED: VoiceDraftState = INVALID
+    }
+}
+typealias DraftState = VoiceDraftState
+
+enum class VoiceFieldState { VALID, REVIEW_REQUIRED, INVALID }
 
 data class CountingVoiceDraft(
     val name: String,
     val quantity: Int?,
     val unit: String?,
     val note: String = "",
-    val state: DraftState
+    val rawTranscript: String = "",
+    val state: VoiceDraftState,
+    val nameState: VoiceFieldState = if (name.isBlank()) VoiceFieldState.INVALID else VoiceFieldState.VALID,
+    val quantityState: VoiceFieldState = if (quantity == null) VoiceFieldState.INVALID else VoiceFieldState.VALID,
+    val unitState: VoiceFieldState = if (unit.isNullOrBlank()) VoiceFieldState.INVALID else VoiceFieldState.VALID
 )
 
 data class ChecklistVoiceDraft(
     val name: String,
     val note: String = "",
     val scheduledTimeMinutes: Int? = null,
-    val state: DraftState = DraftState.READY
+    val rawTranscript: String = "",
+    val state: VoiceDraftState = if (name.isBlank()) VoiceDraftState.INVALID else VoiceDraftState.VALID,
+    val nameState: VoiceFieldState = if (name.isBlank()) VoiceFieldState.INVALID else VoiceFieldState.VALID
 )
 
 data class TimePlanVoiceDraft(
@@ -26,8 +45,17 @@ data class TimePlanVoiceDraft(
     val dateTime: LocalDateTime?,
     val rangeEnd: LocalDateTime? = null,
     val note: String = "",
-    val state: DraftState
+    val rawTranscript: String = "",
+    val state: VoiceDraftState,
+    val nameState: VoiceFieldState = if (name.isBlank()) VoiceFieldState.INVALID else VoiceFieldState.VALID,
+    val dateTimeState: VoiceFieldState = if (dateTime == null) VoiceFieldState.INVALID else VoiceFieldState.VALID,
+    val rangeEndState: VoiceFieldState = when {
+        rangeEnd == null -> VoiceFieldState.VALID
+        dateTime == null || rangeEnd.isBefore(dateTime) -> VoiceFieldState.INVALID
+        else -> VoiceFieldState.VALID
+    }
 )
+
 
 object KoreanVoiceStructurer {
     /**
@@ -127,43 +155,137 @@ object KoreanVoiceStructurer {
         return null
     }
 
+    private val commonCountingUnits = setOf(
+        "개", "명", "대", "병", "마리", "발", "장", "정", "통", "권", "봉", "세트", "박스", "켤레", "쌍"
+    )
+
+    private fun ambiguousAttachedQuantityUnit(token: String): Pair<Int, String>? {
+        // Example: "세대" can mean an ordinary word or "세 대".
+        // Return a candidate only as REVIEW_REQUIRED; never silently commit the interpretation.
+        nativeNumbers.entries
+            .sortedByDescending { it.key.length }
+            .forEach { (word, number) ->
+                if (token.startsWith(word) && token.length > word.length) {
+                    val unit = token.removePrefix(word)
+                    if (unit in commonCountingUnits) return number to unit
+                }
+            }
+        return null
+    }
+
+    fun revalidate(draft: CountingVoiceDraft): CountingVoiceDraft {
+        val nameState = if (draft.name.isBlank()) VoiceFieldState.INVALID else draft.nameState
+        val quantityState = if (draft.quantity == null) VoiceFieldState.INVALID else draft.quantityState
+        val unitState = if (draft.unit.isNullOrBlank()) VoiceFieldState.INVALID else draft.unitState
+        val fieldStates = listOf(nameState, quantityState, unitState)
+        val state = when {
+            VoiceFieldState.INVALID in fieldStates -> VoiceDraftState.INVALID
+            VoiceFieldState.REVIEW_REQUIRED in fieldStates -> VoiceDraftState.REVIEW_REQUIRED
+            else -> VoiceDraftState.VALID
+        }
+        return draft.copy(
+            state = state,
+            nameState = nameState,
+            quantityState = quantityState,
+            unitState = unitState
+        )
+    }
+
+    fun revalidate(draft: ChecklistVoiceDraft): ChecklistVoiceDraft {
+        val nameState = if (draft.name.isBlank()) VoiceFieldState.INVALID else draft.nameState
+        val state = when (nameState) {
+            VoiceFieldState.INVALID -> VoiceDraftState.INVALID
+            VoiceFieldState.REVIEW_REQUIRED -> VoiceDraftState.REVIEW_REQUIRED
+            VoiceFieldState.VALID -> VoiceDraftState.VALID
+        }
+        return draft.copy(state = state, nameState = nameState)
+    }
+
+    fun revalidate(draft: TimePlanVoiceDraft): TimePlanVoiceDraft {
+        val nameState = if (draft.name.isBlank()) VoiceFieldState.INVALID else draft.nameState
+        val dateState = if (draft.dateTime == null) VoiceFieldState.INVALID else draft.dateTimeState
+        val endState = when {
+            draft.rangeEnd == null -> draft.rangeEndState
+            draft.dateTime == null || draft.rangeEnd.isBefore(draft.dateTime) -> VoiceFieldState.INVALID
+            else -> draft.rangeEndState
+        }
+        val fieldStates = listOf(nameState, dateState, endState)
+        val state = when {
+            VoiceFieldState.INVALID in fieldStates -> VoiceDraftState.INVALID
+            VoiceFieldState.REVIEW_REQUIRED in fieldStates -> VoiceDraftState.REVIEW_REQUIRED
+            else -> VoiceDraftState.VALID
+        }
+        return draft.copy(
+            state = state,
+            nameState = nameState,
+            dateTimeState = dateState,
+            rangeEndState = endState
+        )
+    }
+
     fun counting(transcript: String): List<CountingVoiceDraft> {
         val chunks = countingChunks(transcript)
-        // Keep Korean quantity words as whole tokens. A missing unit such as
-        // "건전지 여섯" must not backtrack into quantity="여", unit="섯".
         val separatedPattern = Regex("^(.+?)\\s+(\\d+|[가-힣]+)\\s+([가-힣A-Za-z]+)$")
-        // Numeric quantity + unit is commonly spoken/transcribed without a space (e.g. "6개").
-        // This alternative is intentionally numeric-only so Hangul quantity words are never split.
         val attachedNumericPattern = Regex("^(.+?)\\s+(\\d+)([가-힣A-Za-z]+)$")
+
         return chunks.map { chunk ->
             val m = separatedPattern.matchEntire(chunk) ?: attachedNumericPattern.matchEntire(chunk)
-            if (m == null) {
-                val tokens = chunk.split(Regex("\\s+"))
-                val trailingQuantity = tokens.lastOrNull()?.let(::numberOf)
-                if (tokens.size >= 2 && trailingQuantity != null) {
-                    CountingVoiceDraft(
-                        tokens.dropLast(1).joinToString(" "),
-                        trailingQuantity,
-                        null,
-                        state = DraftState.UNRESOLVED
-                    )
-                } else {
-                    CountingVoiceDraft(chunk, null, null, state = DraftState.UNRESOLVED)
-                }
-            } else {
+            if (m != null) {
                 val q = numberOf(m.groupValues[2])
                 CountingVoiceDraft(
-                    m.groupValues[1].trim(),
-                    q,
-                    m.groupValues[3].trim(),
-                    state = if (q == null) DraftState.REVIEW_REQUIRED else DraftState.READY
+                    name = m.groupValues[1].trim(),
+                    quantity = q,
+                    unit = m.groupValues[3].trim(),
+                    rawTranscript = chunk,
+                    state = if (q == null) VoiceDraftState.INVALID else VoiceDraftState.VALID,
+                    quantityState = if (q == null) VoiceFieldState.INVALID else VoiceFieldState.VALID
                 )
+            } else {
+                val tokens = chunk.split(Regex("\\s+")).filter { it.isNotBlank() }
+                val last = tokens.lastOrNull().orEmpty()
+                val ambiguous = ambiguousAttachedQuantityUnit(last)
+                val trailingQuantity = last.takeIf { ambiguous == null }?.let(::numberOf)
+
+                when {
+                    tokens.size >= 2 && ambiguous != null -> {
+                        CountingVoiceDraft(
+                            name = tokens.dropLast(1).joinToString(" "),
+                            quantity = ambiguous.first,
+                            unit = ambiguous.second,
+                            rawTranscript = chunk,
+                            state = VoiceDraftState.REVIEW_REQUIRED,
+                            quantityState = VoiceFieldState.REVIEW_REQUIRED,
+                            unitState = VoiceFieldState.REVIEW_REQUIRED
+                        )
+                    }
+                    tokens.size >= 2 && trailingQuantity != null -> {
+                        CountingVoiceDraft(
+                            name = tokens.dropLast(1).joinToString(" "),
+                            quantity = trailingQuantity,
+                            unit = null,
+                            rawTranscript = chunk,
+                            state = VoiceDraftState.INVALID,
+                            unitState = VoiceFieldState.INVALID
+                        )
+                    }
+                    else -> {
+                        CountingVoiceDraft(
+                            name = chunk,
+                            quantity = null,
+                            unit = null,
+                            rawTranscript = chunk,
+                            state = VoiceDraftState.INVALID
+                        )
+                    }
+                }
             }
         }
     }
 
     fun checklist(transcript: String): List<ChecklistVoiceDraft> =
-        checklistChunks(transcript).map { ChecklistVoiceDraft(it) }
+        checklistChunks(transcript).map { chunk ->
+            ChecklistVoiceDraft(name = chunk, rawTranscript = chunk)
+        }
 
     /** Deterministic offline structuring. Ambiguous/missing dates remain UNRESOLVED. */
     fun timePlan(transcript: String, referenceDate: LocalDate): List<TimePlanVoiceDraft> {
@@ -217,7 +339,10 @@ object KoreanVoiceStructurer {
                 name = cleanedName,
                 dateTime = start,
                 rangeEnd = rangeEnd,
-                state = if (ready) DraftState.READY else DraftState.UNRESOLVED
+                rawTranscript = chunk,
+                state = if (ready) VoiceDraftState.VALID else VoiceDraftState.INVALID,
+                dateTimeState = if (start == null) VoiceFieldState.INVALID else VoiceFieldState.VALID,
+                rangeEndState = if (!wantsRange || rangeEnd != null) VoiceFieldState.VALID else VoiceFieldState.INVALID
             )
         }
     }

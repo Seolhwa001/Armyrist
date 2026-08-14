@@ -21,6 +21,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -335,6 +336,69 @@ fun OfflineVoiceButton(
     }
 }
 
+private val VoiceReviewWarningColor = Color(0xFFC77800)
+
+@Composable
+fun VoiceDraftStatusHeader(state: VoiceDraftState) {
+    val (label, color) = when (state) {
+        VoiceDraftState.VALID -> "✓ 정상" to ArmyristColors.Accent
+        VoiceDraftState.REVIEW_REQUIRED -> "! 확인 필요" to VoiceReviewWarningColor
+        VoiceDraftState.INVALID -> "! 문제 있음" to ArmyristColors.Danger
+    }
+    Text(label, fontWeight = FontWeight.Bold, color = color)
+}
+
+@Composable
+fun VoiceTranscriptDisclosure(rawTranscript: String) {
+    if (rawTranscript.isBlank()) return
+    var expanded by remember(rawTranscript) { mutableStateOf(false) }
+    OutlinedButton(
+        onClick = { expanded = !expanded },
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+    ) {
+        Text(if (expanded) "인식된 말 숨기기 ▲" else "인식된 말 보기 ▼")
+    }
+    if (expanded) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = ArmyristPanelShape,
+            color = ArmyristColors.WorkSurface,
+            border = BorderStroke(1.dp, ArmyristColors.Border)
+        ) {
+            Text(
+                "인식된 말: \"$rawTranscript\"",
+                modifier = Modifier.padding(10.dp),
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+@Composable
+fun VoiceFieldMarker(state: VoiceFieldState) {
+    if (state == VoiceFieldState.VALID) return
+    Text(
+        "!",
+        fontWeight = FontWeight.Black,
+        color = if (state == VoiceFieldState.INVALID) ArmyristColors.Danger else VoiceReviewWarningColor
+    )
+}
+
+@Composable
+fun voiceReviewFieldColors(state: VoiceFieldState): TextFieldColors {
+    val c = when (state) {
+        VoiceFieldState.VALID -> ArmyristColors.Border
+        VoiceFieldState.REVIEW_REQUIRED -> VoiceReviewWarningColor
+        VoiceFieldState.INVALID -> ArmyristColors.Danger
+    }
+    return OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = c,
+        unfocusedBorderColor = c,
+        errorBorderColor = c
+    )
+}
+
 @Composable
 fun CountingVoiceReviewDialog(
     initial: List<CountingVoiceDraft>,
@@ -342,37 +406,97 @@ fun CountingVoiceReviewDialog(
     onApply: (List<CountingVoiceDraft>) -> Unit
 ) {
     var drafts by remember { mutableStateOf(initial) }
+
+    fun update(index: Int, draft: CountingVoiceDraft) {
+        drafts = drafts.toMutableList().also { it[index] = KoreanVoiceStructurer.revalidate(draft) }
+    }
+
     Dialog(onDismissRequest = onDismiss) {
-        Card(Modifier.fillMaxWidth().fillMaxHeight(.86f), shape = ArmyristPanelShape) {
+        Card(Modifier.fillMaxWidth().fillMaxHeight(.88f).imePadding(), shape = ArmyristPanelShape) {
             Column(Modifier.padding(14.dp)) {
                 Text("음성 입력 검토", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("적용 전에는 기존 실셈 데이터가 변경되지 않습니다.", style = MaterialTheme.typography.bodySmall, color = ArmyristColors.SecondaryText)
+                Text(
+                    "아래 Draft를 확인하고 필요한 항목을 수정하세요. 적용 전에는 기존 실셈 데이터가 변경되지 않습니다.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ArmyristColors.SecondaryText
+                )
                 Spacer(Modifier.height(8.dp))
+
                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(drafts.indices.toList(), key = { it }) { i ->
                         val d = drafts[i]
-                        Card(Modifier.fillMaxWidth(), border = BorderStroke(1.dp, if (d.state == DraftState.READY) ArmyristColors.Border else ArmyristColors.PrimaryControl)) {
-                            Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                OutlinedTextField(d.name, { v -> drafts = drafts.toMutableList().also { it[i] = d.copy(name = v) } }, label = { Text("품명") }, modifier = Modifier.fillMaxWidth())
+                        val borderColor = when (d.state) {
+                            VoiceDraftState.VALID -> ArmyristColors.Border
+                            VoiceDraftState.REVIEW_REQUIRED -> VoiceReviewWarningColor
+                            VoiceDraftState.INVALID -> ArmyristColors.Danger
+                        }
+                        Card(
+                            Modifier.fillMaxWidth(),
+                            border = BorderStroke(1.dp, borderColor)
+                        ) {
+                            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                VoiceDraftStatusHeader(d.state)
+
+                                OutlinedTextField(
+                                    value = d.name,
+                                    onValueChange = { v ->
+                                        update(i, d.copy(
+                                            name = v,
+                                            nameState = if (v.isBlank()) VoiceFieldState.INVALID else VoiceFieldState.VALID
+                                        ))
+                                    },
+                                    label = { Text("품명") },
+                                    trailingIcon = { VoiceFieldMarker(d.nameState) },
+                                    colors = voiceReviewFieldColors(d.nameState),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedTextField(d.quantity?.toString().orEmpty(), { v ->
-                                        val q = v.filter(Char::isDigit).toIntOrNull()
-                                        drafts = drafts.toMutableList().also { it[i] = d.copy(quantity = q, state = if (q != null && !d.unit.isNullOrBlank()) DraftState.READY else DraftState.REVIEW_REQUIRED) }
-                                    }, label = { Text("수량") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
-                                    OutlinedTextField(d.unit.orEmpty(), { v ->
-                                        drafts = drafts.toMutableList().also { it[i] = d.copy(unit = v, state = if (d.quantity != null && v.isNotBlank()) DraftState.READY else DraftState.REVIEW_REQUIRED) }
-                                    }, label = { Text("단위") }, modifier = Modifier.weight(1f))
+                                    OutlinedTextField(
+                                        value = d.quantity?.toString().orEmpty(),
+                                        onValueChange = { v ->
+                                            val q = v.filter(Char::isDigit).toIntOrNull()
+                                            update(i, d.copy(
+                                                quantity = q,
+                                                quantityState = if (q == null) VoiceFieldState.INVALID else VoiceFieldState.VALID
+                                            ))
+                                        },
+                                        label = { Text("수량") },
+                                        trailingIcon = { VoiceFieldMarker(d.quantityState) },
+                                        colors = voiceReviewFieldColors(d.quantityState),
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    OutlinedTextField(
+                                        value = d.unit.orEmpty(),
+                                        onValueChange = { v ->
+                                            update(i, d.copy(
+                                                unit = v,
+                                                unitState = if (v.isBlank()) VoiceFieldState.INVALID else VoiceFieldState.VALID
+                                            ))
+                                        },
+                                        label = { Text("단위") },
+                                        trailingIcon = { VoiceFieldMarker(d.unitState) },
+                                        colors = voiceReviewFieldColors(d.unitState),
+                                        modifier = Modifier.weight(1f)
+                                    )
                                 }
-                                TextButton(onClick = { drafts = drafts.filterIndexed { idx, _ -> idx != i } }) { Text("삭제") }
+
+                                VoiceTranscriptDisclosure(d.rawTranscript)
+
+                                TextButton(onClick = {
+                                    drafts = drafts.filterIndexed { idx, _ -> idx != i }
+                                }) { Text("삭제") }
                             }
                         }
                     }
                 }
+
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("전체 취소") }
                     Button(
                         onClick = { onApply(drafts) },
-                        enabled = drafts.isNotEmpty() && drafts.all { it.name.isNotBlank() && it.quantity != null && !it.unit.isNullOrBlank() },
+                        enabled = drafts.isNotEmpty() && drafts.none { it.state == VoiceDraftState.INVALID },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(containerColor = ArmyristColors.PrimaryControl)
                     ) { Text("적용") }
@@ -389,26 +513,62 @@ fun ChecklistVoiceReviewDialog(
     onApply: (List<ChecklistVoiceDraft>) -> Unit
 ) {
     var drafts by remember { mutableStateOf(initial) }
+
     Dialog(onDismissRequest = onDismiss) {
-        Card(Modifier.fillMaxWidth().fillMaxHeight(.82f), shape = ArmyristPanelShape) {
+        Card(Modifier.fillMaxWidth().fillMaxHeight(.84f).imePadding(), shape = ArmyristPanelShape) {
             Column(Modifier.padding(14.dp)) {
                 Text("음성 입력 검토", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("적용 시 모두 새 체크 항목으로 추가됩니다. 기존 항목은 수정하지 않습니다.", style = MaterialTheme.typography.bodySmall, color = ArmyristColors.SecondaryText)
+                Text(
+                    "아래 Draft를 확인하고 필요한 항목을 수정하세요. 기존 항목은 적용 전까지 변경되지 않습니다.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ArmyristColors.SecondaryText
+                )
                 Spacer(Modifier.height(8.dp))
+
                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(drafts.indices.toList(), key = { it }) { i ->
                         val d = drafts[i]
-                        Card(Modifier.fillMaxWidth(), border = BorderStroke(1.dp, ArmyristColors.Border)) {
-                            Column(Modifier.padding(8.dp)) {
-                                OutlinedTextField(d.name, { v -> drafts = drafts.toMutableList().also { it[i] = d.copy(name = v) } }, label = { Text("체크 항목") }, modifier = Modifier.fillMaxWidth())
-                                TextButton(onClick = { drafts = drafts.filterIndexed { idx, _ -> idx != i } }) { Text("삭제") }
+                        val borderColor = when (d.state) {
+                            VoiceDraftState.VALID -> ArmyristColors.Border
+                            VoiceDraftState.REVIEW_REQUIRED -> VoiceReviewWarningColor
+                            VoiceDraftState.INVALID -> ArmyristColors.Danger
+                        }
+                        Card(Modifier.fillMaxWidth(), border = BorderStroke(1.dp, borderColor)) {
+                            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                VoiceDraftStatusHeader(d.state)
+                                OutlinedTextField(
+                                    value = d.name,
+                                    onValueChange = { v ->
+                                        val changed = d.copy(
+                                            name = v,
+                                            nameState = if (v.isBlank()) VoiceFieldState.INVALID else VoiceFieldState.VALID
+                                        )
+                                        drafts = drafts.toMutableList().also {
+                                            it[i] = KoreanVoiceStructurer.revalidate(changed)
+                                        }
+                                    },
+                                    label = { Text("체크 항목") },
+                                    trailingIcon = { VoiceFieldMarker(d.nameState) },
+                                    colors = voiceReviewFieldColors(d.nameState),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                VoiceTranscriptDisclosure(d.rawTranscript)
+                                TextButton(onClick = {
+                                    drafts = drafts.filterIndexed { idx, _ -> idx != i }
+                                }) { Text("삭제") }
                             }
                         }
                     }
                 }
+
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("전체 취소") }
-                    Button(onClick = { onApply(drafts) }, enabled = drafts.isNotEmpty() && drafts.all { it.name.isNotBlank() }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = ArmyristColors.PrimaryControl)) { Text("적용") }
+                    Button(
+                        onClick = { onApply(drafts) },
+                        enabled = drafts.isNotEmpty() && drafts.none { it.state == VoiceDraftState.INVALID },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = ArmyristColors.PrimaryControl)
+                    ) { Text("적용") }
                 }
             }
         }
