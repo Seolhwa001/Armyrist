@@ -399,6 +399,17 @@ private fun DataManagementScreen(
                     },
                     modifier = Modifier.fillMaxWidth(),
                     primary = false
+                )
+                Spacer(Modifier.height(8.dp))
+                ArmyristActionButton(
+                    text = "Wi-Fi Direct 수신 (PoC)",
+                    onClick = {
+                        context.startActivity(
+                            android.content.Intent(context, WifiDirectTransferActivity::class.java)
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    primary = false
                 )            }
         }
     }

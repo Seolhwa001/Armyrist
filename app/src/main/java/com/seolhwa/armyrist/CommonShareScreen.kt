@@ -541,6 +541,50 @@ fun CommonShareScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = ArmyristColors.SecondaryText
                         )
+                        Spacer(Modifier.height(8.dp))
+                        ArmyristActionButton(
+                            text = "Wi-Fi Direct 전송 (PoC)",
+                            onClick = {
+                                createPortableBytes()?.let { bytes ->
+                                    runCatching {
+                                        val dir = java.io.File(
+                                            context.cacheDir,
+                                            "wifi-direct-send"
+                                        ).apply { mkdirs() }
+                                        val file = java.io.File(
+                                            dir,
+                                            "wifi-direct-${System.currentTimeMillis()}.armyrist"
+                                        )
+                                        file.writeBytes(bytes)
+                                        context.startActivity(
+                                            Intent(
+                                                context,
+                                                WifiDirectTransferActivity::class.java
+                                            ).apply {
+                                                putExtra(
+                                                    WifiDirectTransferActivity.EXTRA_SEND_FILE,
+                                                    file.absolutePath
+                                                )
+                                            }
+                                        )
+                                    }.onFailure {
+                                        Toast.makeText(
+                                            context,
+                                            "Wi-Fi Direct 전송을 준비할 수 없습니다.",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            primary = false
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "공유기/인터넷 없이 Wi-Fi Direct로 두 기기를 직접 연결하는 기술검증입니다.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = ArmyristColors.SecondaryText
+                        )
                     }                }
             }
         }
