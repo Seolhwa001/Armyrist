@@ -306,6 +306,7 @@ private fun DateAwarePlanDetail(
     var batchDateOpen by remember { mutableStateOf(false) }
     var conflictDetail by remember { mutableStateOf<TimePlanConflict?>(null) }
     var pendingNavigation by remember { mutableStateOf<String?>(null) }
+    var headerMenuOpen by remember { mutableStateOf(false) }
     val view = LocalView.current
     val conflicts = remember(plan) { TimePlanConstraintEngine.detect(plan) }
 
@@ -345,32 +346,58 @@ private fun DateAwarePlanDetail(
     Scaffold(
         topBar = {
             ArmyristTopBar(
-                plan.title,
-                "TIME PLAN · DATE · AUTO SAVE",
-                "홈",
-                { requestNavigation("HOME") }
+                title = plan.title,
+                subtitle = "TIME PLAN · DATE · AUTO SAVE",
+                leadingLabel = "홈",
+                onLeading = { requestNavigation("HOME") },
+                secondaryLeadingLabel = "☰",
+                onSecondaryLeading = { requestNavigation("BACK") },
+                onTitleClick = { editTitle = true },
+                actions = {
+                    Box {
+                        TextButton(onClick = { headerMenuOpen = true }) {
+                            Text("⋮", color = ArmyristColors.OnDark, style = MaterialTheme.typography.titleLarge)
+                        }
+                        DropdownMenu(expanded = headerMenuOpen, onDismissRequest = { headerMenuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("결과 전달") },
+                                onClick = { headerMenuOpen = false; requestNavigation("RESULT") }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("메모") },
+                                onClick = { headerMenuOpen = false; editMemo = true }
+                            )
+                        }
+                    }
+                }
             )
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick={requestNavigation("BACK")}, modifier=Modifier.weight(1f), shape=ArmyristPanelShape) { Text("목록") }
-                OutlinedButton(onClick={editTitle=true}, modifier=Modifier.weight(1f), shape=ArmyristPanelShape) { Text("제목 수정") }
-                Button(onClick={requestNavigation("RESULT")}, modifier=Modifier.weight(1f), shape=ArmyristPanelShape, colors=ButtonDefaults.buttonColors(containerColor=ArmyristColors.PrimaryControl)) { Text("결과 전달") }
-            }
-
             if (!selectionMode) {
-                OutlinedButton(
-                    onClick = { selectionMode = true; selectedKeys = emptySet() },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                    shape = ArmyristPanelShape
-                ) { Text("편집 · 여러 항목 선택") }
-                OfflineVoiceButton(
-                toolContext = VoiceToolContext.TIME_PLAN,
-                    modifier=Modifier.fillMaxWidth().padding(horizontal=8.dp),
-                    onTranscript={ voiceDrafts = KoreanVoiceStructurer.timePlan(it, plan.start.value.value?.toLocalDate() ?: LocalDate.now()) },
-                    onMessage={message=it}
-                )
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { selectionMode = true; selectedKeys = emptySet() },
+                        modifier = Modifier.weight(1f),
+                        shape = ArmyristPanelShape
+                    ) { Text("편집/선택") }
+                    Box(Modifier.weight(1f)) {
+                        OfflineVoiceButton(
+                            toolContext = VoiceToolContext.TIME_PLAN,
+                            modifier = Modifier.fillMaxWidth(),
+                            onTranscript = {
+                                voiceDrafts = KoreanVoiceStructurer.timePlan(
+                                    it,
+                                    plan.start.value.value?.toLocalDate() ?: LocalDate.now()
+                                )
+                            },
+                            onMessage = { message = it }
+                        )
+                    }
+                }
             } else {
                 SelectionActionPanel(
                     selectedKeys = selectedKeys,
