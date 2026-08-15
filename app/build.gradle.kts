@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 71
-        versionName = "0.4.31-build-qa-003-fragment-lint-fix"
+        versionCode = 72
+        versionName = "0.4.32-ui-transfer-guidance-buildfix"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
