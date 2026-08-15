@@ -1023,10 +1023,14 @@ private fun CountingScreen(
                                 }
                             }
                     ) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        BoxWithConstraints(Modifier.fillMaxWidth()) {
+                            val stackedDetailed =
+                                viewMode == CountingViewMode.DETAILED && maxWidth < 430.dp
+
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                             if (groupColor != null) {
                                 Box(
                                     Modifier
@@ -1036,6 +1040,94 @@ private fun CountingScreen(
                                 )
                             }
 
+                            if (stackedDetailed) {
+                                Column(
+                                    Modifier
+                                        .weight(1f)
+                                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Row(
+                                        Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.Top
+                                    ) {
+                                        Text(
+                                            if (selected) "✓" else "${index + 1}.",
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.width(34.dp)
+                                        )
+                                        Column(Modifier.weight(1f)) {
+                                            Text(
+                                                item.name,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                            Text(
+                                                "${item.unit} · $groupName",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            if (item.note.isNotBlank()) {
+                                                Text(
+                                                    "비고: ${item.note}",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                        if (!assignmentMode) {
+                                            TextButton(
+                                                onClick = { menuTarget = item },
+                                                modifier = Modifier.widthIn(min = 48.dp).heightIn(min = 48.dp)
+                                            ) { Text("⋮") }
+                                        }
+                                    }
+
+                                    if (!assignmentMode) {
+                                        Row(
+                                            Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Center
+                                        ) {
+                                            OutlinedButton(
+                                                onClick = { onDecrement(item.id) },
+                                                modifier = Modifier.sizeIn(minWidth = 56.dp, minHeight = 56.dp),
+                                                shape = ArmyristPanelShape,
+                                                border = BorderStroke(1.dp, ArmyristColors.Border),
+                                                contentPadding = PaddingValues(0.dp)
+                                            ) { Text("−", style = MaterialTheme.typography.titleLarge) }
+                                            Spacer(Modifier.width(12.dp))
+                                            Button(
+                                                onClick = { quantityTarget = item },
+                                                modifier = Modifier.widthIn(min = 78.dp).heightIn(min = 58.dp),
+                                                shape = ArmyristPanelShape,
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = ArmyristColors.HeaderRaised,
+                                                    contentColor = ArmyristColors.OnDark
+                                                ),
+                                                contentPadding = PaddingValues(horizontal = 8.dp)
+                                            ) {
+                                                Text(
+                                                    item.quantity.toString(),
+                                                    style = MaterialTheme.typography.headlineMedium,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                            Spacer(Modifier.width(12.dp))
+                                            Button(
+                                                onClick = { onIncrement(item.id) },
+                                                modifier = Modifier.sizeIn(minWidth = 56.dp, minHeight = 56.dp),
+                                                shape = ArmyristPanelShape,
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = ArmyristColors.PrimaryControl,
+                                                    contentColor = ArmyristColors.OnDark
+                                                ),
+                                                contentPadding = PaddingValues(0.dp)
+                                            ) { Text("+", style = MaterialTheme.typography.titleLarge) }
+                                        }
+                                    }
+                                }
+                            } else {
                             Row(
                                 Modifier
                                     .weight(1f)
@@ -1181,7 +1273,8 @@ private fun CountingScreen(
                                 )
                             }
                             }
-                        }
+                            } // responsive horizontal branch
+                        } // BoxWithConstraints
                     }
                 }
 

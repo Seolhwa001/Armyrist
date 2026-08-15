@@ -79,7 +79,7 @@ class PortableTransferActivity : ComponentActivity() {
                 contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
                     ?: error("open failed")
             }.onSuccess {
-                Toast.makeText(this, "Armyrist 데이터 파일을 저장했습니다.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "아미리스 데이터 파일을 저장했습니다.", Toast.LENGTH_SHORT).show()
             }.onFailure {
                 Toast.makeText(this, "파일을 저장할 수 없습니다.", Toast.LENGTH_SHORT).show()
             }
@@ -252,7 +252,7 @@ class PortableTransferActivity : ComponentActivity() {
             startActivity(
                 Intent.createChooser(
                     sendIntent,
-                    "Armyrist 데이터 공유"
+                    "아미리스 데이터 공유"
                 )
             )
         }.onFailure {
@@ -295,7 +295,25 @@ class PortableTransferActivity : ComponentActivity() {
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         ArmyristPanel(Modifier.fillMaxWidth()) {
-                            Text("현재 문서를 다른 Armyrist로 전달할 수 있는 데이터 파일로 만듭니다.")
+                            Text("현재 문서를 다른 아미리스로 전달할 수 있는 데이터 파일로 만듭니다.")
+                            Spacer(Modifier.height(12.dp))
+                            ArmyristPanel(Modifier.fillMaxWidth()) {
+                                Text(
+                                    "데이터 파일 전달 안내",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    "가까운 Galaxy 기기로 전달할 때는 Quick Share를 이용하면 편리합니다.",
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    "카카오톡으로 받은 경우 •••(더보기) 기능 → 다른 앱으로 공유 → 아미리스를 선택해주세요.",
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
                             Spacer(Modifier.height(12.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Switch(checked = encrypt, onCheckedChange = { encrypt = it })
