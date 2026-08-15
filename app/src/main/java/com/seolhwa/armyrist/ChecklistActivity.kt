@@ -594,9 +594,7 @@ private fun ChecklistDetailScreen(
     var assignmentGroupId by rememberSaveable { mutableStateOf<String?>(null) }
     var assignmentUngroup by rememberSaveable { mutableStateOf(false) }
     var selectedIdList by rememberSaveable { mutableStateOf(emptyList<String>()) }
-    var selectedIds
-        get() = selectedIdList.toSet()
-        set(value) { selectedIdList = value.toList() }
+    val selectedIds = selectedIdList.toSet()
 
     val haptic = LocalHapticFeedback.current
     val threshold = with(LocalDensity.current) { 46.dp.toPx() }
@@ -606,7 +604,7 @@ private fun ChecklistDetailScreen(
             assignmentGroupId != null || assignmentUngroup -> {
                 assignmentGroupId = null
                 assignmentUngroup = false
-                selectedIds = emptySet()
+                selectedIdList = emptyList()
             }
             else -> onBack()
         }
@@ -783,7 +781,7 @@ private fun ChecklistDetailScreen(
                         TextButton(onClick = {
                             assignmentGroupId = null
                             assignmentUngroup = false
-                            selectedIds = emptySet()
+                            selectedIdList = emptyList()
                         }) { Text("취소") }
                         Button(
                             enabled = selectedIds.isNotEmpty(),
@@ -794,7 +792,7 @@ private fun ChecklistDetailScreen(
                                 )
                                 assignmentGroupId = null
                                 assignmentUngroup = false
-                                selectedIds = emptySet()
+                                selectedIdList = emptyList()
                             }
                         ) { Text("확인") }
                     }
@@ -1021,7 +1019,7 @@ private fun ChecklistDetailScreen(
                 groupPicker = false
                 assignmentGroupId = groupId
                 assignmentUngroup = ungroup
-                selectedIds = emptySet()
+                selectedIdList = emptyList()
             }
         )
     }

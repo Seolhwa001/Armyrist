@@ -84,9 +84,7 @@ private fun ArmyristApp(
     onHome: () -> Unit
 ) {
     var screenName by rememberSaveable { mutableStateOf(Screen.SHEETS.name) }
-    var screen
-        get() = runCatching { Screen.valueOf(screenName) }.getOrDefault(Screen.SHEETS)
-        set(value) { screenName = value.name }
+    val screen = runCatching { Screen.valueOf(screenName) }.getOrDefault(Screen.SHEETS)
     var selectedSheetId by rememberSaveable { mutableStateOf<String?>(null) }
     var revision by remember { mutableIntStateOf(0) }
     @Suppress("UNUSED_VARIABLE")
@@ -103,11 +101,11 @@ private fun ArmyristApp(
             onCreate = {
                 selectedSheetId = repo.createSheet().id
                 refresh()
-                screen = Screen.COUNTING
+                screenName = Screen.COUNTING.name
             },
             onOpen = {
                 selectedSheetId = it
-                screen = Screen.COUNTING
+                screenName = Screen.COUNTING.name
             },
             onRename = { id, title ->
                 if (repo.renameSheet(id, title)) refresh()
@@ -123,13 +121,13 @@ private fun ArmyristApp(
             val sheet = id?.let(repo::getSheet)
 
             if (sheet == null) {
-                screen = Screen.SHEETS
+                screenName = Screen.SHEETS.name
             } else {
                 when (screen) {
                     Screen.COUNTING -> CountingScreen(
                         sheet = sheet,
                         onHome = onHome,
-                        onBack = { screen = Screen.SHEETS },
+                        onBack = { screenName = Screen.SHEETS.name },
                         onAddGroup = { name, color, showAggregate ->
                             if (
                                 repo.addGroup(
@@ -159,8 +157,8 @@ private fun ArmyristApp(
                             repo.deleteGroup(sheet.id, it)
                             refresh()
                         },
-                        onCalculations = { screen = Screen.CALCULATIONS },
-                        onResult = { screen = Screen.RESULT },
+                        onCalculations = { screenName = Screen.CALCULATIONS.name },
+                        onResult = { screenName = Screen.RESULT.name },
                         onRename = {
                             if (repo.renameSheet(sheet.id, it)) refresh()
                         },
@@ -200,7 +198,7 @@ private fun ArmyristApp(
 
                     Screen.GROUPS -> GroupScreen(
                         sheet = sheet,
-                        onBack = { screen = Screen.COUNTING },
+                        onBack = { screenName = Screen.COUNTING.name },
                         onAdd = { name, color, showAggregate ->
                             if (
                                 repo.addGroup(
@@ -234,7 +232,7 @@ private fun ArmyristApp(
 
                     Screen.CALCULATIONS -> CalculationScreen(
                         sheet = sheet,
-                        onBack = { screen = Screen.COUNTING },
+                        onBack = { screenName = Screen.COUNTING.name },
                         onAdd = { left, operator, right, name ->
                             if (repo.addCalculation(sheet.id, left, operator, right, name)) refresh()
                         },
@@ -253,7 +251,7 @@ private fun ArmyristApp(
                             title = sheet.title,
                             body = ResultGenerator.generate(sheet)
                         ),
-                        onBack = { screen = Screen.COUNTING },
+                        onBack = { screenName = Screen.COUNTING.name },
                         portableType = ArmyristPortableDataType.COUNTING,
                         portableRootId = sheet.id
                     )
@@ -475,9 +473,7 @@ private fun CountingScreen(
     var groupPickerOpen by rememberSaveable { mutableStateOf(false) }
     var assignmentGroupId by rememberSaveable { mutableStateOf<String?>(null) }
     var assignmentSelectedList by rememberSaveable { mutableStateOf(emptyList<String>()) }
-    var assignmentSelected
-        get() = assignmentSelectedList.toSet()
-        set(value) { assignmentSelectedList = value.toList() }
+    val assignmentSelected = assignmentSelectedList.toSet()
 
     val dragThresholdPx = with(LocalDensity.current) { 44.dp.toPx() }
     val listState = rememberLazyListState()
@@ -485,7 +481,7 @@ private fun CountingScreen(
     BackHandler {
         if (assignmentGroupId != null) {
             assignmentGroupId = null
-            assignmentSelected = emptySet()
+            assignmentSelectedList = emptyList()
         } else {
             onBack()
         }
@@ -594,7 +590,7 @@ private fun CountingScreen(
                         TextButton(
                             onClick = {
                                 assignmentGroupId = null
-                                assignmentSelected = emptySet()
+                                assignmentSelectedList = emptyList()
                             }
                         ) {
                             Text("취소")
@@ -607,7 +603,7 @@ private fun CountingScreen(
                                     assignmentGroupId?.takeIf { it.isNotEmpty() }
                                 )
                                 assignmentGroupId = null
-                                assignmentSelected = emptySet()
+                                assignmentSelectedList = emptyList()
                             }
                         ) {
                             Text("확인")
@@ -1295,7 +1291,7 @@ private fun CountingScreen(
             if (groupId != null) {
                 assignmentGroupId =
                     if (groupId == "__UNASSIGNED__") "" else groupId
-                assignmentSelected = emptySet()
+                assignmentSelectedList = emptyList()
             }
         }
     }
