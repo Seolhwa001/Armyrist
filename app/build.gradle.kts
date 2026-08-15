@@ -24,7 +24,7 @@ android {
         minSdk = 23
         targetSdk = 36
         versionCode = 61
-        versionName = "0.4.21-data-transfer-direct-open-poc"
+        versionName = "0.4.21-dt-poc-file-association-rework"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
