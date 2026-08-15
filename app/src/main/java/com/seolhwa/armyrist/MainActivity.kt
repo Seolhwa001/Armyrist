@@ -34,6 +34,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -82,8 +83,11 @@ private fun ArmyristApp(
     coreRepo: CoreSuiteRepository,
     onHome: () -> Unit
 ) {
-    var screen by remember { mutableStateOf(Screen.SHEETS) }
-    var selectedSheetId by remember { mutableStateOf<String?>(null) }
+    var screenName by rememberSaveable { mutableStateOf(Screen.SHEETS.name) }
+    var screen
+        get() = runCatching { Screen.valueOf(screenName) }.getOrDefault(Screen.SHEETS)
+        set(value) { screenName = value.name }
+    var selectedSheetId by rememberSaveable { mutableStateOf<String?>(null) }
     var revision by remember { mutableIntStateOf(0) }
     @Suppress("UNUSED_VARIABLE")
     val observedRevision = revision
@@ -449,12 +453,12 @@ private fun CountingScreen(
 ) {
     val context = LocalContext.current
     var itemEditor by remember { mutableStateOf<CountingItem?>(null) }
-    var creating by remember { mutableStateOf(false) }
+    var creating by rememberSaveable { mutableStateOf(false) }
     var quantityTarget by remember { mutableStateOf<CountingItem?>(null) }
     var deleteTarget by remember { mutableStateOf<CountingItem?>(null) }
-    var titleEdit by remember { mutableStateOf(false) }
-    var memoEdit by remember { mutableStateOf(false) }
-    var groupManager by remember { mutableStateOf(false) }
+    var titleEdit by rememberSaveable { mutableStateOf(false) }
+    var memoEdit by rememberSaveable { mutableStateOf(false) }
+    var groupManager by rememberSaveable { mutableStateOf(false) }
     var menuTarget by remember { mutableStateOf<CountingItem?>(null) }
     var voiceDrafts by remember { mutableStateOf<List<CountingVoiceDraft>?>(null) }
     var voiceMessage by remember { mutableStateOf<String?>(null) }
@@ -468,9 +472,12 @@ private fun CountingScreen(
     var headerMenuOpen by remember { mutableStateOf(false) }
     var viewMenuOpen by remember { mutableStateOf(false) }
 
-    var groupPickerOpen by remember { mutableStateOf(false) }
-    var assignmentGroupId by remember { mutableStateOf<String?>(null) }
-    var assignmentSelected by remember { mutableStateOf(setOf<String>()) }
+    var groupPickerOpen by rememberSaveable { mutableStateOf(false) }
+    var assignmentGroupId by rememberSaveable { mutableStateOf<String?>(null) }
+    var assignmentSelectedList by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var assignmentSelected
+        get() = assignmentSelectedList.toSet()
+        set(value) { assignmentSelectedList = value.toList() }
 
     val dragThresholdPx = with(LocalDensity.current) { 44.dp.toPx() }
     val listState = rememberLazyListState()
@@ -2202,7 +2209,7 @@ private fun CalculationScreen(
     onDelete: (String) -> Unit
 ) {
     var editor by remember { mutableStateOf<GroupCalculation?>(null) }
-    var creating by remember { mutableStateOf(false) }
+    var creating by rememberSaveable { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<GroupCalculation?>(null) }
 
     BackHandler { onBack() }

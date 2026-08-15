@@ -34,6 +34,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -218,8 +219,8 @@ private fun ChecklistApp(
     onCancelItemNotification: (String) -> Unit,
     onCancelChecklistNotifications: (Checklist) -> Unit
 ) {
-    var selectedId by remember { mutableStateOf(initialChecklistId) }
-    var showingResult by remember { mutableStateOf(false) }
+    var selectedId by rememberSaveable { mutableStateOf(initialChecklistId) }
+    var showingResult by rememberSaveable { mutableStateOf(false) }
     var revision by remember { mutableIntStateOf(0) }
     @Suppress("UNUSED_VARIABLE") val observed = revision
 
@@ -575,24 +576,27 @@ private fun ChecklistDetailScreen(
     onMove: (String, Int) -> Unit
 ) {
     val context = LocalContext.current
-    var titleEdit by remember { mutableStateOf(false) }
-    var addingItem by remember { mutableStateOf(false) }
+    var titleEdit by rememberSaveable { mutableStateOf(false) }
+    var addingItem by rememberSaveable { mutableStateOf(false) }
     var editingItem by remember { mutableStateOf<ChecklistItem?>(null) }
-    var groupManager by remember { mutableStateOf(false) }
-    var groupPicker by remember { mutableStateOf(false) }
-    var memoEdit by remember { mutableStateOf(false) }
-    var resetConfirm by remember { mutableStateOf(false) }
+    var groupManager by rememberSaveable { mutableStateOf(false) }
+    var groupPicker by rememberSaveable { mutableStateOf(false) }
+    var memoEdit by rememberSaveable { mutableStateOf(false) }
+    var resetConfirm by rememberSaveable { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<ChecklistItem?>(null) }
-    var trashOpen by remember { mutableStateOf(false) }
+    var trashOpen by rememberSaveable { mutableStateOf(false) }
     var permanentDeleteTarget by remember { mutableStateOf<ChecklistItem?>(null) }
     var viewMode by remember { mutableStateOf(ChecklistViewMode.DETAIL) }
     var voiceDrafts by remember { mutableStateOf<List<ChecklistVoiceDraft>?>(null) }
     var voiceMessage by remember { mutableStateOf<String?>(null) }
     var headerMenuOpen by remember { mutableStateOf(false) }
 
-    var assignmentGroupId by remember { mutableStateOf<String?>(null) }
-    var assignmentUngroup by remember { mutableStateOf(false) }
-    var selectedIds by remember { mutableStateOf(setOf<String>()) }
+    var assignmentGroupId by rememberSaveable { mutableStateOf<String?>(null) }
+    var assignmentUngroup by rememberSaveable { mutableStateOf(false) }
+    var selectedIdList by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var selectedIds
+        get() = selectedIdList.toSet()
+        set(value) { selectedIdList = value.toList() }
 
     val haptic = LocalHapticFeedback.current
     val threshold = with(LocalDensity.current) { 46.dp.toPx() }

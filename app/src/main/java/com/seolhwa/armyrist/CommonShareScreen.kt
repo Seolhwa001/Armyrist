@@ -16,6 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -67,13 +68,13 @@ fun CommonShareScreen(
     val context = LocalContext.current
     val templates = remember { repo.getReportTemplates() }
     val default = templates.firstOrNull { it.isDefault }
-    var selectedId by remember { mutableStateOf(default?.id ?: NONE_TEMPLATE) }
+    var selectedId by rememberSaveable { mutableStateOf(default?.id ?: NONE_TEMPLATE) }
     val selected = templates.firstOrNull { it.id == selectedId }
 
     var pendingSaveBytes by remember { mutableStateOf<ByteArray?>(null) }
-    var encrypt by remember { mutableStateOf(false) }
-    var password by remember { mutableStateOf("") }
-    var passwordConfirm by remember { mutableStateOf("") }
+    var encrypt by rememberSaveable { mutableStateOf(false) }
+    var password by rememberSaveable { mutableStateOf("") }
+    var passwordConfirm by rememberSaveable { mutableStateOf("") }
 
     val saveFile = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/vnd.armyrist.data")
