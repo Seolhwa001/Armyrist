@@ -454,7 +454,6 @@ private fun CountingScreen(
     var menuTarget by remember { mutableStateOf<CountingItem?>(null) }
     var voiceDrafts by remember { mutableStateOf<List<CountingVoiceDraft>?>(null) }
     var voiceMessage by remember { mutableStateOf<String?>(null) }
-    val context = LocalContext.current
     val viewPrefs = remember { context.getSharedPreferences("armyrist_ui", Context.MODE_PRIVATE) }
     var viewMode by remember {
         mutableStateOf(
