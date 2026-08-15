@@ -2,6 +2,7 @@ package com.seolhwa.armyrist
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -18,7 +19,7 @@ fun ArmyristUtilityActionButton(
 ) {
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier.heightIn(min = 52.dp),
         shape = ArmyristPanelShape,
         border = BorderStroke(
             1.dp,

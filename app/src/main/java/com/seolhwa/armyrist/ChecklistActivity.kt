@@ -618,7 +618,7 @@ private fun ChecklistDetailScreen(
                 subtitle = "CHECKLIST · 항목 ${checklist.items.size} · AUTO SAVE",
                 leadingLabel = "홈",
                 onLeading = onHome,
-                secondaryLeadingLabel = "☰",
+                secondaryLeadingLabel = "메뉴",
                 onSecondaryLeading = onBack,
                 onTitleClick = { titleEdit = true },
                 actions = {
@@ -660,8 +660,8 @@ private fun ChecklistDetailScreen(
                     Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    ChecklistUtilityButton(text = "그룹 설정", onClick = { groupManager = true })
-                    ChecklistUtilityButton(text = "그룹 지정", onClick = { groupPicker = true })
+                    ChecklistUtilityButton(text = "그룹 설정", onClick = { groupManager = true }, modifier = Modifier.weight(1f))
+                    ChecklistUtilityButton(text = "그룹 지정", onClick = { groupPicker = true }, modifier = Modifier.weight(1f))
                     Box(Modifier.weight(1f)) {
                         OfflineVoiceButton(
                             toolContext = VoiceToolContext.CHECKLIST,
@@ -1119,10 +1119,12 @@ private fun ChecklistDetailScreen(
 @Composable
 private fun ChecklistUtilityButton(
     text: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     OutlinedButton(
         onClick = onClick,
+        modifier = modifier.heightIn(min = 52.dp),
         shape = ArmyristPanelShape,
         border = BorderStroke(
             1.dp,

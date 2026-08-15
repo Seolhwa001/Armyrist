@@ -26,6 +26,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -487,7 +491,7 @@ private fun CountingScreen(
                 subtitle = "COUNTING · 항목 ${sheet.items.size} · AUTO SAVE",
                 leadingLabel = "홈",
                 onLeading = onHome,
-                secondaryLeadingLabel = "☰",
+                secondaryLeadingLabel = "메뉴",
                 onSecondaryLeading = onBack,
                 onTitleClick = { titleEdit = true },
                 actions = {
@@ -607,6 +611,134 @@ private fun CountingScreen(
 
             HorizontalDivider()
 
+            if (viewMode == CountingViewMode.COMPACT) {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 108.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    if (sheet.items.isEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Column(
+                                Modifier.fillMaxWidth().padding(vertical = 28.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text("항목이 없습니다", style = MaterialTheme.typography.titleMedium)
+                                Spacer(Modifier.height(6.dp))
+                                Text("아래 새 항목 추가 버튼으로 시작하세요.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+
+                    gridItems(
+                        items = sheet.items.sortedBy { it.order },
+                        key = { it.id }
+                    ) { item ->
+                        val currentGroup = sheet.groups.firstOrNull { it.id == item.groupId }
+                        val groupColor = currentGroup?.let { parseColor(it.color) }
+                        val assignmentMode = assignmentGroupId != null
+                        val selected = item.id in assignmentSelected
+                        val selectedColor = sheet.groups
+                            .firstOrNull { it.id == assignmentGroupId }
+                            ?.let { parseColor(it.color).copy(alpha = 0.26f) }
+                            ?: ArmyristColors.SecondaryControl
+
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (selected) selectedColor else ArmyristColors.RaisedSurface
+                            ),
+                            shape = ArmyristPanelShape,
+                            border = BorderStroke(
+                                1.dp,
+                                when {
+                                    selected -> ArmyristColors.PrimaryControl
+                                    groupColor != null -> groupColor.copy(alpha = 0.8f)
+                                    else -> ArmyristColors.Divider
+                                }
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 76.dp)
+                                .clickable {
+                                    if (assignmentMode) {
+                                        assignmentSelected = if (selected) assignmentSelected - item.id else assignmentSelected + item.id
+                                    } else {
+                                        itemEditor = item
+                                    }
+                                }
+                        ) {
+                            Row(Modifier.fillMaxWidth()) {
+                                Box(
+                                    Modifier
+                                        .width(5.dp)
+                                        .heightIn(min = 76.dp)
+                                        .background(groupColor ?: ArmyristColors.Divider)
+                                )
+                                Column(
+                                    Modifier.weight(1f).padding(horizontal = 5.dp, vertical = 5.dp),
+                                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Text(
+                                        item.name,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                    if (assignmentMode) {
+                                        Text(
+                                            if (selected) "✓ 선택됨" else "선택",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = if (selected) ArmyristColors.PrimaryControl else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    } else {
+                                        Row(
+                                            Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            OutlinedButton(
+                                                onClick = { onDecrement(item.id) },
+                                                modifier = Modifier.sizeIn(minWidth = 32.dp, minHeight = 36.dp),
+                                                shape = ArmyristPanelShape,
+                                                contentPadding = PaddingValues(0.dp)
+                                            ) { Text("−", fontWeight = FontWeight.Bold) }
+                                            TextButton(
+                                                onClick = { quantityTarget = item },
+                                                modifier = Modifier.widthIn(min = 30.dp).heightIn(min = 36.dp),
+                                                contentPadding = PaddingValues(horizontal = 2.dp)
+                                            ) {
+                                                Text(item.quantity.toString(), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                                            }
+                                            Button(
+                                                onClick = { onIncrement(item.id) },
+                                                modifier = Modifier.sizeIn(minWidth = 32.dp, minHeight = 36.dp),
+                                                shape = ArmyristPanelShape,
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = ArmyristColors.PrimaryControl,
+                                                    contentColor = ArmyristColors.OnDark
+                                                ),
+                                                contentPadding = PaddingValues(0.dp)
+                                            ) { Text("+", fontWeight = FontWeight.Bold) }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        OutlinedButton(
+                            onClick = { creating = true },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
+                            shape = ArmyristPanelShape,
+                            border = BorderStroke(1.dp, ArmyristColors.Accent)
+                        ) { Text("+ 새 항목 추가") }
+                    }
+                }
+            } else {
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
@@ -1016,6 +1148,7 @@ private fun CountingScreen(
                         }
                     }
                 }
+            }
             }
         }
     }
