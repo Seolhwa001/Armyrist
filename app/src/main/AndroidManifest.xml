@@ -7,7 +7,7 @@
     <uses-permission android:maxSdkVersion="30" android:name="android.permission.BLUETOOTH" />
     <uses-permission android:maxSdkVersion="30" android:name="android.permission.BLUETOOTH_ADMIN" />
     <uses-permission android:maxSdkVersion="28" android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:minSdkVersion="29" android:maxSdkVersion="31" android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:minSdkVersion="29" android:maxSdkVersion="30" android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:minSdkVersion="31" android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <uses-permission android:minSdkVersion="31" android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:minSdkVersion="31" android:name="android.permission.BLUETOOTH_SCAN" />
@@ -27,7 +27,7 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:label="군 특화 도구"
+        android:label="아미리스"
         android:supportsRtl="true"
         android:theme="@style/Theme.Armyrist">
         <activity android:name=".MainActivity" android:exported="false" />
