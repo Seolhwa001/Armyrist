@@ -304,9 +304,7 @@ private fun DateAwarePlanDetail(
     var voiceDrafts by remember { mutableStateOf<List<TimePlanVoiceDraft>?>(null) }
     var selectionMode by rememberSaveable(plan.id) { mutableStateOf(false) }
     var selectedKeyList by rememberSaveable(plan.id) { mutableStateOf(emptyList<String>()) }
-    var selectedKeys
-        get() = selectedKeyList.toSet()
-        set(value) { selectedKeyList = value.toList() }
+    val selectedKeys = selectedKeyList.toSet()
     var batchDateOpen by rememberSaveable(plan.id) { mutableStateOf(false) }
     var conflictDetail by remember { mutableStateOf<TimePlanConflict?>(null) }
     var pendingNavigation by remember { mutableStateOf<String?>(null) }
@@ -384,7 +382,7 @@ private fun DateAwarePlanDetail(
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     OutlinedButton(
-                        onClick = { selectionMode = true; selectedKeys = emptySet() },
+                        onClick = { selectionMode = true; selectedKeyList = emptyList() },
                         modifier = Modifier.weight(1f).heightIn(min = 52.dp),
                         shape = ArmyristPanelShape,
                         border = BorderStroke(1.dp, ArmyristColors.Border),
@@ -419,7 +417,7 @@ private fun DateAwarePlanDetail(
                     },
                     onLock = { applyLock(true) },
                     onUnlock = { applyLock(false) },
-                    onDone = { selectionMode = false; selectedKeys = emptySet() }
+                    onDone = { selectionMode = false; selectedKeyList = emptyList() }
                 )
             }
 
@@ -502,7 +500,7 @@ private fun DateAwarePlanDetail(
                     message = "고정된 일정이 포함되어 날짜를 변경할 수 없습니다."
                 } else {
                     onCommit(candidate)
-                    selectedKeys = emptySet()
+                    selectedKeyList = emptyList()
                 }
                 batchDateOpen = false
             }
