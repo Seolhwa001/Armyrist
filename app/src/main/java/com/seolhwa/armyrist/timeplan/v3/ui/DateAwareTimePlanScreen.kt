@@ -323,7 +323,8 @@ private fun DateAwarePlanDetail(
     }
 
     fun toggleSelection(key: String) {
-        selectedKeys = if (key in selectedKeys) selectedKeys - key else selectedKeys + key
+        selectedKeyList =
+            (if (key in selectedKeys) selectedKeys - key else selectedKeys + key).toList()
         view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
     }
 
