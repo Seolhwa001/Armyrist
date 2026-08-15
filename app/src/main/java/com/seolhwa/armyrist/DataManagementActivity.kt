@@ -388,7 +388,18 @@ private fun DataManagementScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 )
-            }
+
+                Spacer(Modifier.height(8.dp))
+                ArmyristActionButton(
+                    text = "주변 Armyrist 수신 (PoC)",
+                    onClick = {
+                        context.startActivity(
+                            android.content.Intent(context, NearbyTransferActivity::class.java)
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    primary = false
+                )            }
         }
     }
 

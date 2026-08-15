@@ -515,19 +515,20 @@ fun CommonShareScreen(
                     if (portableType == ArmyristPortableDataType.COUNTING) {
                         Spacer(Modifier.height(10.dp))
                         ArmyristActionButton(
-                            text = "전송 링크 만들기 (PoC)",
+                            text = "주변 Armyrist (PoC)",
                             onClick = {
                                 createPortableBytes()?.let { bytes ->
                                     runCatching {
-                                        ArmyristTransferLinkPoC.build(bytes)
-                                    }.onSuccess {
-                                        transferLinkPoC = it
+                                        val dir = java.io.File(context.cacheDir, "nearby-send").apply { mkdirs() }
+                                        val file = java.io.File(dir, "nearby-${System.currentTimeMillis()}.armyrist")
+                                        file.writeBytes(bytes)
+                                        context.startActivity(
+                                            Intent(context, NearbyTransferActivity::class.java).apply {
+                                                putExtra(NearbyTransferActivity.EXTRA_SEND_FILE, file.absolutePath)
+                                            }
+                                        )
                                     }.onFailure {
-                                        Toast.makeText(
-                                            context,
-                                            "전송 링크를 만들 수 없습니다.",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                        Toast.makeText(context, "주변 전송을 준비할 수 없습니다.", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             },
@@ -536,12 +537,11 @@ fun CommonShareScreen(
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "기술검증용입니다. 서버에 사용자 데이터를 저장하지 않고 링크 자체에 데이터를 포함합니다.",
+                            "같은 Wi-Fi/로컬 네트워크의 Armyrist로 직접 전송합니다. 인터넷 서버는 사용하지 않습니다.",
                             style = MaterialTheme.typography.bodySmall,
                             color = ArmyristColors.SecondaryText
                         )
-                    }
-                }
+                    }                }
             }
         }
     }

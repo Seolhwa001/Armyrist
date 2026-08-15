@@ -47,6 +47,8 @@ internal fun resolvePortableLaunchRoute(
             PortableLaunchRoute.INTERNAL_EXPORT
         PortableTransferActivity.MODE_IMPORT ->
             PortableLaunchRoute.INTERNAL_IMPORT
+        PortableTransferActivity.MODE_IMPORT_BYTES ->
+            PortableLaunchRoute.INTERNAL_IMPORT
         else ->
             PortableLaunchRoute.UNSUPPORTED
     }
@@ -59,6 +61,8 @@ class PortableTransferActivity : ComponentActivity() {
         const val EXTRA_ROOT_ID = "rootId"
         const val MODE_EXPORT = "export"
         const val MODE_IMPORT = "import"
+        const val MODE_IMPORT_BYTES = "importBytes"
+        const val EXTRA_CACHE_FILE = "cacheFile"
         const val ARMYRIST_MIME = "application/vnd.armyrist.data"
     }
 
@@ -141,6 +145,25 @@ class PortableTransferActivity : ComponentActivity() {
             } else {
                 null
             }
+
+        if (intent.getStringExtra(EXTRA_MODE) == MODE_IMPORT_BYTES) {
+            val path = intent.getStringExtra(EXTRA_CACHE_FILE)
+            val file = path?.let(::File)
+            if (file == null || !file.exists() || !file.canonicalPath.startsWith(cacheDir.canonicalPath)) {
+                Toast.makeText(this, "수신 데이터를 읽을 수 없습니다.", Toast.LENGTH_LONG).show()
+                finish()
+                return
+            }
+            val bytes = runCatching { file.readBytes() }.getOrNull()
+            file.delete()
+            if (bytes == null) {
+                finish()
+                return
+            }
+            importBytes = bytes
+            renderImport(bytes)
+            return
+        }
 
         when (
             resolvePortableLaunchRoute(
