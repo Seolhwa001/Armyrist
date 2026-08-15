@@ -1277,6 +1277,7 @@ private fun CountingScreen(
                         } // BoxWithConstraints
                     }
                 }
+            } // itemsIndexed
 
                 item {
                     OutlinedButton(
@@ -1446,7 +1447,6 @@ private fun CountingScreen(
             confirmButton = { TextButton(onClick = { voiceMessage = null }) { Text("확인") } }
         )
     }
-}
 }
 
 @Composable
