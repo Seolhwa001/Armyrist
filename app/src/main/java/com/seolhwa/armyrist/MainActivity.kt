@@ -1447,6 +1447,7 @@ private fun CountingScreen(
         )
     }
 }
+}
 
 @Composable
 private fun ArmyristUtilityButton(
