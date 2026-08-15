@@ -15,6 +15,7 @@ import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -44,9 +45,9 @@ fun DateAwareTimePlanApp(
     coreRepository: CoreSuiteRepository,
     onHome: () -> Unit
 ) {
-    var selectedId by remember { mutableStateOf<String?>(null) }
-    var selectedLegacyId by remember { mutableStateOf<String?>(null) }
-    var sharingId by remember { mutableStateOf<String?>(null) }
+    var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedLegacyId by rememberSaveable { mutableStateOf<String?>(null) }
+    var sharingId by rememberSaveable { mutableStateOf<String?>(null) }
     var revision by remember { mutableIntStateOf(0) }
     @Suppress("UNUSED_VARIABLE") val observed = revision
 
@@ -293,17 +294,20 @@ private fun DateAwarePlanDetail(
     onResult: () -> Unit,
     onCommit: (DateAwareTimePlan) -> Unit
 ) {
-    var editStart by remember { mutableStateOf(false) }
-    var editEnd by remember { mutableStateOf(false) }
+    var editStart by rememberSaveable(plan.id) { mutableStateOf(false) }
+    var editEnd by rememberSaveable(plan.id) { mutableStateOf(false) }
     var editEvent by remember { mutableStateOf<DateTimeEvent?>(null) }
     var editLink by remember { mutableStateOf<DateTimeLink?>(null) }
-    var editTitle by remember { mutableStateOf(false) }
-    var editMemo by remember { mutableStateOf(false) }
+    var editTitle by rememberSaveable(plan.id) { mutableStateOf(false) }
+    var editMemo by rememberSaveable(plan.id) { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var voiceDrafts by remember { mutableStateOf<List<TimePlanVoiceDraft>?>(null) }
-    var selectionMode by remember(plan.id) { mutableStateOf(false) }
-    var selectedKeys by remember(plan.id) { mutableStateOf<Set<String>>(emptySet()) }
-    var batchDateOpen by remember { mutableStateOf(false) }
+    var selectionMode by rememberSaveable(plan.id) { mutableStateOf(false) }
+    var selectedKeyList by rememberSaveable(plan.id) { mutableStateOf(emptyList<String>()) }
+    var selectedKeys
+        get() = selectedKeyList.toSet()
+        set(value) { selectedKeyList = value.toList() }
+    var batchDateOpen by rememberSaveable(plan.id) { mutableStateOf(false) }
     var conflictDetail by remember { mutableStateOf<TimePlanConflict?>(null) }
     var pendingNavigation by remember { mutableStateOf<String?>(null) }
     var headerMenuOpen by remember { mutableStateOf(false) }
@@ -1116,7 +1120,7 @@ private fun DateTimeEventEditDialog(event:DateTimeEvent,onDismiss:()->Unit,onDel
 
 @Composable private fun LegacyDateMigrationDialog(title:String,onDismiss:()->Unit,onApply:(LocalDate)->Unit){var date by remember{mutableStateOf(LocalDate.now())};var calendar by remember{mutableStateOf(false)};AlertDialog(onDismissRequest=onDismiss,title={Text("기준 날짜 지정")},text={Column(verticalArrangement=Arrangement.spacedBy(10.dp)){Text("‘$title’은 날짜 기능이 추가되기 전에 작성되었습니다.\n계획의 시작 기준 날짜를 선택해주세요.");Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){OutlinedButton(onClick={date=date.minusDays(1)}){Text("-1일")};Text(date.format(DateTimeFormatter.ISO_DATE),fontWeight=FontWeight.Bold);OutlinedButton(onClick={date=date.plusDays(1)}){Text("+1일")}};TextButton(onClick={calendar=true},modifier=Modifier.fillMaxWidth()){Text("달력")};Text("적용 전에는 기존 데이터가 변경되지 않습니다.",style=MaterialTheme.typography.bodySmall,color=ArmyristColors.SecondaryText)}},dismissButton={TextButton(onClick=onDismiss){Text("취소")}},confirmButton={Button(onClick={onApply(date)},colors=ButtonDefaults.buttonColors(containerColor=ArmyristColors.PrimaryControl)){Text("적용")}});if(calendar){val state=rememberDatePickerState(initialSelectedDateMillis=date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli());DatePickerDialog(onDismissRequest={calendar=false},confirmButton={TextButton(onClick={state.selectedDateMillis?.let{date=Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()};calendar=false}){Text("확인")}}){DatePicker(state=state)}}}
 
-@Composable private fun SimpleTextDialog(title:String,initial:String,single:Boolean,onDismiss:()->Unit,onConfirm:(String)->Unit){var value by remember{mutableStateOf(initial)};AlertDialog(onDismissRequest=onDismiss,title={Text(title)},text={OutlinedTextField(value,{value=it},singleLine=single,modifier=Modifier.fillMaxWidth())},dismissButton={TextButton(onClick=onDismiss){Text("취소")}},confirmButton={Button(onClick={onConfirm(value)},colors=ButtonDefaults.buttonColors(containerColor=ArmyristColors.PrimaryControl)){Text("확인")}})}
+@Composable private fun SimpleTextDialog(title:String,initial:String,single:Boolean,onDismiss:()->Unit,onConfirm:(String)->Unit){var value by rememberSaveable(title, initial){mutableStateOf(initial)};AlertDialog(onDismissRequest=onDismiss,title={Text(title)},text={OutlinedTextField(value,{value=it},singleLine=single,modifier=Modifier.fillMaxWidth())},dismissButton={TextButton(onClick=onDismiss){Text("취소")}},confirmButton={Button(onClick={onConfirm(value)},colors=ButtonDefaults.buttonColors(containerColor=ArmyristColors.PrimaryControl)){Text("확인")}})}
 
 @Composable
 private fun TimePlanVoiceReviewDialog(
