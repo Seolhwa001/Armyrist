@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 53
-        versionName = "0.4.13-minor-patch-a-ui-counting-renewal"
+        versionCode = 54
+        versionName = "0.4.14-count-qa-001-build-fix"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
