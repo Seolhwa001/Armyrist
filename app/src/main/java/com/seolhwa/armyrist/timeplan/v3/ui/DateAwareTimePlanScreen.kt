@@ -350,7 +350,7 @@ private fun DateAwarePlanDetail(
                 subtitle = "TIME PLAN · DATE · AUTO SAVE",
                 leadingLabel = "홈",
                 onLeading = { requestNavigation("HOME") },
-                secondaryLeadingLabel = "☰",
+                secondaryLeadingLabel = "메뉴",
                 onSecondaryLeading = { requestNavigation("BACK") },
                 onTitleClick = { editTitle = true },
                 actions = {
@@ -381,9 +381,14 @@ private fun DateAwarePlanDetail(
                 ) {
                     OutlinedButton(
                         onClick = { selectionMode = true; selectedKeys = emptySet() },
-                        modifier = Modifier.weight(1f),
-                        shape = ArmyristPanelShape
-                    ) { Text("편집/선택") }
+                        modifier = Modifier.weight(1f).heightIn(min = 52.dp),
+                        shape = ArmyristPanelShape,
+                        border = BorderStroke(1.dp, ArmyristColors.Border),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = ArmyristColors.WorkSurface,
+                            contentColor = ArmyristColors.PrimaryText
+                        )
+                    ) { Text("편집/선택", style = MaterialTheme.typography.labelLarge) }
                     Box(Modifier.weight(1f)) {
                         OfflineVoiceButton(
                             toolContext = VoiceToolContext.TIME_PLAN,
