@@ -487,6 +487,9 @@ private fun CountingScreen(
                 subtitle = "COUNTING · 항목 ${sheet.items.size} · AUTO SAVE",
                 leadingLabel = "홈",
                 onLeading = onHome,
+                secondaryLeadingLabel = "☰",
+                onSecondaryLeading = onBack,
+                onTitleClick = { titleEdit = true },
                 actions = {
                     Box {
                         TextButton(onClick = { viewMenuOpen = true }) {
@@ -511,14 +514,12 @@ private fun CountingScreen(
                             )
                         }
                     }
-                    TextButton(onClick = { titleEdit = true }) { Text("✎", color = ArmyristColors.OnDark, style = MaterialTheme.typography.titleLarge) }
                     Box {
                         TextButton(onClick = { headerMenuOpen = true }) { Text("⋮", color = ArmyristColors.OnDark, style = MaterialTheme.typography.titleLarge) }
                         DropdownMenu(expanded = headerMenuOpen, onDismissRequest = { headerMenuOpen = false }) {
-                            DropdownMenuItem(text = { Text("목록") }, onClick = { headerMenuOpen = false; onBack() })
                             DropdownMenuItem(text = { Text("결과 전달") }, onClick = { headerMenuOpen = false; onResult() })
-                            DropdownMenuItem(text = { Text("그룹 관리") }, onClick = { headerMenuOpen = false; groupManager = true })
-                            DropdownMenuItem(text = { Text("계산 상세 관리") }, onClick = { headerMenuOpen = false; onCalculations() })
+                            DropdownMenuItem(text = { Text("계산") }, onClick = { headerMenuOpen = false; onCalculations() })
+                            DropdownMenuItem(text = { Text("메모") }, onClick = { headerMenuOpen = false; memoEdit = true })
                         }
                     }
                 }
@@ -534,9 +535,8 @@ private fun CountingScreen(
                 Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                ArmyristUtilityActionButton("그룹", { groupPickerOpen = true }, Modifier.weight(1f))
-                ArmyristUtilityActionButton("계산", onCalculations, Modifier.weight(1f))
-                ArmyristUtilityActionButton("메모", { memoEdit = true }, Modifier.weight(1f))
+                ArmyristUtilityActionButton("그룹 설정", { groupManager = true }, Modifier.weight(1f))
+                ArmyristUtilityActionButton("그룹 지정", { groupPickerOpen = true }, Modifier.weight(1f))
                 Box(Modifier.weight(1f)) {
                     OfflineVoiceButton(
                         toolContext = VoiceToolContext.COUNTING,
@@ -802,7 +802,7 @@ private fun CountingScreen(
                                 Box(
                                     Modifier
                                         .width(5.dp)
-                                        .heightIn(min = 70.dp)
+                                        .heightIn(min = if (viewMode == CountingViewMode.COMPACT) 44.dp else 88.dp)
                                         .background(groupColor)
                                 )
                             }
@@ -812,7 +812,7 @@ private fun CountingScreen(
                                     .weight(1f)
                                     .padding(
                                         horizontal = if (viewMode == CountingViewMode.COMPACT) 8.dp else 12.dp,
-                                        vertical = if (viewMode == CountingViewMode.COMPACT) 4.dp else 10.dp
+                                        vertical = if (viewMode == CountingViewMode.COMPACT) 2.dp else 14.dp
                                     ),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -846,8 +846,8 @@ private fun CountingScreen(
                                 OutlinedButton(
                                     onClick = { onDecrement(item.id) },
                                     modifier = Modifier.sizeIn(
-                                        minWidth = if (viewMode == CountingViewMode.COMPACT) 42.dp else 54.dp,
-                                        minHeight = if (viewMode == CountingViewMode.COMPACT) 42.dp else 54.dp
+                                        minWidth = if (viewMode == CountingViewMode.COMPACT) 40.dp else 56.dp,
+                                        minHeight = if (viewMode == CountingViewMode.COMPACT) 40.dp else 56.dp
                                     ),
                                     shape = ArmyristPanelShape,
                                     border = BorderStroke(
@@ -862,8 +862,8 @@ private fun CountingScreen(
                                 Button(
                                     onClick = { quantityTarget = item },
                                     modifier = Modifier
-                                        .widthIn(min = if (viewMode == CountingViewMode.COMPACT) 48.dp else 72.dp)
-                                        .heightIn(min = if (viewMode == CountingViewMode.COMPACT) 42.dp else 54.dp),
+                                        .widthIn(min = if (viewMode == CountingViewMode.COMPACT) 46.dp else 78.dp)
+                                        .heightIn(min = if (viewMode == CountingViewMode.COMPACT) 40.dp else 58.dp),
                                     shape = ArmyristPanelShape,
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor =
@@ -886,8 +886,8 @@ private fun CountingScreen(
                                 Button(
                                     onClick = { onIncrement(item.id) },
                                     modifier = Modifier.sizeIn(
-                                        minWidth = if (viewMode == CountingViewMode.COMPACT) 42.dp else 54.dp,
-                                        minHeight = if (viewMode == CountingViewMode.COMPACT) 42.dp else 54.dp
+                                        minWidth = if (viewMode == CountingViewMode.COMPACT) 40.dp else 56.dp,
+                                        minHeight = if (viewMode == CountingViewMode.COMPACT) 40.dp else 56.dp
                                     ),
                                     shape = ArmyristPanelShape,
                                     colors = ButtonDefaults.buttonColors(

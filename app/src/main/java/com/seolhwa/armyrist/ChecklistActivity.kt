@@ -588,6 +588,7 @@ private fun ChecklistDetailScreen(
     var viewMode by remember { mutableStateOf(ChecklistViewMode.DETAIL) }
     var voiceDrafts by remember { mutableStateOf<List<ChecklistVoiceDraft>?>(null) }
     var voiceMessage by remember { mutableStateOf<String?>(null) }
+    var headerMenuOpen by remember { mutableStateOf(false) }
 
     var assignmentGroupId by remember { mutableStateOf<String?>(null) }
     var assignmentUngroup by remember { mutableStateOf(false) }
@@ -616,95 +617,65 @@ private fun ChecklistDetailScreen(
                 title = checklist.title,
                 subtitle = "CHECKLIST · 항목 ${checklist.items.size} · AUTO SAVE",
                 leadingLabel = "홈",
-                onLeading = onHome
+                onLeading = onHome,
+                secondaryLeadingLabel = "☰",
+                onSecondaryLeading = onBack,
+                onTitleClick = { titleEdit = true },
+                actions = {
+                    Box {
+                        TextButton(onClick = { headerMenuOpen = true }) {
+                            Text("⋮", color = ArmyristColors.OnDark, style = MaterialTheme.typography.titleLarge)
+                        }
+                        DropdownMenu(expanded = headerMenuOpen, onDismissRequest = { headerMenuOpen = false }) {
+                            DropdownMenuItem(text = { Text("결과 전달") }, onClick = { headerMenuOpen = false; onResult() })
+                            DropdownMenuItem(
+                                text = { Text("알람음 일괄") },
+                                onClick = {
+                                    headerMenuOpen = false
+                                    val enabledItems = checklist.items.filter { it.notificationEnabled }
+                                    if (enabledItems.isNotEmpty()) {
+                                        onPickNotificationSound(enabledItems.firstOrNull()?.notificationSoundUri) { soundUri ->
+                                            onBulkNotificationSound(soundUri)
+                                        }
+                                    }
+                                }
+                            )
+                            DropdownMenuItem(text = { Text("메모") }, onClick = { headerMenuOpen = false; memoEdit = true })
+                            DropdownMenuItem(text = { Text("초기화") }, onClick = { headerMenuOpen = false; resetConfirm = true })
+                            if (checklist.deletedItems.isNotEmpty()) {
+                                DropdownMenuItem(
+                                    text = { Text("삭제된 항목 ${checklist.deletedItems.size}") },
+                                    onClick = { headerMenuOpen = false; trashOpen = true }
+                                )
+                            }
+                        }
+                    }
+                }
             )
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = onBack,
-                    modifier = Modifier.weight(1f),
-                    shape = ArmyristPanelShape,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = ArmyristColors.HeaderRaised,
-                        contentColor = ArmyristColors.OnDark
-                    )
+            if (!assignmentMode) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text("목록", fontWeight = FontWeight.Bold)
+                    ChecklistUtilityButton(text = "그룹 설정", onClick = { groupManager = true })
+                    ChecklistUtilityButton(text = "그룹 지정", onClick = { groupPicker = true })
+                    Box(Modifier.weight(1f)) {
+                        OfflineVoiceButton(
+                            toolContext = VoiceToolContext.CHECKLIST,
+                            modifier = Modifier.fillMaxWidth(),
+                            onTranscript = { transcript -> voiceDrafts = KoreanVoiceStructurer.checklist(transcript) },
+                            onMessage = { voiceMessage = it }
+                        )
+                    }
                 }
-                OutlinedButton(
-                    onClick = { titleEdit = true },
-                    modifier = Modifier.weight(1f),
-                    shape = ArmyristPanelShape,
-                    border = BorderStroke(1.dp, ArmyristColors.PrimaryControl),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = ArmyristColors.WorkSurface,
-                        contentColor = ArmyristColors.PrimaryText
-                    )
-                ) {
-                    Text("제목 수정", fontWeight = FontWeight.Bold)
-                }
-                Button(
-                    onClick = onResult,
-                    modifier = Modifier.weight(1f),
-                    shape = ArmyristPanelShape,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = ArmyristColors.PrimaryControl,
-                        contentColor = ArmyristColors.OnDark
-                    )
-                ) {
-                    Text("결과 전달", fontWeight = FontWeight.Bold)
-                }
-
             }
-
-            OfflineVoiceButton(
-                toolContext = VoiceToolContext.CHECKLIST,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                onTranscript = { transcript ->
-                    voiceDrafts = KoreanVoiceStructurer.checklist(transcript)
-                },
-                onMessage = { voiceMessage = it }
-            )
 
             ChecklistProgressSummary(checklist)
 
             if (!assignmentMode) {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    ChecklistUtilityButton(text = "그룹", onClick = { groupManager = true })
-                    ChecklistUtilityButton(text = "그룹 지정", onClick = { groupPicker = true })
-                    ChecklistUtilityButton(
-                        text = "알람음 일괄",
-                        onClick = {
-                            val enabledItems =
-                                checklist.items.filter {
-                                    it.notificationEnabled
-                                }
-
-                            if (enabledItems.isNotEmpty()) {
-                                onPickNotificationSound(
-                                    enabledItems
-                                        .firstOrNull()
-                                        ?.notificationSoundUri
-                                ) { soundUri ->
-                                    onBulkNotificationSound(soundUri)
-                                }
-                            }
-                        }
-                    )
-                    ChecklistUtilityButton(text = "메모", onClick = { memoEdit = true })
-                    ChecklistUtilityButton(text = "초기화", onClick = { resetConfirm = true })
-                }
-
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically
