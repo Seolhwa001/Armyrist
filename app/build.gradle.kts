@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 64
-        versionName = "0.4.24-wifi-direct-nearby-poc"
+        versionCode = 66
+        versionName = "0.4.26-minor-patch-b-counting-nearby"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
