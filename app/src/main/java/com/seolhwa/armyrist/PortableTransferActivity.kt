@@ -207,21 +207,7 @@ class PortableTransferActivity : ComponentActivity() {
     }
 
     private fun startExternalImport(uri: android.net.Uri) {
-        val bytes =
-            if (ArmyristTransferLinkPoC.isTransferLink(uri)) {
-                runCatching {
-                    ArmyristTransferLinkPoC.decode(uri)
-                }.getOrElse {
-                    Toast.makeText(
-                        this,
-                        "Armyrist 전송 링크가 손상되었거나 지원되지 않습니다.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    null
-                }
-            } else {
-                readUriBytesSafely(uri)
-            }
+        val bytes = readUriBytesSafely(uri)
 
         if (bytes == null) {
             finish()
@@ -229,8 +215,6 @@ class PortableTransferActivity : ComponentActivity() {
         }
 
         importBytes = bytes
-        // Existing Portable inspection / validation / preview / CREATE NEW import
-        // is deliberately reused. A link tap is never an automatic import.
         renderImport(bytes)
     }
 

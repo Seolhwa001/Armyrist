@@ -75,9 +75,6 @@ fun CommonShareScreen(
     var encrypt by rememberSaveable { mutableStateOf(false) }
     var password by rememberSaveable { mutableStateOf("") }
     var passwordConfirm by rememberSaveable { mutableStateOf("") }
-    var transferLinkPoC by remember {
-        mutableStateOf<ArmyristTransferLinkPoC.Generated?>(null)
-    }
 
     val saveFile = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/vnd.armyrist.data")
@@ -226,24 +223,6 @@ fun CommonShareScreen(
                 Toast.LENGTH_SHORT
             ).show()
         }
-    }
-
-    fun shareTransferLinkPoC(generated: ArmyristTransferLinkPoC.Generated) {
-        val shareText =
-            "Armyrist 데이터 전송 링크 (PoC)\n" +
-                generated.uri
-
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, shareText)
-        }
-
-        context.startActivity(
-            Intent.createChooser(
-                intent,
-                "Armyrist 전송 링크 공유"
-            )
-        )
     }
 
     Scaffold(
@@ -541,118 +520,10 @@ fun CommonShareScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = ArmyristColors.SecondaryText
                         )
-                        Spacer(Modifier.height(8.dp))
-                        ArmyristActionButton(
-                            text = "Wi-Fi Direct 전송 (PoC)",
-                            onClick = {
-                                createPortableBytes()?.let { bytes ->
-                                    runCatching {
-                                        val dir = java.io.File(
-                                            context.cacheDir,
-                                            "wifi-direct-send"
-                                        ).apply { mkdirs() }
-                                        val file = java.io.File(
-                                            dir,
-                                            "wifi-direct-${System.currentTimeMillis()}.armyrist"
-                                        )
-                                        file.writeBytes(bytes)
-                                        context.startActivity(
-                                            Intent(
-                                                context,
-                                                WifiDirectTransferActivity::class.java
-                                            ).apply {
-                                                putExtra(
-                                                    WifiDirectTransferActivity.EXTRA_SEND_FILE,
-                                                    file.absolutePath
-                                                )
-                                            }
-                                        )
-                                    }.onFailure {
-                                        Toast.makeText(
-                                            context,
-                                            "Wi-Fi Direct 전송을 준비할 수 없습니다.",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            primary = false
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "공유기/인터넷 없이 Wi-Fi Direct로 두 기기를 직접 연결하는 기술검증입니다.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = ArmyristColors.SecondaryText
-                        )
+
                     }                }
             }
         }
-    }
-
-    transferLinkPoC?.let { generated ->
-        AlertDialog(
-            onDismissRequest = { transferLinkPoC = null },
-            title = { Text("전송 링크 PoC") },
-            text = {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        "사용자 데이터는 서버에 업로드되지 않습니다.",
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text("원본: ${generated.originalBytes} bytes")
-                    Text("압축: ${generated.compressedBytes} bytes")
-                    Text("인코딩: ${generated.encodedChars} chars")
-                    Text("최종 링크: ${generated.finalUrlChars} chars")
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "카카오톡 등에 공유한 뒤 링크가 클릭 가능한지, 한 번의 탭으로 Armyrist가 열리고 Preview가 나타나는지 확인해주세요.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        shareTransferLinkPoC(generated)
-                    }
-                ) {
-                    Text("링크 공유")
-                }
-            },
-            dismissButton = {
-                Row {
-                    TextButton(
-                        onClick = {
-                            val clipboard =
-                                context.getSystemService(
-                                    Context.CLIPBOARD_SERVICE
-                                ) as ClipboardManager
-                            clipboard.setPrimaryClip(
-                                ClipData.newPlainText(
-                                    "Armyrist transfer link",
-                                    generated.uri
-                                )
-                            )
-                            Toast.makeText(
-                                context,
-                                "전송 링크를 복사했습니다.",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    ) {
-                        Text("복사")
-                    }
-                    TextButton(
-                        onClick = { transferLinkPoC = null }
-                    ) {
-                        Text("닫기")
-                    }
-                }
-            }
-        )
     }
 
 }
