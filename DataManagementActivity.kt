@@ -391,7 +391,7 @@ private fun DataManagementScreen(
 
                 Spacer(Modifier.height(8.dp))
                 ArmyristActionButton(
-                    text = "주변 Armyrist 수신",
+                    text = "주변 Armyrist 수신 (PoC)",
                     onClick = {
                         context.startActivity(
                             android.content.Intent(context, NearbyTransferActivity::class.java)
