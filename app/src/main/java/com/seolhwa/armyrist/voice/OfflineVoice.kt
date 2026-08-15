@@ -363,7 +363,7 @@ fun OfflineVoiceButton(
         }
     }
 
-    Button(
+    OutlinedButton(
         onClick = {
             when (state) {
                 VoiceUiState.UNAVAILABLE -> onMessage("이 기기에서 오프라인 음성인식을 사용할 수 없습니다.")
@@ -380,7 +380,12 @@ fun OfflineVoiceButton(
         modifier = modifier.heightIn(min = 52.dp),
         shape = ArmyristPanelShape,
         enabled = state != VoiceUiState.RECOGNIZING && state != VoiceUiState.STRUCTURING,
-        colors = ButtonDefaults.buttonColors(containerColor = ArmyristColors.PrimaryControl)
+        border = BorderStroke(1.dp, ArmyristColors.Border),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = ArmyristColors.WorkSurface,
+            contentColor = ArmyristColors.PrimaryText
+        ),
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
     ) {
         Text(
             when (state) {
@@ -389,7 +394,8 @@ fun OfflineVoiceButton(
                 VoiceUiState.UNAVAILABLE -> "음성 입력 사용 불가"
                 else -> "음성 입력"
             },
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelLarge
         )
     }
 
