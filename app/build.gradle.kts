@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 57
-        versionName = "0.4.17-counting-compact-2col-group-marker"
+        versionCode = 58
+        versionName = "0.4.18-nav-state-preservation"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
