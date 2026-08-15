@@ -521,6 +521,60 @@ fun CommonShareScreen(
                             color = ArmyristColors.SecondaryText
                         )
 
+                        Spacer(Modifier.height(8.dp))
+                        ArmyristActionButton(
+                            text = "주변 Armyrist · 백그라운드 PoC",
+                            onClick = {
+                                createPortableBytes()?.let { bytes ->
+                                    runCatching {
+                                        val dir = java.io.File(
+                                            context.cacheDir,
+                                            "nearby-connections-send"
+                                        ).apply { mkdirs() }
+                                        val file = java.io.File(
+                                            dir,
+                                            "nearby-connections-${System.currentTimeMillis()}.armyrist"
+                                        )
+                                        file.writeBytes(bytes)
+
+                                        context.startActivity(
+                                            Intent(
+                                                context,
+                                                NearbyConnectionsSenderActivity::class.java
+                                            ).apply {
+                                                putExtra(
+                                                    NearbyConnectionsPoC.EXTRA_SEND_FILE,
+                                                    file.absolutePath
+                                                )
+                                                putExtra(
+                                                    NearbyConnectionsPoC.EXTRA_TITLE,
+                                                    result.title
+                                                )
+                                                putExtra(
+                                                    NearbyConnectionsPoC.EXTRA_TYPE,
+                                                    portableType.name
+                                                )
+                                            }
+                                        )
+                                    }.onFailure {
+                                        Toast.makeText(
+                                            context,
+                                            "주변 전송 PoC를 준비할 수 없습니다.",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            primary = false
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "수신 모드를 켜 둔 주변 Armyrist를 찾는 독립 기술검증입니다. 기존 전송 기능은 유지됩니다.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = ArmyristColors.SecondaryText
+                        )
+
                     }                }
             }
         }

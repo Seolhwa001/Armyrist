@@ -1,6 +1,11 @@
 package com.seolhwa.armyrist
 
 import android.content.Intent
+import android.content.Context
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -18,6 +23,14 @@ import androidx.compose.ui.unit.dp
 class HomeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        if (
+            NearbyConnectionsPoC.isReceiveEnabled(this) &&
+            NearbyConnectionsPoC.hasRuntimePermissions(this)
+        ) {
+            NearbyConnectionsPoC.startReceiverService(this)
+        }
+
         setContent {
             ArmyristTheme {
                 Surface(
@@ -153,6 +166,9 @@ private fun HomeScreen(
             }
         }
 
+
+        NearbyReceiveToggle()
+
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -188,6 +204,105 @@ private fun HomeScreen(
             "CORE SUITE v1  ·  OFFLINE READY",
             modifier = Modifier.fillMaxWidth()
         )
+    }
+}
+
+
+@Composable
+private fun NearbyReceiveToggle() {
+    val context = LocalContext.current
+    var enabled by remember {
+        mutableStateOf(
+            NearbyConnectionsPoC.isReceiveEnabled(context)
+        )
+    }
+    var message by remember {
+        mutableStateOf(
+            if (enabled) "● 수신 대기 중" else "수신 모드가 꺼져 있습니다."
+        )
+    }
+
+    val launcher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions()
+        ) { result ->
+            val granted = result.values.all { it }
+            if (granted) {
+                NearbyConnectionsPoC.startReceiverService(context)
+                enabled = true
+                message = "● 수신 대기 중"
+            } else {
+                NearbyConnectionsPoC.setReceiveEnabled(context, false)
+                enabled = false
+                message = "권한이 없어 주변 데이터 수신을 사용할 수 없습니다."
+            }
+        }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = ArmyristColors.WorkSurface,
+        shape = ArmyristPanelShape,
+        border = BorderStroke(1.dp, ArmyristColors.Border)
+    ) {
+        Column(
+            modifier = Modifier.padding(
+                horizontal = 14.dp,
+                vertical = 11.dp
+            )
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "주변 데이터 수신",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color =
+                            if (enabled) {
+                                ArmyristColors.PrimaryControl
+                            } else {
+                                ArmyristColors.SecondaryText
+                            }
+                    )
+                }
+
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = { turnOn ->
+                        if (!turnOn) {
+                            NearbyConnectionsPoC.stopReceiverService(context)
+                            enabled = false
+                            message = "수신 모드가 꺼져 있습니다."
+                        } else if (
+                            NearbyConnectionsPoC.hasRuntimePermissions(context)
+                        ) {
+                            NearbyConnectionsPoC.startReceiverService(context)
+                            enabled = true
+                            message = "● 수신 대기 중"
+                        } else {
+                            launcher.launch(
+                                NearbyConnectionsPoC.runtimePermissions()
+                            )
+                        }
+                    }
+                )
+            }
+
+            if (enabled) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Armyrist를 보고 있지 않아도 주변 전송 요청을 받을 수 있도록 수신 서비스를 유지합니다.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ArmyristColors.SecondaryText
+                )
+            }
+        }
     }
 }
 
