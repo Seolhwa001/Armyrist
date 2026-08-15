@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 59
-        versionName = "0.4.19-nav-state-compile-fix"
+        versionCode = 60
+        versionName = "0.4.20-nav-saveable-assignment-fix"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
