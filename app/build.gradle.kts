@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 52
-        versionName = "0.4.12-voice-dedicated-recording"
+        versionCode = 53
+        versionName = "0.4.13-minor-patch-a-ui-counting-renewal"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
