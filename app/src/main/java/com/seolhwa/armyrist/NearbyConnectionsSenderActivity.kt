@@ -2,6 +2,7 @@ package com.seolhwa.armyrist
 
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -163,9 +164,20 @@ class NearbyConnectionsSenderActivity : ComponentActivity() {
                 .setStrategy(Strategy.P2P_POINT_TO_POINT)
                 .build()
         ).addOnSuccessListener {
+            Log.i(
+                "ArmyristNearby",
+                "startDiscovery SUCCESS serviceId=${NearbyConnectionsPoC.SERVICE_ID} strategy=${NearbyConnectionsPoC.STRATEGY_LABEL}"
+            )
             status = "검색 중 · 수신 모드가 켜진 기기를 찾습니다."
-        }.addOnFailureListener {
-            status = "주변 기기 검색을 시작하지 못했습니다."
+        }.addOnFailureListener { error ->
+            val diagnostic =
+                NearbyConnectionsPoC.diagnosticFailure("startDiscovery", error)
+            Log.e(
+                "ArmyristNearby",
+                "$diagnostic · serviceId=${NearbyConnectionsPoC.SERVICE_ID} strategy=${NearbyConnectionsPoC.STRATEGY_LABEL}",
+                error
+            )
+            status = "검색 시작 실패 · $diagnostic"
         }
     }
 

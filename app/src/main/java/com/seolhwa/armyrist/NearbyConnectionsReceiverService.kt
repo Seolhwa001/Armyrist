@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.AdvertisingOptions
@@ -107,9 +108,20 @@ class NearbyConnectionsReceiverService : Service() {
             lifecycleCallback,
             options
         ).addOnSuccessListener {
+            Log.i(
+                "ArmyristNearby",
+                "startAdvertising SUCCESS serviceId=${NearbyConnectionsPoC.SERVICE_ID} strategy=${NearbyConnectionsPoC.STRATEGY_LABEL}"
+            )
             notifyStatus("주변 데이터 수신 대기 중")
-        }.addOnFailureListener {
-            notifyStatus("수신 대기를 시작하지 못했습니다.")
+        }.addOnFailureListener { error ->
+            val diagnostic =
+                NearbyConnectionsPoC.diagnosticFailure("startAdvertising", error)
+            Log.e(
+                "ArmyristNearby",
+                "$diagnostic · serviceId=${NearbyConnectionsPoC.SERVICE_ID} strategy=${NearbyConnectionsPoC.STRATEGY_LABEL}",
+                error
+            )
+            notifyStatus("수신 대기 시작 실패 · $diagnostic")
         }
     }
 

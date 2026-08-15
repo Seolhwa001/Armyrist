@@ -6,6 +6,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.nearby.connection.ConnectionsStatusCodes
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -39,12 +41,14 @@ internal object NearbyConnectionsPoC {
     fun runtimePermissions(): Array<String> {
         val out = mutableListOf<String>()
 
+        if (Build.VERSION.SDK_INT in 29..31) {
+            out += Manifest.permission.ACCESS_FINE_LOCATION
+        }
+
         if (Build.VERSION.SDK_INT >= 31) {
             out += Manifest.permission.BLUETOOTH_ADVERTISE
             out += Manifest.permission.BLUETOOTH_CONNECT
             out += Manifest.permission.BLUETOOTH_SCAN
-        } else {
-            out += Manifest.permission.ACCESS_FINE_LOCATION
         }
 
         if (Build.VERSION.SDK_INT >= 33) {
@@ -60,6 +64,29 @@ internal object NearbyConnectionsPoC {
             ContextCompat.checkSelfPermission(context, it) ==
                 PackageManager.PERMISSION_GRANTED
         }
+
+
+    fun diagnosticFailure(operation: String, throwable: Throwable): String {
+        val api = throwable as? ApiException
+        val code = api?.statusCode
+        val codeText = code?.let { ConnectionsStatusCodes.getStatusCodeString(it) }
+            ?: throwable::class.java.simpleName
+        val detail = throwable.message?.take(160).orEmpty()
+        return buildString {
+            append(operation)
+            append(" FAIL")
+            if (code != null) {
+                append(" · statusCode=")
+                append(code)
+            }
+            append(" · ")
+            append(codeText)
+            if (detail.isNotBlank()) {
+                append(" · ")
+                append(detail)
+            }
+        }
+    }
 
     fun isReceiveEnabled(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
