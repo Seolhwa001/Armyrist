@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 62
-        versionName = "0.4.22-self-contained-transfer-link-poc"
+        versionCode = 63
+        versionName = "0.4.23-nearby-direct-transfer-poc"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
