@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 60
-        versionName = "0.4.20-nav-saveable-assignment-fix"
+        versionCode = 61
+        versionName = "0.4.21-data-transfer-direct-open-poc"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
