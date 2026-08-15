@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 69
-        versionName = "0.4.29-minor-patch-b-poc-cleanup-source-fix"
+        versionCode = 70
+        versionName = "0.4.30-nearby-connections-background-poc"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -83,6 +83,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
+    implementation("com.google.android.gms:play-services-nearby:19.3.0")
 
     testImplementation("junit:junit:4.13.2")
     // JVM unit tests need a real org.json implementation; android.jar provides only stubs.
