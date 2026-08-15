@@ -23,6 +23,20 @@
         <activity
             android:name=".PortableTransferActivity"
             android:exported="true">
+            <!--
+                Self-contained Transfer Link PoC.
+                The payload is stored entirely in the URI fragment:
+                armyrist://import#v1.<base64url-gzip-portable>
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="armyrist"
+                    android:host="import" />
+            </intent-filter>
+
             <!-- Native Armyrist MIME association. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
