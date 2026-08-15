@@ -689,9 +689,9 @@ private fun CountingScreen(
                                 .heightIn(min = 112.dp)
                                 .clickable {
                                     if (assignmentMode) {
-                                        assignmentSelected =
-                                            if (selected) assignmentSelected - item.id
-                                            else assignmentSelected + item.id
+                                        assignmentSelectedList =
+                                            (if (selected) assignmentSelected - item.id
+                                            else assignmentSelected + item.id).toList()
                                     } else {
                                         itemEditor = item
                                     }
@@ -1015,9 +1015,9 @@ private fun CountingScreen(
                             }
                             .clickable {
                                 if (assignmentMode) {
-                                    assignmentSelected =
-                                        if (selected) assignmentSelected - item.id
-                                        else assignmentSelected + item.id
+                                    assignmentSelectedList =
+                                        (if (selected) assignmentSelected - item.id
+                                        else assignmentSelected + item.id).toList()
                                 } else {
                                     itemEditor = item
                                 }

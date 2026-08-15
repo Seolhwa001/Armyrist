@@ -878,9 +878,9 @@ private fun ChecklistDetailScreen(
                             }
                             .clickable {
                                 if (assignmentMode) {
-                                    selectedIds =
-                                        if (selected) selectedIds - item.id
-                                        else selectedIds + item.id
+                                    selectedIdList =
+                                        (if (selected) selectedIds - item.id
+                                        else selectedIds + item.id).toList()
                                 } else if (!dragging) {
                                     editingItem = item
                                 }
