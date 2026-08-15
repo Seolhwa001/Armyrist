@@ -11,6 +11,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -20,7 +21,8 @@ fun ArmyristTopBar(
     title: String,
     subtitle: String? = null,
     leadingLabel: String = "홈",
-    onLeading: () -> Unit
+    onLeading: () -> Unit,
+    actions: @Composable RowScope.() -> Unit = {}
 ) {
     TopAppBar(
         title = {
@@ -56,6 +58,7 @@ fun ArmyristTopBar(
                 Text(leadingLabel)
             }
         },
+        actions = actions,
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = ArmyristColors.Header,
             titleContentColor = ArmyristColors.OnDark,

@@ -70,6 +70,7 @@ class MainActivity : ComponentActivity() {
 }
 
 private enum class Screen { SHEETS, COUNTING, GROUPS, CALCULATIONS, RESULT }
+private enum class CountingViewMode { DETAILED, COMPACT }
 
 @Composable
 private fun ArmyristApp(
@@ -453,6 +454,16 @@ private fun CountingScreen(
     var menuTarget by remember { mutableStateOf<CountingItem?>(null) }
     var voiceDrafts by remember { mutableStateOf<List<CountingVoiceDraft>?>(null) }
     var voiceMessage by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    val viewPrefs = remember { context.getSharedPreferences("armyrist_ui", Context.MODE_PRIVATE) }
+    var viewMode by remember {
+        mutableStateOf(
+            if (viewPrefs.getString("counting_view_mode", "DETAILED") == "COMPACT")
+                CountingViewMode.COMPACT else CountingViewMode.DETAILED
+        )
+    }
+    var headerMenuOpen by remember { mutableStateOf(false) }
+    var viewMenuOpen by remember { mutableStateOf(false) }
 
     var groupPickerOpen by remember { mutableStateOf(false) }
     var assignmentGroupId by remember { mutableStateOf<String?>(null) }
@@ -476,7 +487,42 @@ private fun CountingScreen(
                 title = sheet.title,
                 subtitle = "COUNTING · 항목 ${sheet.items.size} · AUTO SAVE",
                 leadingLabel = "홈",
-                onLeading = onHome
+                onLeading = onHome,
+                actions = {
+                    Box {
+                        TextButton(onClick = { viewMenuOpen = true }) {
+                            Text("☷", color = ArmyristColors.OnDark, style = MaterialTheme.typography.titleLarge)
+                        }
+                        DropdownMenu(expanded = viewMenuOpen, onDismissRequest = { viewMenuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text(if (viewMode == CountingViewMode.DETAILED) "● 상세 보기 (기본)" else "○ 상세 보기 (기본)") },
+                                onClick = {
+                                    viewMode = CountingViewMode.DETAILED
+                                    viewPrefs.edit().putString("counting_view_mode", "DETAILED").apply()
+                                    viewMenuOpen = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (viewMode == CountingViewMode.COMPACT) "● 컴팩트 보기" else "○ 컴팩트 보기") },
+                                onClick = {
+                                    viewMode = CountingViewMode.COMPACT
+                                    viewPrefs.edit().putString("counting_view_mode", "COMPACT").apply()
+                                    viewMenuOpen = false
+                                }
+                            )
+                        }
+                    }
+                    TextButton(onClick = { titleEdit = true }) { Text("✎", color = ArmyristColors.OnDark, style = MaterialTheme.typography.titleLarge) }
+                    Box {
+                        TextButton(onClick = { headerMenuOpen = true }) { Text("⋮", color = ArmyristColors.OnDark, style = MaterialTheme.typography.titleLarge) }
+                        DropdownMenu(expanded = headerMenuOpen, onDismissRequest = { headerMenuOpen = false }) {
+                            DropdownMenuItem(text = { Text("목록") }, onClick = { headerMenuOpen = false; onBack() })
+                            DropdownMenuItem(text = { Text("결과 전달") }, onClick = { headerMenuOpen = false; onResult() })
+                            DropdownMenuItem(text = { Text("그룹 관리") }, onClick = { headerMenuOpen = false; groupManager = true })
+                            DropdownMenuItem(text = { Text("계산 상세 관리") }, onClick = { headerMenuOpen = false; onCalculations() })
+                        }
+                    }
+                }
             )
         }
     ) { padding ->
@@ -486,90 +532,26 @@ private fun CountingScreen(
                 .padding(padding)
         ) {
             Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Button(
-                    onClick = onBack,
-                    modifier = Modifier.weight(1f),
-                    shape = ArmyristPanelShape,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = ArmyristColors.HeaderRaised,
-                        contentColor = ArmyristColors.OnDark
+                ArmyristUtilityActionButton("그룹", { groupPickerOpen = true }, Modifier.weight(1f))
+                ArmyristUtilityActionButton("계산", onCalculations, Modifier.weight(1f))
+                ArmyristUtilityActionButton("메모", { memoEdit = true }, Modifier.weight(1f))
+                Box(Modifier.weight(1f)) {
+                    OfflineVoiceButton(
+                        toolContext = VoiceToolContext.COUNTING,
+                        modifier = Modifier.fillMaxWidth(),
+                        onTranscript = { transcript -> voiceDrafts = KoreanVoiceStructurer.counting(transcript) },
+                        onMessage = { voiceMessage = it }
                     )
-                ) {
-                    Text("목록", fontWeight = FontWeight.Bold)
                 }
-
-                OutlinedButton(
-                    onClick = { titleEdit = true },
-                    modifier = Modifier.weight(1f),
-                    shape = ArmyristPanelShape,
-                    border = BorderStroke(
-                        1.dp,
-                        ArmyristColors.PrimaryControl
-                    ),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = ArmyristColors.WorkSurface,
-                        contentColor = ArmyristColors.PrimaryText
-                    )
-                ) {
-                    Text("제목 수정", fontWeight = FontWeight.Bold)
-                }
-
-                Button(
-                    onClick = onResult,
-                    modifier = Modifier.weight(1f),
-                    shape = ArmyristPanelShape,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = ArmyristColors.PrimaryControl,
-                        contentColor = ArmyristColors.OnDark
-                    )
-                ) {
-                    Text("결과 전달", fontWeight = FontWeight.Bold)
-                }
-
             }
-
-            OfflineVoiceButton(
-                toolContext = VoiceToolContext.COUNTING,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                onTranscript = { transcript ->
-                    voiceDrafts = KoreanVoiceStructurer.counting(transcript)
-                },
-                onMessage = { voiceMessage = it }
-            )
 
             AggregateSummary(sheet)
             CalculationSummary(sheet)
 
-            if (assignmentGroupId == null) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    ArmyristUtilityButton(
-                        text = "그룹",
-                        onClick = { groupManager = true }
-                    )
-                    ArmyristUtilityButton(
-                        text = "그룹 지정",
-                        onClick = { groupPickerOpen = true }
-                    )
-                    ArmyristUtilityButton(
-                        text = "계산",
-                        onClick = onCalculations
-                    )
-                    ArmyristUtilityButton(
-                        text = "메모",
-                        onClick = { memoEdit = true }
-                    )
-                }
-            } else {
+            if (assignmentGroupId != null) {
                 val targetGroup = sheet.groups.firstOrNull { it.id == assignmentGroupId }
                 val targetLabel =
                     if (assignmentGroupId?.isEmpty() == true) {
@@ -635,7 +617,7 @@ private fun CountingScreen(
                     top = 6.dp,
                     bottom = 24.dp
                 ),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(if (viewMode == CountingViewMode.COMPACT) 2.dp else 6.dp)
             ) {
                 if (sheet.items.isEmpty()) {
                     item {
@@ -830,8 +812,8 @@ private fun CountingScreen(
                                 Modifier
                                     .weight(1f)
                                     .padding(
-                                        horizontal = 12.dp,
-                                        vertical = 10.dp
+                                        horizontal = if (viewMode == CountingViewMode.COMPACT) 8.dp else 12.dp,
+                                        vertical = if (viewMode == CountingViewMode.COMPACT) 4.dp else 10.dp
                                     ),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -844,15 +826,15 @@ private fun CountingScreen(
                             Column(Modifier.weight(1f)) {
                                 Text(
                                     item.name,
-                                    style = MaterialTheme.typography.titleMedium,
+                                    style = if (viewMode == CountingViewMode.COMPACT) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 Text(
-                                    "${item.unit} · $groupName",
+                                    if (viewMode == CountingViewMode.COMPACT) "${item.unit}  $groupName" else "${item.unit} · $groupName",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                if (item.note.isNotBlank()) {
+                                if (viewMode == CountingViewMode.DETAILED && item.note.isNotBlank()) {
                                     Text(
                                         "비고: ${item.note}",
                                         style = MaterialTheme.typography.bodySmall,
@@ -865,8 +847,8 @@ private fun CountingScreen(
                                 OutlinedButton(
                                     onClick = { onDecrement(item.id) },
                                     modifier = Modifier.sizeIn(
-                                        minWidth = 54.dp,
-                                        minHeight = 54.dp
+                                        minWidth = if (viewMode == CountingViewMode.COMPACT) 42.dp else 54.dp,
+                                        minHeight = if (viewMode == CountingViewMode.COMPACT) 42.dp else 54.dp
                                     ),
                                     shape = ArmyristPanelShape,
                                     border = BorderStroke(
@@ -881,8 +863,8 @@ private fun CountingScreen(
                                 Button(
                                     onClick = { quantityTarget = item },
                                     modifier = Modifier
-                                        .widthIn(min = 72.dp)
-                                        .heightIn(min = 54.dp),
+                                        .widthIn(min = if (viewMode == CountingViewMode.COMPACT) 48.dp else 72.dp)
+                                        .heightIn(min = if (viewMode == CountingViewMode.COMPACT) 42.dp else 54.dp),
                                     shape = ArmyristPanelShape,
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor =
@@ -897,8 +879,7 @@ private fun CountingScreen(
                                     Text(
                                         item.quantity.toString(),
                                         style =
-                                            MaterialTheme.typography
-                                                .headlineMedium,
+                                            if (viewMode == CountingViewMode.COMPACT) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
@@ -906,8 +887,8 @@ private fun CountingScreen(
                                 Button(
                                     onClick = { onIncrement(item.id) },
                                     modifier = Modifier.sizeIn(
-                                        minWidth = 54.dp,
-                                        minHeight = 54.dp
+                                        minWidth = if (viewMode == CountingViewMode.COMPACT) 42.dp else 54.dp,
+                                        minHeight = if (viewMode == CountingViewMode.COMPACT) 42.dp else 54.dp
                                     ),
                                     shape = ArmyristPanelShape,
                                     colors = ButtonDefaults.buttonColors(
