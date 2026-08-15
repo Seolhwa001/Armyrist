@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 56
-        versionName = "0.4.16-minor-patch-a-final-ui-correction-03"
+        versionCode = 57
+        versionName = "0.4.17-counting-compact-2col-group-marker"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
