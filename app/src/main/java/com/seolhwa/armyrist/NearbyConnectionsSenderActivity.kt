@@ -177,7 +177,14 @@ class NearbyConnectionsSenderActivity : ComponentActivity() {
                 "$diagnostic · serviceId=${NearbyConnectionsPoC.SERVICE_ID} strategy=${NearbyConnectionsPoC.STRATEGY_LABEL}",
                 error
             )
-            status = "주변 기기 검색을 시작하지 못했습니다. 권한과 무선 연결 상태를 확인해주세요."
+            status = buildString {
+                append("주변 기기 검색 시작 실패\n")
+                append(diagnostic)
+                append("\nserviceId=")
+                append(NearbyConnectionsPoC.SERVICE_ID)
+                append(" · strategy=")
+                append(NearbyConnectionsPoC.STRATEGY_LABEL)
+            }
         }
     }
 
