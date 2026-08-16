@@ -80,17 +80,24 @@ class NearbyConnectionsReceiverService : Service() {
             else -> Unit
         }
 
+        val explicitStart =
+            intent?.action == NearbyConnectionsPoC.ACTION_START
+
         if (
-            NearbyConnectionsPoC.isReceiveEnabled(this) &&
+            (explicitStart || NearbyConnectionsPoC.isReceiveEnabled(this)) &&
             NearbyConnectionsPoC.hasRuntimePermissions(this)
         ) {
             startForeground(
                 STATUS_NOTIFICATION_ID,
-                statusNotification("주변 데이터 수신 대기 중")
+                statusNotification("주변 데이터 수신을 준비하는 중")
             )
             startAdvertising()
-        } else if (intent?.action == NearbyConnectionsPoC.ACTION_START) {
+        } else if (explicitStart) {
             NearbyConnectionsPoC.setReceiveEnabled(this, false)
+            sendBroadcast(
+                Intent(NearbyConnectionsPoC.ACTION_ADVERTISING_FAILED)
+                    .setPackage(packageName)
+            )
             stopSelf()
         }
 
@@ -108,12 +115,18 @@ class NearbyConnectionsReceiverService : Service() {
             lifecycleCallback,
             options
         ).addOnSuccessListener {
+            NearbyConnectionsPoC.setReceiveEnabled(this, true)
             Log.i(
                 "ArmyristNearby",
                 "startAdvertising SUCCESS serviceId=${NearbyConnectionsPoC.SERVICE_ID} strategy=${NearbyConnectionsPoC.STRATEGY_LABEL}"
             )
             notifyStatus("주변 데이터 수신 대기 중")
+            sendBroadcast(
+                Intent(NearbyConnectionsPoC.ACTION_ADVERTISING_ACTIVE)
+                    .setPackage(packageName)
+            )
         }.addOnFailureListener { error ->
+            NearbyConnectionsPoC.setReceiveEnabled(this, false)
             val diagnostic =
                 NearbyConnectionsPoC.diagnosticFailure("startAdvertising", error)
             Log.e(
@@ -121,7 +134,13 @@ class NearbyConnectionsReceiverService : Service() {
                 "$diagnostic · serviceId=${NearbyConnectionsPoC.SERVICE_ID} strategy=${NearbyConnectionsPoC.STRATEGY_LABEL}",
                 error
             )
-            notifyStatus("수신 대기 시작 실패 · $diagnostic")
+            notifyStatus("주변 데이터 수신을 시작하지 못했습니다.")
+            sendBroadcast(
+                Intent(NearbyConnectionsPoC.ACTION_ADVERTISING_FAILED)
+                    .setPackage(packageName)
+            )
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
         }
     }
 

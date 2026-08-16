@@ -1,6 +1,9 @@
 package com.seolhwa.armyrist
 
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import android.os.Build
 import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -216,25 +219,73 @@ private fun NearbyReceiveToggle() {
             NearbyConnectionsPoC.isReceiveEnabled(context)
         )
     }
+    var starting by remember { mutableStateOf(false) }
     var message by remember {
         mutableStateOf(
             if (enabled) "● 수신 대기 중" else "수신 모드가 꺼져 있습니다."
         )
     }
 
+    DisposableEffect(context) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                when (intent?.action) {
+                    NearbyConnectionsPoC.ACTION_ADVERTISING_ACTIVE -> {
+                        starting = false
+                        enabled = true
+                        message = "● 수신 대기 중"
+                    }
+
+                    NearbyConnectionsPoC.ACTION_ADVERTISING_FAILED -> {
+                        starting = false
+                        enabled = false
+                        message =
+                            "주변 데이터 수신을 시작하지 못했습니다. 권한과 무선 연결 상태를 확인해주세요."
+                    }
+                }
+            }
+        }
+
+        val filter = IntentFilter().apply {
+            addAction(NearbyConnectionsPoC.ACTION_ADVERTISING_ACTIVE)
+            addAction(NearbyConnectionsPoC.ACTION_ADVERTISING_FAILED)
+        }
+
+        if (Build.VERSION.SDK_INT >= 33) {
+            context.registerReceiver(
+                receiver,
+                filter,
+                Context.RECEIVER_NOT_EXPORTED
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            context.registerReceiver(receiver, filter)
+        }
+
+        onDispose {
+            runCatching { context.unregisterReceiver(receiver) }
+        }
+    }
+
     val launcher =
         rememberLauncherForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions()
         ) { result ->
-            val granted = result.values.all { it }
+            val granted =
+                NearbyConnectionsPoC.hasRuntimePermissions(context) &&
+                    result.values.all { it }
+
             if (granted) {
+                starting = true
+                enabled = false
+                message = "수신 대기를 시작하는 중…"
                 NearbyConnectionsPoC.startReceiverService(context)
-                enabled = true
-                message = "● 수신 대기 중"
             } else {
                 NearbyConnectionsPoC.setReceiveEnabled(context, false)
+                starting = false
                 enabled = false
-                message = "권한이 없어 주변 데이터 수신을 사용할 수 없습니다."
+                message =
+                    "주변 데이터 수신을 사용하려면 근처 기기 권한이 필요합니다."
             }
         }
 
@@ -274,17 +325,20 @@ private fun NearbyReceiveToggle() {
 
                 Switch(
                     checked = enabled,
+                    enabled = !starting,
                     onCheckedChange = { turnOn ->
                         if (!turnOn) {
                             NearbyConnectionsPoC.stopReceiverService(context)
+                            starting = false
                             enabled = false
                             message = "수신 모드가 꺼져 있습니다."
                         } else if (
                             NearbyConnectionsPoC.hasRuntimePermissions(context)
                         ) {
+                            starting = true
+                            enabled = false
+                            message = "수신 대기를 시작하는 중…"
                             NearbyConnectionsPoC.startReceiverService(context)
-                            enabled = true
-                            message = "● 수신 대기 중"
                         } else {
                             launcher.launch(
                                 NearbyConnectionsPoC.runtimePermissions()
@@ -297,7 +351,7 @@ private fun NearbyReceiveToggle() {
             if (enabled) {
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Armyrist를 보고 있지 않아도 주변 전송 요청을 받을 수 있도록 수신 서비스를 유지합니다.",
+                    "아미리스를 보고 있지 않아도 주변 전송 요청을 받을 수 있도록 수신 서비스를 유지합니다.",
                     style = MaterialTheme.typography.bodySmall,
                     color = ArmyristColors.SecondaryText
                 )

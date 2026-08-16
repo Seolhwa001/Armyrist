@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -476,7 +477,12 @@ private fun CountingScreen(
     val assignmentSelected = assignmentSelectedList.toSet()
 
     val dragThresholdPx = with(LocalDensity.current) { 44.dp.toPx() }
+    val compactDragHorizontalThresholdPx =
+        with(LocalDensity.current) { 56.dp.toPx() }
+    val compactDragVerticalThresholdPx =
+        with(LocalDensity.current) { 72.dp.toPx() }
     val listState = rememberLazyListState()
+    val compactGridState = rememberLazyGridState()
 
     BackHandler {
         if (assignmentGroupId != null) {
@@ -617,6 +623,7 @@ private fun CountingScreen(
             if (viewMode == CountingViewMode.COMPACT) {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
+                    state = compactGridState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 24.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -649,6 +656,22 @@ private fun CountingScreen(
                             .firstOrNull { it.id == assignmentGroupId }
                             ?.let { parseColor(it.color).copy(alpha = 0.26f) }
                             ?: ArmyristColors.SecondaryControl
+
+                        var compactDragOffsetX by remember(item.id) {
+                            mutableFloatStateOf(0f)
+                        }
+                        var compactDragOffsetY by remember(item.id) {
+                            mutableFloatStateOf(0f)
+                        }
+                        var compactDragging by remember(item.id) {
+                            mutableStateOf(false)
+                        }
+                        val compactHaptic = LocalHapticFeedback.current
+                        val compactDragScope = rememberCoroutineScope()
+                        val compactEdgeThresholdPx =
+                            with(LocalDensity.current) { 72.dp.toPx() }
+                        val compactAutoScrollStepPx =
+                            with(LocalDensity.current) { 20.dp.toPx() }
 
                         // Group marker number is presentation-only.
                         // It appears only when multiple groups use the same configured color.
@@ -686,7 +709,18 @@ private fun CountingScreen(
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 112.dp)
+                                .heightIn(min = 96.dp)
+                                .zIndex(if (compactDragging) 2f else 0f)
+                                .graphicsLayer {
+                                    translationX =
+                                        if (compactDragging) compactDragOffsetX else 0f
+                                    translationY =
+                                        if (compactDragging) compactDragOffsetY else 0f
+                                    shadowElevation =
+                                        if (compactDragging) 12f else 0f
+                                    scaleX = if (compactDragging) 1.02f else 1f
+                                    scaleY = if (compactDragging) 1.02f else 1f
+                                }
                                 .clickable {
                                     if (assignmentMode) {
                                         assignmentSelectedList =
@@ -700,13 +734,141 @@ private fun CountingScreen(
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 9.dp, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
+                                    if (!assignmentMode) {
+                                        Box(
+                                            modifier = Modifier
+                                                .sizeIn(
+                                                    minWidth = 40.dp,
+                                                    minHeight = 40.dp
+                                                )
+                                                .pointerInput(item.id) {
+                                                    detectDragGesturesAfterLongPress(
+                                                        onDragStart = {
+                                                            compactDragging = true
+                                                            compactDragOffsetX = 0f
+                                                            compactDragOffsetY = 0f
+                                                            compactHaptic.performHapticFeedback(
+                                                                HapticFeedbackType.LongPress
+                                                            )
+                                                        },
+                                                        onDragCancel = {
+                                                            compactDragging = false
+                                                            compactDragOffsetX = 0f
+                                                            compactDragOffsetY = 0f
+                                                        },
+                                                        onDragEnd = {
+                                                            compactDragging = false
+                                                            compactDragOffsetX = 0f
+                                                            compactDragOffsetY = 0f
+                                                        },
+                                                        onDrag = { change, dragAmount ->
+                                                            change.consume()
+                                                            compactDragOffsetX += dragAmount.x
+                                                            compactDragOffsetY += dragAmount.y
+
+                                                            when {
+                                                                compactDragOffsetX >=
+                                                                    compactDragHorizontalThresholdPx -> {
+                                                                    onMove(item.id, 1)
+                                                                    compactDragOffsetX -=
+                                                                        compactDragHorizontalThresholdPx
+                                                                    compactHaptic.performHapticFeedback(
+                                                                        HapticFeedbackType.TextHandleMove
+                                                                    )
+                                                                }
+
+                                                                compactDragOffsetX <=
+                                                                    -compactDragHorizontalThresholdPx -> {
+                                                                    onMove(item.id, -1)
+                                                                    compactDragOffsetX +=
+                                                                        compactDragHorizontalThresholdPx
+                                                                    compactHaptic.performHapticFeedback(
+                                                                        HapticFeedbackType.TextHandleMove
+                                                                    )
+                                                                }
+                                                            }
+
+                                                            when {
+                                                                compactDragOffsetY >=
+                                                                    compactDragVerticalThresholdPx -> {
+                                                                    onMove(item.id, 2)
+                                                                    compactDragOffsetY -=
+                                                                        compactDragVerticalThresholdPx
+                                                                    compactHaptic.performHapticFeedback(
+                                                                        HapticFeedbackType.TextHandleMove
+                                                                    )
+                                                                }
+
+                                                                compactDragOffsetY <=
+                                                                    -compactDragVerticalThresholdPx -> {
+                                                                    onMove(item.id, -2)
+                                                                    compactDragOffsetY +=
+                                                                        compactDragVerticalThresholdPx
+                                                                    compactHaptic.performHapticFeedback(
+                                                                        HapticFeedbackType.TextHandleMove
+                                                                    )
+                                                                }
+                                                            }
+
+                                                            val layout =
+                                                                compactGridState.layoutInfo
+                                                            val draggedInfo =
+                                                                layout.visibleItemsInfo
+                                                                    .firstOrNull {
+                                                                        it.key == item.id
+                                                                    }
+
+                                                            if (draggedInfo != null) {
+                                                                val top =
+                                                                    draggedInfo.offset.y +
+                                                                        compactDragOffsetY
+                                                                val bottom =
+                                                                    top + draggedInfo.size.height
+
+                                                                when {
+                                                                    top <
+                                                                        layout.viewportStartOffset +
+                                                                        compactEdgeThresholdPx -> {
+                                                                        compactDragScope.launch {
+                                                                            compactGridState.scrollBy(
+                                                                                -compactAutoScrollStepPx
+                                                                            )
+                                                                        }
+                                                                    }
+
+                                                                    bottom >
+                                                                        layout.viewportEndOffset -
+                                                                        compactEdgeThresholdPx -> {
+                                                                        compactDragScope.launch {
+                                                                            compactGridState.scrollBy(
+                                                                                compactAutoScrollStepPx
+                                                                            )
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    )
+                                                },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                "⠿",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                color = ArmyristColors.SecondaryText,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        Spacer(Modifier.width(2.dp))
+                                    }
+
                                     Text(
                                         "$displayIndex.",
                                         style = MaterialTheme.typography.labelLarge,

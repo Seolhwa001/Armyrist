@@ -26,6 +26,8 @@ internal object NearbyConnectionsPoC {
     const val ACTION_REJECT = "com.seolhwa.armyrist.nearby.REJECT"
     const val ACTION_PAYLOAD_READY = "com.seolhwa.armyrist.nearby.PAYLOAD_READY"
     const val ACTION_TRANSFER_ERROR = "com.seolhwa.armyrist.nearby.TRANSFER_ERROR"
+    const val ACTION_ADVERTISING_ACTIVE = "com.seolhwa.armyrist.nearby.ADVERTISING_ACTIVE"
+    const val ACTION_ADVERTISING_FAILED = "com.seolhwa.armyrist.nearby.ADVERTISING_FAILED"
 
     const val EXTRA_ENDPOINT_ID = "endpointId"
     const val EXTRA_FILE_PATH = "filePath"
@@ -100,7 +102,6 @@ internal object NearbyConnectionsPoC {
     }
 
     fun startReceiverService(context: Context) {
-        setReceiveEnabled(context, true)
         ContextCompat.startForegroundService(
             context,
             Intent(context, NearbyConnectionsReceiverService::class.java)
