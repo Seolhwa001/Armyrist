@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 75
-        versionName = "0.4.35-rework-007-nearby-permission-simple-drag"
+        versionCode = 76
+        versionName = "0.4.36-nearby-discovery-diagnostic"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
