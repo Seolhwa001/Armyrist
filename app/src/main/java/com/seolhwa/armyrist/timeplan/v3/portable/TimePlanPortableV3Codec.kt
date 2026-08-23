@@ -11,7 +11,7 @@ object TimePlanPortableV3Codec {
     fun encode(plan: DateAwareTimePlan): JSONObject = DateAwareTimePlanJson.encode(plan).put("schemaVersion", SCHEMA_VERSION)
     fun decode(document: JSONObject): DateAwareTimePlan {
         val schema = document.getInt("schemaVersion")
-        require(schema == 3 || schema == SCHEMA_VERSION)
+        require(schema in setOf(3, 4, SCHEMA_VERSION))
         val plan = DateAwareTimePlanJson.decode(document)
         require(com.seolhwa.armyrist.timeplan.v3.domain.DateTimePlanRules.validateForPersistence(plan).isEmpty())
         return plan
@@ -26,11 +26,24 @@ object TimePlanPortableV3Codec {
                 toNodeId = eventMap[l.toNodeId] ?: l.toNodeId
             )
         }
+        val groupMap = source.actionGroups.associate { it.id to UUID.randomUUID().toString() }
+        val groups = source.actionGroups.map { it.copy(id = groupMap.getValue(it.id)) }
+        val actions = source.actions.map { action ->
+            action.copy(
+                id = UUID.randomUUID().toString(),
+                parentPointId = eventMap[action.parentPointId] ?: action.parentPointId,
+                groupId = action.groupId?.let { groupMap[it] },
+                createdAt = System.currentTimeMillis().toString(),
+                updatedAt = System.currentTimeMillis().toString()
+            )
+        }
         return source.copy(
             id = UUID.randomUUID().toString(),
             midwayEvents = mid,
             finalPoint = final,
             links = links,
+            actionGroups = groups,
+            actions = actions,
             createdAt = System.currentTimeMillis().toString(),
             updatedAt = System.currentTimeMillis().toString()
         )
