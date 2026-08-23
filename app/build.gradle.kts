@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 90
-        versionName = "0.6.2-music-alarm-import-build-rework"
+        versionCode = 91
+        versionName = "0.6.3-timeplan-action-scroll-density"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
