@@ -65,6 +65,12 @@ fun DateAwareTimePlanApp(
     @Suppress("UNUSED_VARIABLE") val observed = revision
 
     if (trashOpen) {
+        // System Back and the visible "뒤로" button must have the same contract:
+        // close Trash and return to the TimePlan list, never finish TimePlanActivity.
+        BackHandler(enabled = true) {
+            trashOpen = false
+        }
+
         val trashItems =
             trashRepository.getItems(TrashToolType.TIME_PLAN)
 
@@ -166,6 +172,10 @@ fun DateAwareTimePlanApp(
                 onDismiss = { selectedLegacyId = null },
                 onApply = { date ->
                     repository.migrateLegacy(legacy, date)?.let { migrated ->
+                        // Migration has committed the full DateAware snapshot.
+                        // Remove the old v2 source only after that succeeds so it
+                        // cannot reappear later as a "날짜 기능 이전 계획".
+                        legacyRepository.delete(legacy.id)
                         selectedLegacyId = null
                         selectedId = migrated.id
                         revision++
@@ -180,7 +190,22 @@ fun DateAwareTimePlanApp(
     val selected = selectedId?.let(repository::getPlan)
     if (selected == null) {
         val datePlans = repository.getPlans()
-        val legacyPlans = legacyRepository.getPlans().filterNot { repository.contains(it.id) }
+
+        // Older Armyrist builds kept the original v2 plan after successful date
+        // migration. While the DateAware plan existed that v2 copy was hidden by
+        // ID, but deleting/restoring/importing could expose it again and make it
+        // look as if old plans had been newly created.
+        //
+        // Exact-ID duplicates are migration shadows, not independent documents.
+        // Remove them only while their DateAware replacement is present.
+        val dateAwareIds = datePlans.map { it.id }.toSet()
+        legacyRepository.getPlans()
+            .filter { it.id in dateAwareIds }
+            .forEach { shadow ->
+                legacyRepository.delete(shadow.id)
+            }
+
+        val legacyPlans = legacyRepository.getPlans()
         DateAwarePlanList(
             datePlans = datePlans,
             legacyPlans = legacyPlans.map { it.id to it.title },
