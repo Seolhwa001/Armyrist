@@ -74,7 +74,18 @@ class DateAwareTimePlanRepository(context: Context) {
      * -> validate -> persist -> publish.
      */
     @Synchronized
-    fun deleteEvent(planId: String, eventId: String): Boolean {
+    fun deleteEvent(planId: String, eventId: String): Boolean =
+        runCatching {
+            deleteEventInternal(planId, eventId)
+        }.onFailure {
+            android.util.Log.e(
+                "Armyrist-TimePlan",
+                "Atomic event deletion failed plan=$planId event=$eventId",
+                it
+            )
+        }.getOrDefault(false)
+
+    private fun deleteEventInternal(planId: String, eventId: String): Boolean {
         val current = plans.firstOrNull { it.id == planId } ?: return false
 
         val isFinal = current.finalPoint?.id == eventId
