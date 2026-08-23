@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 100
-        versionName = "0.6.12-atomic-point-delete-ui-unification"
+        versionCode = 101
+        versionName = "0.6.13-emergency-delete-guard-active-alarm"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
