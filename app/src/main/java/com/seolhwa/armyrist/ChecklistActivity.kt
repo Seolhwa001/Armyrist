@@ -37,6 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.RestoreFromTrash
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -56,6 +57,7 @@ import com.seolhwa.armyrist.notification.ChecklistNotificationManager
 import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
 import com.seolhwa.armyrist.stage2.domain.*
 import com.seolhwa.armyrist.voice.*
+import com.seolhwa.armyrist.trash.*
 import kotlin.math.roundToInt
 
 class ChecklistActivity : ComponentActivity() {
@@ -95,6 +97,7 @@ class ChecklistActivity : ComponentActivity() {
                 Surface(Modifier.fillMaxSize(), color = ArmyristColors.AppBackground) {
                     ChecklistApp(
                         repo = coreRepository,
+                        trashRepo = (application as ArmyristApplication).commonTrashRepository,
                         initialChecklistId = initialChecklistId,
                         onHome = { finish() },
                         onPickNotificationSound = { existingUri, onPicked ->
@@ -215,6 +218,7 @@ private enum class ChecklistViewMode { DETAIL, COMPACT }
 @Composable
 private fun ChecklistApp(
     repo: CoreSuiteRepository,
+    trashRepo: CommonTrashRepository,
     initialChecklistId: String?,
     onHome: () -> Unit,
     onPickNotificationSound: (String?, (String) -> Unit) -> Unit,
@@ -237,6 +241,7 @@ private fun ChecklistApp(
             BackHandler { onHome() }
             ChecklistListScreen(
                 checklists = repo.getChecklists(),
+                trashRepo = trashRepo,
                 onHome = onHome,
                 onCreate = {
                     selectedId = repo.createChecklist().id
@@ -249,13 +254,44 @@ private fun ChecklistApp(
                         refresh()
                     }
                 },
-                onDelete = { checklistId ->
-                    repo.getChecklist(checklistId)?.let {
-                        onCancelChecklistNotifications(it)
+                onDeleteToTrash = { checklistId ->
+                    val current = repo.getChecklist(checklistId)
+                    val payload = repo.exportChecklistTrashPayload(checklistId)
+                    if (current == null || payload == null) {
+                        false
+                    } else {
+                        val trashItem = trashRepo.moveToTrash(
+                            toolType = TrashToolType.CHECKLIST,
+                            originalId = current.id,
+                            title = current.title,
+                            payloadVersion = 1,
+                            payload = payload
+                        )
+                        if (trashItem == null) {
+                            false
+                        } else if (repo.deleteChecklistForTrash(checklistId)) {
+                            onCancelChecklistNotifications(current)
+                            onReconcileNotifications()
+                            refresh()
+                            true
+                        } else {
+                            trashRepo.permanentlyDelete(trashItem.id)
+                            false
+                        }
                     }
-                    repo.deleteChecklist(checklistId)
-                    onReconcileNotifications()
-                    refresh()
+                },
+                onRestoreTrash = { item ->
+                    if (repo.restoreChecklistTrashPayload(item.payload)) {
+                        trashRepo.permanentlyDelete(item.id)
+                        onReconcileNotifications()
+                        refresh()
+                        true
+                    } else false
+                },
+                onPermanentDeleteTrash = { item ->
+                    val deleted = trashRepo.permanentlyDelete(item.id)
+                    if (deleted) refresh()
+                    deleted
                 }
             )
         }
@@ -387,14 +423,19 @@ private fun ChecklistApp(
 @Composable
 private fun ChecklistListScreen(
     checklists: List<Checklist>,
+    trashRepo: CommonTrashRepository,
     onHome: () -> Unit,
     onCreate: () -> Unit,
     onOpen: (String) -> Unit,
     onRename: (String, String) -> Unit,
-    onDelete: (String) -> Unit
+    onDeleteToTrash: (String) -> Boolean,
+    onRestoreTrash: (CommonTrashItem) -> Boolean,
+    onPermanentDeleteTrash: (CommonTrashItem) -> Boolean
 ) {
     var renameTarget by remember { mutableStateOf<Checklist?>(null) }
     var deleteTarget by remember { mutableStateOf<Checklist?>(null) }
+    var trashOpen by rememberSaveable { mutableStateOf(false) }
+    var trashRevision by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
     val openImport = {
         context.startActivity(
@@ -402,6 +443,27 @@ private fun ChecklistListScreen(
                 putExtra(PortableTransferActivity.EXTRA_MODE, PortableTransferActivity.MODE_IMPORT)
             }
         )
+    }
+
+    if (trashOpen) {
+        BackHandler { trashOpen = false }
+        CommonTrashScreen(
+            toolLabel = "체크리스트",
+            items = trashRepo.getItems(TrashToolType.CHECKLIST),
+            retentionDays = trashRepo.retentionDays(),
+            onBack = { trashOpen = false },
+            onRetentionChange = {
+                if (trashRepo.setRetentionDays(it)) trashRevision++
+            },
+            onRestore = {
+                if (onRestoreTrash(it)) trashRevision++
+                else Toast.makeText(context, "복구하지 못했습니다.", Toast.LENGTH_SHORT).show()
+            },
+            onPermanentDelete = {
+                if (onPermanentDeleteTrash(it)) trashRevision++
+            }
+        )
+        return
     }
 
     Scaffold(
@@ -480,17 +542,42 @@ private fun ChecklistListScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 96.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                item(key = "checklist-import") {
-                    OutlinedButton(
-                        onClick = openImport,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp),
-                        shape = ArmyristPanelShape
+                item(key = "checklist-import-trash") {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Outlined.FileDownload, contentDescription = null, tint = ArmyristColors.PrimaryControl)
-                        Spacer(Modifier.width(8.dp))
-                        Text("데이터 불러오기")
+                        OutlinedButton(
+                            onClick = openImport,
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                            shape = ArmyristPanelShape,
+                            border = BorderStroke(1.dp, ArmyristColors.SoftBorder),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = ArmyristColors.RaisedSurface,
+                                contentColor = ArmyristColors.PrimaryText
+                            )
+                        ) {
+                            Icon(Icons.Outlined.FileDownload, contentDescription = null, tint = ArmyristColors.PrimaryControl)
+                            Spacer(Modifier.width(8.dp))
+                            Text("데이터 불러오기")
+                        }
+                        OutlinedButton(
+                            onClick = { trashOpen = true },
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            shape = ArmyristPanelShape,
+                            border = BorderStroke(1.dp, ArmyristColors.SoftBorder),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = ArmyristColors.RaisedSurface,
+                                contentColor = ArmyristColors.PrimaryText
+                            )
+                        ) {
+                            Icon(Icons.Outlined.RestoreFromTrash, contentDescription = null, tint = ArmyristColors.PrimaryControl)
+                            Spacer(Modifier.width(6.dp))
+                            val count = trashRepo.getItems(TrashToolType.CHECKLIST).size
+                            Text(if (count > 0) "휴지통 $count" else "휴지통")
+                        }
                     }
                 }
                 items(checklists, key = { it.id }) { checklist ->
@@ -504,7 +591,7 @@ private fun ChecklistListScreen(
                         ),
                         border = BorderStroke(
                             1.dp,
-                            ArmyristColors.Border
+                            ArmyristColors.SoftBorder
                         )
                     ) {
                         Row(

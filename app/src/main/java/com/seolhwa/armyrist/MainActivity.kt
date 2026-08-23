@@ -38,6 +38,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.RestoreFromTrash
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -54,6 +55,7 @@ import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
 import com.seolhwa.armyrist.stage2.domain.ToolResult
 import com.seolhwa.armyrist.domain.*
 import com.seolhwa.armyrist.voice.*
+import com.seolhwa.armyrist.trash.*
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -61,6 +63,7 @@ class MainActivity : ComponentActivity() {
         val app = application as ArmyristApplication
         val repository = app.repository
         val coreSuiteRepository = app.coreSuiteRepository
+        val trashRepository = app.commonTrashRepository
 
         setContent {
             ArmyristTheme {
@@ -71,6 +74,7 @@ class MainActivity : ComponentActivity() {
                     ArmyristApp(
                         repo = repository,
                         coreRepo = coreSuiteRepository,
+                        trashRepo = trashRepository,
                         onHome = { finish() }
                     )
                 }
@@ -86,6 +90,7 @@ private enum class CountingViewMode { DETAILED, COMPACT }
 private fun ArmyristApp(
     repo: CountingRepository,
     coreRepo: CoreSuiteRepository,
+    trashRepo: CommonTrashRepository,
     onHome: () -> Unit
 ) {
     var screenName by rememberSaveable { mutableStateOf(Screen.SHEETS.name) }
@@ -102,6 +107,7 @@ private fun ArmyristApp(
     when (screen) {
         Screen.SHEETS -> SheetListScreen(
             sheets = repo.getSheets(),
+            trashRepo = trashRepo,
             onHome = onHome,
             onCreate = {
                 selectedSheetId = repo.createSheet().id
@@ -115,9 +121,41 @@ private fun ArmyristApp(
             onRename = { id, title ->
                 if (repo.renameSheet(id, title)) refresh()
             },
-            onDelete = {
-                repo.deleteSheet(it)
-                refresh()
+            onDeleteToTrash = { id ->
+                val current = repo.getSheet(id)
+                val payload = repo.exportSheetTrashPayload(id)
+                if (current == null || payload == null) {
+                    false
+                } else {
+                    val trashItem = trashRepo.moveToTrash(
+                        toolType = TrashToolType.COUNTING,
+                        originalId = current.id,
+                        title = current.title,
+                        payloadVersion = 1,
+                        payload = payload
+                    )
+                    if (trashItem == null) {
+                        false
+                    } else if (repo.deleteSheetForTrash(id)) {
+                        refresh()
+                        true
+                    } else {
+                        trashRepo.permanentlyDelete(trashItem.id)
+                        false
+                    }
+                }
+            },
+            onRestoreTrash = { item ->
+                if (repo.restoreSheetTrashPayload(item.payload)) {
+                    trashRepo.permanentlyDelete(item.id)
+                    refresh()
+                    true
+                } else false
+            },
+            onPermanentDeleteTrash = { item ->
+                val deleted = trashRepo.permanentlyDelete(item.id)
+                if (deleted) refresh()
+                deleted
             }
         )
 
@@ -272,14 +310,19 @@ private fun ArmyristApp(
 @Composable
 private fun SheetListScreen(
     sheets: List<CountingSheet>,
+    trashRepo: CommonTrashRepository,
     onHome: () -> Unit,
     onCreate: () -> Unit,
     onOpen: (String) -> Unit,
     onRename: (String, String) -> Unit,
-    onDelete: (String) -> Unit
+    onDeleteToTrash: (String) -> Boolean,
+    onRestoreTrash: (CommonTrashItem) -> Boolean,
+    onPermanentDeleteTrash: (CommonTrashItem) -> Boolean
 ) {
     var renameTarget by remember { mutableStateOf<CountingSheet?>(null) }
     var deleteTarget by remember { mutableStateOf<CountingSheet?>(null) }
+    var trashOpen by rememberSaveable { mutableStateOf(false) }
+    var trashRevision by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
     val openImport = {
         context.startActivity(
@@ -287,6 +330,27 @@ private fun SheetListScreen(
                 putExtra(PortableTransferActivity.EXTRA_MODE, PortableTransferActivity.MODE_IMPORT)
             }
         )
+    }
+
+    if (trashOpen) {
+        BackHandler { trashOpen = false }
+        CommonTrashScreen(
+            toolLabel = "실셈",
+            items = trashRepo.getItems(TrashToolType.COUNTING),
+            retentionDays = trashRepo.retentionDays(),
+            onBack = { trashOpen = false },
+            onRetentionChange = {
+                if (trashRepo.setRetentionDays(it)) trashRevision++
+            },
+            onRestore = {
+                if (onRestoreTrash(it)) trashRevision++
+                else Toast.makeText(context, "복구하지 못했습니다.", Toast.LENGTH_SHORT).show()
+            },
+            onPermanentDelete = {
+                if (onPermanentDeleteTrash(it)) trashRevision++
+            }
+        )
+        return
     }
 
     Scaffold(
@@ -382,17 +446,42 @@ private fun SheetListScreen(
                     top = 8.dp,
                     bottom = 96.dp
                 ),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                item(key = "counting-import") {
-                    OutlinedButton(
-                        onClick = openImport,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp),
-                        shape = ArmyristPanelShape
+                item(key = "counting-import-trash") {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Outlined.FileDownload, contentDescription = null, tint = ArmyristColors.PrimaryControl)
-                        Spacer(Modifier.width(8.dp))
-                        Text("데이터 불러오기")
+                        OutlinedButton(
+                            onClick = openImport,
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                            shape = ArmyristPanelShape,
+                            border = BorderStroke(1.dp, ArmyristColors.SoftBorder),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = ArmyristColors.RaisedSurface,
+                                contentColor = ArmyristColors.PrimaryText
+                            )
+                        ) {
+                            Icon(Icons.Outlined.FileDownload, contentDescription = null, tint = ArmyristColors.PrimaryControl)
+                            Spacer(Modifier.width(8.dp))
+                            Text("데이터 불러오기")
+                        }
+                        OutlinedButton(
+                            onClick = { trashOpen = true },
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            shape = ArmyristPanelShape,
+                            border = BorderStroke(1.dp, ArmyristColors.SoftBorder),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = ArmyristColors.RaisedSurface,
+                                contentColor = ArmyristColors.PrimaryText
+                            )
+                        ) {
+                            Icon(Icons.Outlined.RestoreFromTrash, contentDescription = null, tint = ArmyristColors.PrimaryControl)
+                            Spacer(Modifier.width(6.dp))
+                            val count = trashRepo.getItems(TrashToolType.COUNTING).size
+                            Text(if (count > 0) "휴지통 $count" else "휴지통")
+                        }
                     }
                 }
                 items(sheets, key = { it.id }) { sheet ->
@@ -405,7 +494,7 @@ private fun SheetListScreen(
                         ),
                         border = BorderStroke(
                             1.dp,
-                            ArmyristColors.Border
+                            ArmyristColors.SoftBorder
                         )
                     ) {
                         Row(
@@ -458,7 +547,9 @@ private fun SheetListScreen(
             message = "'${target.title}'와 모든 항목/그룹/계산을 삭제합니다."
         ) {
             deleteTarget = null
-            if (it) onDelete(target.id)
+            if (it && !onDeleteToTrash(target.id)) {
+                Toast.makeText(context, "휴지통으로 이동하지 못했습니다.", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 }
@@ -1503,7 +1594,7 @@ private fun CountingScreen(
                         ),
                         border = BorderStroke(
                             1.dp,
-                            ArmyristColors.Border
+                            ArmyristColors.SoftBorder
                         )
                     ) {
                         Column(Modifier.padding(14.dp)) {
@@ -1717,7 +1808,7 @@ private fun AggregateSummary(sheet: CountingSheet) {
                         shape = ArmyristPanelShape,
                         border = BorderStroke(
                             1.dp,
-                            ArmyristColors.Border
+                            ArmyristColors.SoftBorder
                         ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
