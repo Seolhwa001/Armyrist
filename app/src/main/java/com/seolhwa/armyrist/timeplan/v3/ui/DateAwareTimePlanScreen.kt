@@ -1090,6 +1090,7 @@ private fun DateAwarePlanDetail(
                 title = plan.title,
                 subtitle = "TIME PLAN · DATE · AUTO SAVE",
                 leadingLabel = "홈",
+                leadingIcon = ArmyristTopBarLeadingIcon.HOME,
                 onLeading = { requestNavigation("HOME") },
                 secondaryLeadingLabel = "메뉴",
                 onSecondaryLeading = { requestNavigation("BACK") },
