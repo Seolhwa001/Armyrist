@@ -14,7 +14,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
@@ -41,6 +42,7 @@ import com.seolhwa.armyrist.timeplan.v3.domain.*
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
+import kotlin.math.abs
 
 enum class TimePlanExecutionMode { PREPARE, EXECUTE }
 enum class TimePlanExecutionView { TIMELINE, GROUP }
@@ -206,7 +208,7 @@ private fun TimePlanPrepareScreen(
                 ) {
                     OutlinedButton(
                         onClick = { groupManager = true },
-                        modifier = Modifier.weight(1f).heightIn(min = 40.dp),
+                        modifier = Modifier.weight(1f).heightIn(min = 38.dp),
                         shape = ArmyristPanelShape,
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                     ) { Text("그룹 관리") }
@@ -224,7 +226,7 @@ private fun TimePlanPrepareScreen(
                                     allPointIds
                                 }
                         },
-                        modifier = Modifier.weight(1f).heightIn(min = 40.dp),
+                        modifier = Modifier.weight(1f).heightIn(min = 38.dp),
                         shape = ArmyristPanelShape,
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                     ) {
@@ -252,7 +254,7 @@ private fun TimePlanPrepareScreen(
                                     allActionIds
                                 }
                         },
-                        modifier = Modifier.weight(1f).heightIn(min = 40.dp),
+                        modifier = Modifier.weight(1f).heightIn(min = 38.dp),
                         shape = ArmyristPanelShape,
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                     ) {
@@ -309,8 +311,8 @@ private fun TimePlanPrepareScreen(
             Modifier
                 .weight(1f)
                 .fillMaxWidth(),
-            contentPadding = PaddingValues(8.dp, 4.dp, 8.dp, 96.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            contentPadding = PaddingValues(8.dp, 4.dp, 8.dp, 88.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             items(allPointIds, key = { "point-$it" }) { pointId ->
                 val pointActions = TimePlanExecutionRules.actionsForPoint(plan, pointId)
@@ -622,7 +624,7 @@ private fun TimePlanExecuteScreen(
                             bulkSelect = true
                             selectedActionIds = allActionIds
                         },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 38.dp),
                         shape = ArmyristPanelShape,
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                         border = BorderStroke(1.dp, ArmyristColors.Border),
@@ -651,7 +653,7 @@ private fun TimePlanExecuteScreen(
                             )
                             OutlinedButton(
                                 onClick = { selectedActionIds = emptyList(); bulkSelect = false },
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 38.dp),
                                 shape = ArmyristPanelShape,
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                                 border = BorderStroke(1.dp, ArmyristColors.Border),
@@ -677,7 +679,7 @@ private fun TimePlanExecuteScreen(
                                             )
                                         )
                                     },
-                                    modifier = Modifier.weight(1f).heightIn(min = 40.dp),
+                                    modifier = Modifier.weight(1f).heightIn(min = 38.dp),
                                     shape = ArmyristPanelShape,
                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                                     colors = ButtonDefaults.buttonColors(
@@ -703,7 +705,7 @@ private fun TimePlanExecuteScreen(
                                             )
                                         )
                                     },
-                                    modifier = Modifier.weight(1f).heightIn(min = 40.dp),
+                                    modifier = Modifier.weight(1f).heightIn(min = 38.dp),
                                     shape = ArmyristPanelShape,
                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                                 ) {
@@ -739,8 +741,8 @@ private fun TimePlanExecuteScreen(
                     listTopInRoot = coordinates.positionInRoot().y
                     listBottomInRoot = listTopInRoot + coordinates.size.height
                 },
-            contentPadding = PaddingValues(8.dp, 4.dp, 8.dp, 96.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            contentPadding = PaddingValues(8.dp, 4.dp, 8.dp, 88.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             sections.forEach { (title, actions) ->
                 item(key = "header-$title") {
@@ -780,7 +782,7 @@ private fun TimePlanExecuteScreen(
                             }
                         )
                     ) {
-                        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                             if (bulkSelect) {
                                 Checkbox(
                                     checked = action.id in selectedActionIds,
@@ -857,7 +859,11 @@ private fun TimePlanExecuteScreen(
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(if (completed) "완료" else "미실시", style = MaterialTheme.typography.labelMedium)
-                                TextButton(onClick = { noteTarget = action }) { Text("비고") }
+                                TextButton(
+                                    onClick = { noteTarget = action },
+                                    modifier = Modifier.defaultMinSize(minWidth = 42.dp, minHeight = 32.dp),
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                                ) { Text("비고") }
                             }
                         }
                     }
@@ -894,44 +900,84 @@ private fun CompletionRailControl(
     onDragEnd: () -> Unit
 ) {
     var topInRoot by remember { mutableFloatStateOf(0f) }
-    val railColor = if (completed) ArmyristColors.PrimaryControl else ArmyristColors.Border
+    val railColor = if (completed) {
+        ArmyristColors.PrimaryControl
+    } else {
+        ArmyristColors.Border
+    }
 
     Box(
         modifier = Modifier
-            .width(52.dp)
-            .heightIn(min = 58.dp)
+            .width(44.dp)
+            .heightIn(min = 48.dp)
             .onGloballyPositioned { coordinates ->
                 topInRoot = coordinates.positionInRoot().y
             }
             .pointerInput(completed) {
-                detectDragGestures(
-                    onDragStart = { offset ->
-                        onDragStartAtRootY(topInRoot + offset.y)
-                    },
-                    onDragEnd = onDragEnd,
-                    onDragCancel = onDragEnd,
-                    onDrag = { change, _ ->
-                        change.consume()
-                        onDragAtRootY(topInRoot + change.position.y)
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    // A gesture that begins on the Completion Rail belongs to the rail,
+                    // not to LazyColumn scrolling.
+                    down.consume()
+
+                    var dragging = false
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+
+                        if (!change.pressed) break
+
+                        val deltaY = change.position.y - down.position.y
+                        if (!dragging && abs(deltaY) >= 6f) {
+                            dragging = true
+                            onDragStartAtRootY(topInRoot + down.position.y)
+                        }
+
+                        if (dragging) {
+                            change.consume()
+                            onDragAtRootY(topInRoot + change.position.y)
+                        }
                     }
-                )
-            }
-            .clickable(onClick = onTap),
+
+                    if (dragging) {
+                        onDragEnd()
+                    } else {
+                        onTap()
+                    }
+                }
+            },
         contentAlignment = Alignment.Center
     ) {
         Canvas(Modifier.fillMaxSize()) {
             val x = size.width / 2f
             drawLine(
-                color = railColor,
+                color = railColor.copy(alpha = if (completed) 0.90f else 0.55f),
                 start = androidx.compose.ui.geometry.Offset(x, 0f),
                 end = androidx.compose.ui.geometry.Offset(x, size.height),
-                strokeWidth = if (completed) 4f else 2f
+                strokeWidth = if (completed) 3.dp.toPx() else 1.5.dp.toPx()
             )
         }
-        Checkbox(
-            checked = completed,
-            onCheckedChange = null
-        )
+
+        Surface(
+            modifier = Modifier.size(28.dp),
+            shape = CircleShape,
+            color = if (completed) ArmyristColors.PrimaryControl else ArmyristColors.RaisedSurface,
+            border = BorderStroke(
+                2.dp,
+                if (completed) ArmyristColors.PrimaryControl else ArmyristColors.Border
+            )
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                if (completed) {
+                    Text(
+                        "✓",
+                        color = ArmyristColors.OnDark,
+                        fontWeight = FontWeight.ExtraBold,
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -945,7 +991,7 @@ private fun ArmyristModeButton(
     if (selected) {
         Button(
             onClick = onClick,
-            modifier = modifier.heightIn(min = 40.dp),
+            modifier = modifier.heightIn(min = 38.dp),
             shape = ArmyristPanelShape,
             colors = ButtonDefaults.buttonColors(
                 containerColor = ArmyristColors.SecondaryControl,
@@ -959,7 +1005,7 @@ private fun ArmyristModeButton(
     } else {
         OutlinedButton(
             onClick = onClick,
-            modifier = modifier.heightIn(min = 40.dp),
+            modifier = modifier.heightIn(min = 38.dp),
             shape = ArmyristPanelShape,
             border = BorderStroke(1.dp, ArmyristColors.Border),
             colors = ButtonDefaults.outlinedButtonColors(

@@ -1112,42 +1112,38 @@ private fun DayHeader(
     baseDate: LocalDate?,
     mode: TimePlanDateDisplayMode
 ) {
-    val dow = date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.KOREAN)
-    val accent = when (Math.floorMod(date.toEpochDay().toInt(), 4)) {
-        0 -> Color(0xFF556B2F)
-        1 -> Color(0xFF49646C)
-        2 -> Color(0xFF765C3D)
-        else -> Color(0xFF6B536F)
-    }
+    val dayName = date.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.KOREAN)
     val label = if (
         mode == TimePlanDateDisplayMode.RELATIVE_D_DAY && baseDate != null
     ) {
-        val d = java.time.temporal.ChronoUnit.DAYS.between(baseDate, date)
-        if (d == 0L) "D-Day" else "D${if (d > 0) "+" else ""}$d"
+        val offset = java.time.temporal.ChronoUnit.DAYS.between(baseDate, date)
+        if (offset == 0L) "D-Day" else "D${if (offset > 0) "+" else ""}$offset"
     } else {
-        "${date.format(DateTimeFormatter.ofPattern("MM.dd"))} ($dow)"
+        "${date.format(DateTimeFormatter.ofPattern("MM.dd"))}  $dayName"
     }
 
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
-        HorizontalDivider(Modifier.width(22.dp), color = accent.copy(alpha = 0.55f))
-        Surface(
-            modifier = Modifier.padding(horizontal = 8.dp),
-            shape = ArmyristPanelShape,
-            color = accent.copy(alpha = 0.11f),
-            border = BorderStroke(1.dp, accent.copy(alpha = 0.42f))
-        ) {
-            Text(
-                label,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                fontWeight = FontWeight.Bold,
-                color = accent
-            )
-        }
-        HorizontalDivider(Modifier.width(22.dp), color = accent.copy(alpha = 0.55f))
+        HorizontalDivider(
+            modifier = Modifier.width(34.dp),
+            color = ArmyristColors.PrimaryControl.copy(alpha = 0.40f)
+        )
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 10.dp),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.ExtraBold,
+            color = ArmyristColors.PrimaryControl
+        )
+        HorizontalDivider(
+            modifier = Modifier.width(34.dp),
+            color = ArmyristColors.PrimaryControl.copy(alpha = 0.40f)
+        )
     }
 }
 
@@ -1179,7 +1175,6 @@ private fun DatePointCard(
             Spacer(Modifier.weight(1f))
             if(locked) LockBadge()
             conflict?.let { WarningButton { onWarning(it) } }
-            Box(Modifier.width(38.dp), contentAlignment = Alignment.Center) { TimelinePointGlyph(isRange = false, emphasized = emphasized) }
         }
     }
 }
@@ -1221,9 +1216,6 @@ private fun EventCard(
             }
             if(e.dateTimeLocked) LockBadge()
             conflict?.let { WarningButton { onWarning(it) } }
-            Box(Modifier.width(38.dp), contentAlignment = Alignment.Center) {
-                TimelinePointGlyph(isRange = e.timeSpec is EventDateTimeSpec.Range, emphasized = e.kind == TimeEventKind.FINAL)
-            }
         }
     }
 }
@@ -1240,27 +1232,6 @@ private fun EventCard(
     }
 }
 
-@Composable
-private fun TimelinePointGlyph(isRange: Boolean, emphasized: Boolean) {
-    val color = ArmyristColors.PrimaryControl
-    Canvas(Modifier.width(34.dp).height(if (isRange) 54.dp else 34.dp)) {
-        val x = size.width / 2f
-        val radius = if (emphasized) 6.dp.toPx() else 5.dp.toPx()
-        if (isRange) {
-            val topY = 10.dp.toPx(); val bottomY = size.height - 10.dp.toPx()
-            drawLine(color=color,start=androidx.compose.ui.geometry.Offset(x, topY + radius),end=androidx.compose.ui.geometry.Offset(x, bottomY - radius),strokeWidth=2.dp.toPx())
-            drawCircle(color=color,radius=radius,center=androidx.compose.ui.geometry.Offset(x,topY))
-            drawCircle(color=color,radius=radius,center=androidx.compose.ui.geometry.Offset(x,bottomY))
-        } else drawCircle(color=color,radius=radius,center=center)
-    }
-}
-
-@Composable private fun TimelineConnectorGlyph() {
-    Canvas(Modifier.width(34.dp).height(38.dp)) {
-        val x = size.width / 2f
-        drawLine(color=ArmyristColors.Border,start=androidx.compose.ui.geometry.Offset(x,0f),end=androidx.compose.ui.geometry.Offset(x,size.height),strokeWidth=2.dp.toPx())
-    }
-}
 
 @Composable
 private fun LinkRow(
@@ -1288,7 +1259,7 @@ private fun LinkRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Spacer(Modifier.weight(1f))
-            HorizontalDivider(Modifier.width(26.dp), color = ArmyristColors.Border)
+            HorizontalDivider(Modifier.width(12.dp), color = ArmyristColors.Border.copy(alpha = 0.65f))
             Surface(
                 modifier = Modifier.padding(horizontal = 6.dp),
                 shape = ArmyristPanelShape,
@@ -1314,11 +1285,8 @@ private fun LinkRow(
                     }
                 }
             }
-            HorizontalDivider(Modifier.width(26.dp), color = ArmyristColors.Border)
+            HorizontalDivider(Modifier.width(12.dp), color = ArmyristColors.Border.copy(alpha = 0.65f))
             Spacer(Modifier.weight(1f))
-        }
-        Box(Modifier.width(38.dp), contentAlignment = Alignment.Center) {
-            TimelineConnectorGlyph()
         }
     }
 }
