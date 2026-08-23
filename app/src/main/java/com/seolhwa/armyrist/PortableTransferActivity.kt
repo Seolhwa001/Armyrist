@@ -8,6 +8,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.FileProvider
 import java.io.File
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -447,6 +451,8 @@ class PortableTransferActivity : ComponentActivity() {
                 var validated by remember {
                     mutableStateOf<ArmyristPortableDataManager.ValidatedPortableDocument?>(null)
                 }
+                var legacyBaseDate by remember { mutableStateOf(LocalDate.now()) }
+                var legacyDatePickerOpen by remember { mutableStateOf(false) }
                 val encrypted = inspection.value.encrypted
 
                 fun validateNow() {
@@ -514,23 +520,47 @@ class PortableTransferActivity : ComponentActivity() {
                                     "기존 문서는 변경하지 않고 새로운 문서로 추가됩니다.",
                                     color = ArmyristColors.SecondaryText
                                 )
-                                if (
+                                val isLegacyTimePlan =
                                     p.dataType == ArmyristPortableDataType.TIME_PLAN &&
-                                    data.timePlanSchemaVersion != null &&
-                                    data.timePlanSchemaVersion < ArmyristPortableDataManager.TIME_PLAN_SCHEMA_VERSION
-                                ) {
+                                        data.timePlanSchemaVersion != null &&
+                                        data.timePlanSchemaVersion !in setOf(3, 4, 5)
+
+                                if (isLegacyTimePlan) {
                                     Spacer(Modifier.height(8.dp))
                                     Text(
-                                        "날짜 기능 이전 시간계획입니다. 가져온 뒤 처음 열 때 기준 날짜를 직접 지정해야 합니다.",
+                                        "날짜 기능 이전 시간계획입니다. 기준 날짜를 지정하면 날짜 기반 시간계획으로 변환해 가져옵니다.",
                                         color = ArmyristColors.PrimaryControl,
                                         fontWeight = FontWeight.Bold
                                     )
+                                    Spacer(Modifier.height(10.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        OutlinedButton(onClick = {
+                                            legacyBaseDate = legacyBaseDate.minusDays(1)
+                                        }) { Text("-1일") }
+                                        Text(
+                                            legacyBaseDate.format(DateTimeFormatter.ISO_DATE),
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        OutlinedButton(onClick = {
+                                            legacyBaseDate = legacyBaseDate.plusDays(1)
+                                        }) { Text("+1일") }
+                                    }
+                                    TextButton(
+                                        onClick = { legacyDatePickerOpen = true },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) { Text("달력에서 선택") }
                                 }
                                 Spacer(Modifier.height(14.dp))
                                 Button(
                                     onClick = {
                                         when (val result = ArmyristPortableDataManager.importIndividual(
-                                            this@PortableTransferActivity, data
+                                            this@PortableTransferActivity,
+                                            data,
+                                            if (isLegacyTimePlan) legacyBaseDate else null
                                         )) {
                                             is PortableResult.Success -> {
                                                 val app =
@@ -559,6 +589,35 @@ class PortableTransferActivity : ComponentActivity() {
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
                                     shape = ArmyristPanelShape
                                 ) { Text("가져오기", fontWeight = FontWeight.Bold) }
+                            }
+
+                            if (legacyDatePickerOpen) {
+                                val datePickerState = rememberDatePickerState(
+                                    initialSelectedDateMillis = legacyBaseDate
+                                        .atStartOfDay(ZoneOffset.UTC)
+                                        .toInstant()
+                                        .toEpochMilli()
+                                )
+                                DatePickerDialog(
+                                    onDismissRequest = { legacyDatePickerOpen = false },
+                                    confirmButton = {
+                                        TextButton(onClick = {
+                                            datePickerState.selectedDateMillis?.let { millis ->
+                                                legacyBaseDate = Instant.ofEpochMilli(millis)
+                                                    .atZone(ZoneOffset.UTC)
+                                                    .toLocalDate()
+                                            }
+                                            legacyDatePickerOpen = false
+                                        }) { Text("확인") }
+                                    },
+                                    dismissButton = {
+                                        TextButton(onClick = { legacyDatePickerOpen = false }) {
+                                            Text("취소")
+                                        }
+                                    }
+                                ) {
+                                    DatePicker(state = datePickerState)
+                                }
                             }
                         }
                     }

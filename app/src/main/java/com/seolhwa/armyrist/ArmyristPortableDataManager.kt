@@ -2,7 +2,6 @@ package com.seolhwa.armyrist
 
 import android.content.Context
 import android.util.Base64
-import com.seolhwa.armyrist.timeplan.data.TimePlanV2Repository
 import com.seolhwa.armyrist.timeplan.portable.TimePlanPortableV1Migrator
 import com.seolhwa.armyrist.timeplan.portable.TimePlanPortableV2Codec
 import com.seolhwa.armyrist.timeplan.v3.data.DateAwareTimePlanRepository
@@ -1151,7 +1150,8 @@ object ArmyristPortableDataManager {
      */
     fun importIndividual(
         context: Context,
-        validated: ValidatedPortableDocument
+        validated: ValidatedPortableDocument,
+        legacyBaseDate: java.time.LocalDate? = null
     ): PortableResult<String> {
         return runCatching {
             val type = validated.preview.dataType
@@ -1180,11 +1180,18 @@ object ArmyristPortableDataManager {
                             ?: error("TimePlan v3 import commit failed.")
                         return@runCatching importedId
                     } else {
-                        // Legacy portable material remains date-less by contract.
-                        // Import it as a new legacy v2 plan; first opening in TimePlan asks the user for a base date.
+                        // Legacy portable material has no calendar date. Do not recreate it
+                        // inside the legacy/v2 repository: that makes old plans reappear in
+                        // the active list after every import. The caller must obtain an
+                        // explicit base date from the user, migrate in memory, and persist
+                        // only the new DateAware/v3 copy.
+                        val baseDate = legacyBaseDate
+                            ?: error("Legacy TimePlan import requires an explicit base date.")
                         val revised = TimePlanPortableV2Codec.decode(validated.document)
-                        val importedId = TimePlanV2Repository(context).importPortableAsNew(revised)
-                            ?: error("Legacy TimePlan import commit failed.")
+                        val candidate = LegacyDateMigration.createCandidate(revised, baseDate)
+                            ?: error("Legacy TimePlan date migration failed.")
+                        val importedId = DateAwareTimePlanRepository(context).importAsNew(candidate)
+                            ?: error("Legacy TimePlan DateAware import commit failed.")
                         return@runCatching importedId
                     }
                 }
