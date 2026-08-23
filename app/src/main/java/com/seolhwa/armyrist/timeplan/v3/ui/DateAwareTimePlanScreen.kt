@@ -377,6 +377,8 @@ private fun DateAwarePlanDetail(
     var headerMenuOpen by remember { mutableStateOf(false) }
     var baseDateDialogOpen by rememberSaveable(plan.id) { mutableStateOf(false) }
     var pendingActionShift by remember { mutableStateOf<Pair<DateAwareTimePlan, Map<String, Long>>?>(null) }
+    var pendingDeleteEventId by remember { mutableStateOf<String?>(null) }
+    var deleteEventInProgress by remember { mutableStateOf(false) }
     val view = LocalView.current
     val conflicts = remember(plan) { TimePlanConstraintEngine.detect(plan) }
 
@@ -422,6 +424,66 @@ private fun DateAwarePlanDetail(
         }
         onCommit(changed)
         view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+    }
+
+    LaunchedEffect(pendingDeleteEventId) {
+        val eventId = pendingDeleteEventId ?: return@LaunchedEffect
+        if (deleteEventInProgress) return@LaunchedEffect
+
+        deleteEventInProgress = true
+        try {
+            // Run deletion only after the edit dialog has left composition.
+            // This avoids mutating topology while a dialog still owns references
+            // to the event that is being removed.
+            val currentEvent =
+                plan.midwayEvents.firstOrNull { it.id == eventId }
+                    ?: plan.finalPoint?.takeIf { it.id == eventId }
+
+            if (currentEvent == null) {
+                pendingDeleteEventId = null
+                return@LaunchedEffect
+            }
+
+            val changedBase =
+                if (currentEvent.kind == TimeEventKind.FINAL) {
+                    plan.copy(finalPoint = null)
+                } else {
+                    plan.copy(
+                        midwayEvents = plan.midwayEvents
+                            .filterNot { it.id == eventId }
+                            .mapIndexed { index, event ->
+                                event.copy(order = index)
+                            }
+                    )
+                }
+
+            val withoutActions =
+                TimePlanExecutionRules.removePointActions(changedBase, eventId)
+            val candidate =
+                DateTimePlanRules.normalizeTopology(withoutActions)
+
+            val validationProblems =
+                DateTimePlanRules.validateForPersistence(candidate)
+
+            if (validationProblems.isNotEmpty()) {
+                message =
+                    "지점을 삭제하지 못했습니다. 시간계획을 확인해주세요."
+            } else {
+                val removedNodeKey = nodeSelectionKey(eventId)
+                selectedKeyList = selectedKeyList.filterNot { key ->
+                    key == removedNodeKey ||
+                        key.startsWith("L:$eventId->") ||
+                        key.endsWith("->$eventId")
+                }
+                editLink = null
+                conflictDetail = null
+                pendingActionShift = null
+                onCommit(candidate)
+            }
+        } finally {
+            pendingDeleteEventId = null
+            deleteEventInProgress = false
+        }
     }
 
     BackHandler { requestNavigation("BACK") }
@@ -601,33 +663,18 @@ private fun DateAwarePlanDetail(
         editEnd=false
     }
     editEvent?.let { event ->
-        DateTimeEventEditDialog(event, onDismiss={editEvent=null}, onDelete={
-            // Clear transient references before the point disappears from topology.
-            editEvent = null
-            editLink = null
-            conflictDetail = null
-            pendingActionShift = null
-            val removedNodeKey = nodeSelectionKey(event.id)
-            selectedKeyList = selectedKeyList.filterNot { key ->
-                key == removedNodeKey ||
-                    key.startsWith("L:${event.id}->") ||
-                    key.endsWith("->${event.id}")
-            }
-
-            val changedBase =
-                if (event.kind == TimeEventKind.FINAL) {
-                    plan.copy(finalPoint = null)
-                } else {
-                    plan.copy(
-                        midwayEvents = plan.midwayEvents
-                            .filterNot { it.id == event.id }
-                            .mapIndexed { i, e -> e.copy(order = i) }
-                    )
+        DateTimeEventEditDialog(
+            event,
+            onDismiss = { editEvent = null },
+            onDelete = {
+                // Close the editor first. Actual topology mutation is deferred to
+                // LaunchedEffect after this dialog leaves composition.
+                if (!deleteEventInProgress && pendingDeleteEventId == null) {
+                    pendingDeleteEventId = event.id
+                    editEvent = null
                 }
-            val changed =
-                TimePlanExecutionRules.removePointActions(changedBase, event.id)
-            onCommit(DateTimePlanRules.normalizeTopology(changed))
-        }) { changedEvent ->
+            }
+        ) { changedEvent ->
             // A user-edited event remains explicit. Unlocked later nodes, including END,
             // follow the event's departure delta. A locked END remains fixed and the
             // resulting conflict is intentionally surfaced instead of being moved.
