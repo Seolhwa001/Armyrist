@@ -164,6 +164,33 @@ object TimePlanExecutionRules {
         )
     }
 
+    /**
+     * Move multiple selected execution actions to one target point.
+     * Re-parenting preserves each action's absolute scheduledDateTime.
+     */
+    fun batchMoveActionsToParentPreservingTime(
+        plan: DateAwareTimePlan,
+        actionIds: Set<String>,
+        targetParentPointId: String
+    ): DateAwareTimePlan {
+        require(targetParentPointId in DateTimePlanRules.nodeIds(plan)) {
+            "Unknown target parent point."
+        }
+
+        val now = System.currentTimeMillis().toString()
+        val changed = plan.copy(
+            actions = plan.actions.map { action ->
+                if (action.id in actionIds) {
+                    action.copy(
+                        parentPointId = targetParentPointId,
+                        updatedAt = now
+                    )
+                } else action
+            }
+        )
+        return normalizeActionOrder(changed)
+    }
+
     fun batchShift(
         plan: DateAwareTimePlan,
         actionIds: Set<String>,
