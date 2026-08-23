@@ -43,7 +43,8 @@ fun DateAwareTimePlanApp(
     repository: DateAwareTimePlanRepository,
     legacyRepository: TimePlanV2Repository,
     coreRepository: CoreSuiteRepository,
-    onHome: () -> Unit
+    onHome: () -> Unit,
+    onOpenExecution: (String, String, Set<String>) -> Unit
 ) {
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedLegacyId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -118,6 +119,7 @@ fun DateAwareTimePlanApp(
             onHome = onHome,
             onBack = { selectedId = null },
             onResult = { sharingId = selected.id },
+            onOpenExecution = { mode, pointIds -> onOpenExecution(selected.id, mode, pointIds) },
             onCommit = { changed ->
                 if (repository.commit(changed.copy(updatedAt = System.currentTimeMillis().toString()))) revision++
             }
@@ -292,6 +294,7 @@ private fun DateAwarePlanDetail(
     onHome: () -> Unit,
     onBack: () -> Unit,
     onResult: () -> Unit,
+    onOpenExecution: (String, Set<String>) -> Unit,
     onCommit: (DateAwareTimePlan) -> Unit
 ) {
     var editStart by rememberSaveable(plan.id) { mutableStateOf(false) }
@@ -309,6 +312,7 @@ private fun DateAwarePlanDetail(
     var conflictDetail by remember { mutableStateOf<TimePlanConflict?>(null) }
     var pendingNavigation by remember { mutableStateOf<String?>(null) }
     var headerMenuOpen by remember { mutableStateOf(false) }
+    var pendingActionShift by remember { mutableStateOf<Pair<DateAwareTimePlan, Map<String, Long>>?>(null) }
     val view = LocalView.current
     val conflicts = remember(plan) { TimePlanConstraintEngine.detect(plan) }
 
@@ -326,6 +330,18 @@ private fun DateAwarePlanDetail(
         selectedKeyList =
             (if (key in selectedKeys) selectedKeys - key else selectedKeys + key).toList()
         view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+    }
+
+    fun commitWithActionTimeImpact(candidate: DateAwareTimePlan) {
+        val deltas = DateTimePlanRules.nodeIds(plan).mapNotNull { nodeId ->
+            if (plan.actions.none { it.parentPointId == nodeId }) return@mapNotNull null
+            val oldTime = DateTimePlanRules.nodeArrival(plan, nodeId) ?: return@mapNotNull null
+            val newTime = DateTimePlanRules.nodeArrival(candidate, nodeId) ?: return@mapNotNull null
+            val delta = java.time.Duration.between(oldTime, newTime).toMinutes()
+            if (delta == 0L) null else nodeId to delta
+        }.toMap()
+        if (deltas.isEmpty()) onCommit(candidate)
+        else pendingActionShift = candidate to deltas
     }
 
     fun applyLock(locked: Boolean) {
@@ -392,6 +408,15 @@ private fun DateAwarePlanDetail(
                             contentColor = ArmyristColors.PrimaryText
                         )
                     ) { Text("편집/선택", style = MaterialTheme.typography.labelLarge) }
+                    Button(
+                        onClick = { onOpenExecution(TimePlanExecutionActivity.MODE_EXECUTE, emptySet()) },
+                        modifier = Modifier.weight(1f).heightIn(min = 52.dp),
+                        shape = ArmyristPanelShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ArmyristColors.PrimaryControl,
+                            contentColor = ArmyristColors.OnDark
+                        )
+                    ) { Text("수행 모드", style = MaterialTheme.typography.labelLarge) }
                     Box(Modifier.weight(1f)) {
                         OfflineVoiceButton(
                             toolContext = VoiceToolContext.TIME_PLAN,
@@ -418,6 +443,11 @@ private fun DateAwarePlanDetail(
                     },
                     onLock = { applyLock(true) },
                     onUnlock = { applyLock(false) },
+                    onActionEdit = {
+                        val nodeIds = selectedKeys.filter { it.startsWith("N:") }.map { it.removePrefix("N:") }.toSet()
+                        if (nodeIds.isEmpty()) message = "실시사항을 편집할 지점을 선택해주세요."
+                        else onOpenExecution(TimePlanExecutionActivity.MODE_PREPARE, nodeIds)
+                    },
                     onDone = { selectionMode = false; selectedKeyList = emptyList() }
                 )
             }
@@ -460,27 +490,31 @@ private fun DateAwarePlanDetail(
 
     if(editStart) DateTimeEditorDialog("시작 날짜 / 시간", plan.start.value.value, {editStart=false}) { dt ->
         val edited = plan.copy(start=plan.start.copy(value=DateTimeValue.explicit(dt)))
-        onCommit(DateTimePlanRules.recalculateForExplicitNodes(edited, setOf(DateTimePlanRules.START_ID)))
+        val candidate = DateTimePlanRules.recalculateForExplicitNodes(edited, setOf(DateTimePlanRules.START_ID))
+        commitWithActionTimeImpact(candidate)
         editStart=false
     }
     if(editEnd) DateTimeEditorDialog("종료 날짜 / 시간", plan.end.value.value, {editEnd=false}) { dt ->
         val edited = plan.copy(end=plan.end.copy(value=DateTimeValue.explicit(dt)))
-        onCommit(DateTimePlanRules.recalculateForExplicitNodes(edited, setOf(DateTimePlanRules.END_ID)))
+        val candidate = DateTimePlanRules.recalculateForExplicitNodes(edited, setOf(DateTimePlanRules.END_ID))
+        commitWithActionTimeImpact(candidate)
         editEnd=false
     }
     editEvent?.let { event ->
         DateTimeEventEditDialog(event, onDismiss={editEvent=null}, onDelete={
-            val changed=if(event.kind==TimeEventKind.FINAL) plan.copy(finalPoint=null) else plan.copy(midwayEvents=plan.midwayEvents.filterNot{it.id==event.id}.mapIndexed{i,e->e.copy(order=i)})
+            val changedBase=if(event.kind==TimeEventKind.FINAL) plan.copy(finalPoint=null) else plan.copy(midwayEvents=plan.midwayEvents.filterNot{it.id==event.id}.mapIndexed{i,e->e.copy(order=i)})
+            val changed = TimePlanExecutionRules.removePointActions(changedBase, event.id)
             onCommit(DateTimePlanRules.normalizeTopology(changed)); editEvent=null
         }) { changedEvent ->
             val changed=if(changedEvent.kind==TimeEventKind.FINAL) plan.copy(finalPoint=changedEvent) else plan.copy(midwayEvents=plan.midwayEvents.map{if(it.id==changedEvent.id) changedEvent else it})
-            onCommit(DateTimePlanRules.recalculateForExplicitNodes(changed, setOf(changedEvent.id)))
+            val candidate = DateTimePlanRules.recalculateForExplicitNodes(changed, setOf(changedEvent.id))
+            commitWithActionTimeImpact(candidate)
             editEvent=null
         }
     }
     editLink?.let { link ->
         DateDurationDialog(link.durationMinutes, link.label.orEmpty(), {editLink=null}) { minutes,label ->
-            onCommit(DateTimePlanRules.setLinkDuration(plan,link.fromNodeId,link.toNodeId,minutes,label))
+            commitWithActionTimeImpact(DateTimePlanRules.setLinkDuration(plan,link.fromNodeId,link.toNodeId,minutes,label))
             editLink=null
         }
     }
@@ -500,10 +534,45 @@ private fun DateAwarePlanDetail(
                 if (candidate == null) {
                     message = "고정된 일정이 포함되어 날짜를 변경할 수 없습니다."
                 } else {
-                    onCommit(candidate)
+                    commitWithActionTimeImpact(candidate)
                     selectedKeyList = emptyList()
                 }
                 batchDateOpen = false
+            }
+        )
+    }
+
+    pendingActionShift?.let { pending ->
+        val (candidate, deltas) = pending
+        AlertDialog(
+            onDismissRequest = { pendingActionShift = null },
+            title = { Text("실시사항 시간 영향") },
+            text = {
+                val summary = deltas.entries.joinToString("\n") { (nodeId, delta) ->
+                    "${TimePlanExecutionRules.pointName(plan, nodeId)}: ${if (delta >= 0) "+" else ""}${delta}분"
+                }
+                Text(
+                    "시간 변경의 영향을 받는 실시사항이 있습니다.\n\n$summary\n\n‘Action 시간 유지’를 선택하면 실시사항의 기존 절대 시각을 유지합니다."
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    onCommit(candidate)
+                    pendingActionShift = null
+                }) { Text("Action 시간 유지") }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        var shifted = candidate
+                        deltas.forEach { (nodeId, delta) ->
+                            shifted = TimePlanExecutionRules.shiftActionsForParent(shifted, nodeId, delta)
+                        }
+                        onCommit(shifted)
+                        pendingActionShift = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor=ArmyristColors.PrimaryControl)
+                ) { Text("함께 이동") }
             }
         )
     }
@@ -590,6 +659,7 @@ private fun SelectionActionPanel(
     onBatchDate: () -> Unit,
     onLock: () -> Unit,
     onUnlock: () -> Unit,
+    onActionEdit: () -> Unit,
     onDone: () -> Unit
 ) {
     Surface(
@@ -613,6 +683,12 @@ private fun SelectionActionPanel(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
+                OutlinedButton(
+                    onClick = onActionEdit,
+                    enabled = selectedKeys.any { it.startsWith("N:") },
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+                ) { Text("실시사항") }
                 if (canBatchDate) {
                     OutlinedButton(
                         onClick = onBatchDate,
