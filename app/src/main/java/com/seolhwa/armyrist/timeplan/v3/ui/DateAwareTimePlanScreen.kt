@@ -440,6 +440,33 @@ private fun DateAwarePlanList(
                 onLeading = onHome,
                 leadingIcon = ArmyristTopBarLeadingIcon.HOME
             )
+        },
+        bottomBar = {
+            Surface(
+                color = ArmyristColors.AppBackground,
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp
+            ) {
+                Button(
+                    onClick = onCreate,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                        .heightIn(min = 54.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ArmyristColors.PrimaryControl,
+                        contentColor = ArmyristColors.OnDark
+                    )
+                ) {
+                    Text(
+                        "+  새 시간계획 만들기",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            }
         }
     ) { padding ->
         if (datePlans.isEmpty() && legacyPlans.isEmpty()) {
@@ -464,16 +491,6 @@ private fun DateAwarePlanList(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(Modifier.height(20.dp))
-                        Button(
-                            onClick = onCreate,
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
-                            shape = ArmyristPanelShape,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = ArmyristColors.PrimaryControl,
-                                contentColor = ArmyristColors.OnDark
-                            )
-                        ) { Text("새 시간계획 만들기", fontWeight = FontWeight.Bold) }
-                        Spacer(Modifier.height(8.dp))
                         Row(
                             Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -593,12 +610,12 @@ private fun DateAwarePlanList(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(width = 38.dp, height = 52.dp)
+                                    .size(width = 38.dp, height = 48.dp)
                                     .pointerInput(plan.id, orderedPlans.size) {
                                         detectDragGesturesAfterLongPress(
                                             onDragStart = {
@@ -769,7 +786,7 @@ private fun DateAwarePlanList(
 
                             Box(
                                 Modifier
-                                    .height(26.dp)
+                                    .height(22.dp)
                                     .width(1.dp)
                                     .alpha(0.65f)
                                     .background(ArmyristColors.Divider)
@@ -834,50 +851,6 @@ private fun DateAwarePlanList(
                     }
                 }
 
-                item(key = "timeplan-create") {
-                    Button(
-                        onClick = onCreate,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 54.dp),
-                        shape = ArmyristPanelShape,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = ArmyristColors.PrimaryControl,
-                            contentColor = ArmyristColors.OnDark
-                        )
-                    ) {
-                        Text(
-                            "+  새 시간계획 만들기",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
-                }
-
-                item(key = "timeplan-reorder-help") {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp),
-                        color = ArmyristColors.InfoSurface
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "ⓘ",
-                                color = ArmyristColors.MutedText,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                "왼쪽 핸들을 길게 눌러 순서를 변경합니다. 화면 끝에서는 자동 스크롤됩니다.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = ArmyristColors.MutedText
-                            )
-                        }
-                    }
-                }
             }
         }
     }
