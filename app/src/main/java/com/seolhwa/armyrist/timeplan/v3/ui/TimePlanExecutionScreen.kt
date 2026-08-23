@@ -18,6 +18,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -174,6 +175,7 @@ private fun TimePlanPrepareScreen(
     var batchAdd by remember { mutableStateOf(false) }
     var batchShift by remember { mutableStateOf(false) }
     var groupManager by remember { mutableStateOf(false) }
+    var moveAction by remember { mutableStateOf<TimePlanActionItem?>(null) }
     var batchGroup by remember { mutableStateOf(false) }
     var confirmDeleteSelected by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -313,7 +315,7 @@ private fun TimePlanPrepareScreen(
                 .weight(1f)
                 .fillMaxWidth(),
             contentPadding = PaddingValues(8.dp, 4.dp, 8.dp, 88.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
             items(allPointIds, key = { "point-$it" }) { pointId ->
                 val pointActions = TimePlanExecutionRules.actionsForPoint(plan, pointId)
@@ -432,6 +434,10 @@ private fun TimePlanPrepareScreen(
             baseDateTime = action.scheduledDateTime,
             groups = plan.actionGroups,
             onDismiss = { editAction = null },
+            onMove = {
+                moveAction = action
+                editAction = null
+            },
             onDelete = {
                 onCommit(TimePlanExecutionRules.batchDelete(plan, setOf(action.id)))
                 editAction = null
@@ -453,6 +459,37 @@ private fun TimePlanPrepareScreen(
                 )
                 if (!onCommit(candidate)) message = "실시사항을 저장하지 못했습니다."
                 editAction = null
+            }
+        )
+    }
+
+    moveAction?.let { action ->
+        ActionMoveDialog(
+            plan = plan,
+            action = action,
+            onDismiss = { moveAction = null },
+            onMove = { targetPointId ->
+                val targetTime = TimePlanExecutionRules.pointDateTime(plan, targetPointId)
+                val sourceTime = TimePlanExecutionRules.pointDateTime(plan, action.parentPointId)
+                val shiftedTime =
+                    if (targetTime != null && sourceTime != null) {
+                        action.scheduledDateTime.plusMinutes(
+                            java.time.Duration.between(sourceTime, targetTime).toMinutes()
+                        )
+                    } else action.scheduledDateTime
+                val candidate = TimePlanExecutionRules.normalizeActionOrder(
+                    plan.copy(
+                        actions = plan.actions.map {
+                            if (it.id == action.id) it.copy(
+                                parentPointId = targetPointId,
+                                scheduledDateTime = shiftedTime,
+                                updatedAt = System.currentTimeMillis().toString()
+                            ) else it
+                        }
+                    )
+                )
+                if (!onCommit(candidate)) message = "실시사항을 이동하지 못했습니다."
+                moveAction = null
             }
         )
     }
@@ -562,6 +599,9 @@ private fun TimePlanExecuteScreen(
 ) {
     var view by rememberSaveable(plan.id) { mutableStateOf(TimePlanExecutionView.TIMELINE) }
     var noteTarget by remember { mutableStateOf<TimePlanActionItem?>(null) }
+    var editAction by remember { mutableStateOf<TimePlanActionItem?>(null) }
+    var moveAction by remember { mutableStateOf<TimePlanActionItem?>(null) }
+    var message by remember { mutableStateOf<String?>(null) }
     var bulkSelect by rememberSaveable(plan.id) { mutableStateOf(false) }
     var selectedActionIds by rememberSaveable(plan.id) { mutableStateOf(emptyList<String>()) }
     val summary = TimePlanExecutionRules.summary(plan)
@@ -808,19 +848,23 @@ private fun TimePlanExecuteScreen(
                         (dragPreviewStates[action.id] ?: action.completionState) ==
                             ActionCompletionState.COMPLETE
                     Card(
-                        onClick = {
-                            if (bulkSelect) {
-                                selectedActionIds =
-                                    if (action.id in selectedActionIds) {
-                                        selectedActionIds - action.id
-                                    } else {
-                                        selectedActionIds + action.id
-                                    }
-                            }
-                        },
-                        enabled = bulkSelect,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .combinedClickable(
+                                onClick = {
+                                    if (bulkSelect) {
+                                        selectedActionIds =
+                                            if (action.id in selectedActionIds) {
+                                                selectedActionIds - action.id
+                                            } else {
+                                                selectedActionIds + action.id
+                                            }
+                                    }
+                                },
+                                onLongClick = {
+                                    if (!bulkSelect) editAction = action
+                                }
+                            )
                             .onGloballyPositioned { coordinates ->
                                 val top = coordinates.positionInRoot().y
                                 actionVerticalBounds[action.id] =
@@ -892,6 +936,77 @@ private fun TimePlanExecuteScreen(
                 }
             }
         }
+    }
+
+    editAction?.let { action ->
+        ActionEditDialog(
+            title = "실시사항 편집",
+            initial = action,
+            baseDateTime = action.scheduledDateTime,
+            groups = plan.actionGroups,
+            onDismiss = { editAction = null },
+            onMove = {
+                moveAction = action
+                editAction = null
+            },
+            onDelete = {
+                onCommit(TimePlanExecutionRules.batchDelete(plan, setOf(action.id)))
+                editAction = null
+            },
+            onConfirm = { changed ->
+                val candidate = plan.copy(
+                    actions = plan.actions.map {
+                        if (it.id == action.id) changed.copy(
+                            id = action.id,
+                            parentPointId = action.parentPointId,
+                            order = action.order,
+                            createdAt = action.createdAt,
+                            updatedAt = System.currentTimeMillis().toString()
+                        ) else it
+                    }
+                )
+                if (!onCommit(candidate)) message = "실시사항을 저장하지 못했습니다."
+                editAction = null
+            }
+        )
+    }
+
+    moveAction?.let { action ->
+        ActionMoveDialog(
+            plan = plan,
+            action = action,
+            onDismiss = { moveAction = null },
+            onMove = { targetPointId ->
+                val targetTime = TimePlanExecutionRules.pointDateTime(plan, targetPointId)
+                val sourceTime = TimePlanExecutionRules.pointDateTime(plan, action.parentPointId)
+                val shiftedTime =
+                    if (targetTime != null && sourceTime != null) {
+                        action.scheduledDateTime.plusMinutes(
+                            java.time.Duration.between(sourceTime, targetTime).toMinutes()
+                        )
+                    } else action.scheduledDateTime
+                val candidate = TimePlanExecutionRules.normalizeActionOrder(
+                    plan.copy(actions = plan.actions.map {
+                        if (it.id == action.id) it.copy(
+                            parentPointId = targetPointId,
+                            scheduledDateTime = shiftedTime,
+                            updatedAt = System.currentTimeMillis().toString()
+                        ) else it
+                    })
+                )
+                if (!onCommit(candidate)) message = "실시사항을 이동하지 못했습니다."
+                moveAction = null
+            }
+        )
+    }
+
+    message?.let {
+        AlertDialog(
+            onDismissRequest = { message = null },
+            title = { Text("확인") },
+            text = { Text(it) },
+            confirmButton = { TextButton(onClick = { message = null }) { Text("확인") } }
+        )
     }
 
     noteTarget?.let { action ->
@@ -1005,6 +1120,7 @@ private fun ActionEditDialog(
     baseDateTime: LocalDateTime,
     groups: List<TimePlanActionGroup>,
     onDismiss: () -> Unit,
+    onMove: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
     onConfirm: (TimePlanActionItem) -> Unit
 ) {
@@ -1075,6 +1191,7 @@ private fun ActionEditDialog(
         },
         dismissButton = {
             Row {
+                onMove?.let { move -> TextButton(onClick = move) { Text("이동") } }
                 onDelete?.let { delete -> TextButton(onClick = delete) { Text("삭제") } }
                 TextButton(onClick = onDismiss) { Text("취소") }
             }
@@ -1115,6 +1232,66 @@ private fun ActionEditDialog(
             }
         )
     }
+}
+
+@Composable
+private fun ActionMoveDialog(
+    plan: DateAwareTimePlan,
+    action: TimePlanActionItem,
+    onDismiss: () -> Unit,
+    onMove: (String) -> Unit
+) {
+    val pointIds = DateTimePlanRules.nodeIds(plan)
+    var target by remember(action.id) { mutableStateOf(action.parentPointId) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = false),
+        title = { Text("실시사항 이동", fontWeight = FontWeight.Bold) },
+        text = {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 420.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                items(pointIds, key = { it }) { pointId ->
+                    val selected = pointId == target
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { target = pointId },
+                        shape = ArmyristPanelShape,
+                        color = if (selected) ArmyristColors.SecondaryControl else ArmyristColors.WorkSurface,
+                        border = BorderStroke(
+                            1.dp,
+                            if (selected) ArmyristColors.PrimaryControl else ArmyristColors.Border
+                        )
+                    ) {
+                        Row(
+                            Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = selected, onClick = { target = pointId })
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text(TimePlanExecutionRules.pointName(plan, pointId), fontWeight = FontWeight.SemiBold)
+                                TimePlanExecutionRules.pointDateTime(plan, pointId)?.let {
+                                    Text(it.format(dateClock), style = MaterialTheme.typography.bodySmall, color = ArmyristColors.SecondaryText)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+        confirmButton = {
+            Button(
+                enabled = target != action.parentPointId,
+                onClick = { onMove(target) },
+                colors = ButtonDefaults.buttonColors(containerColor = ArmyristColors.PrimaryControl)
+            ) { Text("이동") }
+        }
+    )
 }
 
 @Composable
