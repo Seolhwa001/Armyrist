@@ -20,7 +20,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 @Composable
-fun AutoUpdateCheckHost() {
+fun AutoUpdateCheckHost(
+    onUpdateAvailabilityChanged: (UpdateReleaseMetadata?) -> Unit = {}
+) {
     val context = LocalContext.current
     val manager = remember { ArmyristUpdateManager(context) }
     var available by remember { mutableStateOf<UpdateReleaseMetadata?>(null) }
@@ -34,11 +36,16 @@ fun AutoUpdateCheckHost() {
 
         when (val result = manager.check(manual = false)) {
             is UpdateCheckResult.Available -> {
+                onUpdateAvailabilityChanged(result.release)
                 if (UpdateSessionState.shouldPrompt(result.release.versionCode)) {
                     available = result.release
                 }
             }
-            else -> Unit // Automatic checks never interrupt core use.
+            is UpdateCheckResult.Latest,
+            is UpdateCheckResult.NoNewerEligibleRelease -> {
+                onUpdateAvailabilityChanged(null)
+            }
+            is UpdateCheckResult.Failure -> Unit // Automatic checks never interrupt core use.
         }
     }
 
