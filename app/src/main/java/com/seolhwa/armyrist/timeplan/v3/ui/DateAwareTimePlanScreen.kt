@@ -5,22 +5,38 @@ package com.seolhwa.armyrist.timeplan.v3.ui
 import android.view.HapticFeedbackConstants
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.DragIndicator
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.RestoreFromTrash
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.consume
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.KeyboardType
@@ -38,6 +54,7 @@ import com.seolhwa.armyrist.trash.*
 import org.json.JSONObject
 import com.seolhwa.armyrist.timeplan.v3.domain.*
 import com.seolhwa.armyrist.voice.*
+import kotlinx.coroutines.launch
 import java.time.*
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
@@ -216,11 +233,8 @@ fun DateAwareTimePlanApp(
                 selectedId = plan.id
             },
             onOpen = { selectedId = it },
-            onMoveUp = { id ->
-                if (repository.movePlan(id, -1)) revision++
-            },
-            onMoveDown = { id ->
-                if (repository.movePlan(id, 1)) revision++
+            onOrderChanged = { orderedIds ->
+                if (repository.setPlanOrder(orderedIds)) revision++
             },
             onRename = { id, title ->
                 repository.getPlan(id)?.let { current ->
@@ -358,8 +372,7 @@ private fun DateAwarePlanList(
     onHome: () -> Unit,
     onCreate: () -> Unit,
     onOpen: (String) -> Unit,
-    onMoveUp: (String) -> Unit,
-    onMoveDown: (String) -> Unit,
+    onOrderChanged: (List<String>) -> Unit,
     onRename: (String, String) -> Unit,
     onOpenTrash: () -> Unit,
     trashCount: Int,
@@ -373,6 +386,44 @@ private fun DateAwarePlanList(
         mutableStateOf<Pair<String, String>?>(null)
     }
     val context = LocalContext.current
+    val density = LocalDensity.current
+    val listState = rememberLazyListState()
+    val reorderScope = rememberCoroutineScope()
+
+    val orderedPlans = remember { mutableStateListOf<DateAwareTimePlan>() }
+    var draggingPlanId by remember { mutableStateOf<String?>(null) }
+    var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    var reorderDirty by remember { mutableStateOf(false) }
+
+    LaunchedEffect(datePlans.map { it.id }, draggingPlanId) {
+        if (draggingPlanId == null) {
+            val currentIds = orderedPlans.map { it.id }
+            val incomingIds = datePlans.map { it.id }
+            if (currentIds != incomingIds) {
+                orderedPlans.clear()
+                orderedPlans.addAll(datePlans)
+            } else {
+                // Refresh content after rename/edit without disturbing the chosen order.
+                val latestById = datePlans.associateBy { it.id }
+                for (index in orderedPlans.indices) {
+                    latestById[orderedPlans[index].id]?.let { orderedPlans[index] = it }
+                }
+            }
+        }
+    }
+
+    fun finishReorder(commit: Boolean) {
+        if (commit && reorderDirty) {
+            onOrderChanged(orderedPlans.map { it.id })
+        } else if (!commit) {
+            orderedPlans.clear()
+            orderedPlans.addAll(datePlans)
+        }
+        draggingPlanId = null
+        dragOffsetY = 0f
+        reorderDirty = false
+    }
+
     val openImport = {
         context.startActivity(
             android.content.Intent(context, PortableTransferActivity::class.java).apply {
@@ -389,23 +440,6 @@ private fun DateAwarePlanList(
                 "홈",
                 onHome
             )
-        },
-        floatingActionButton = {
-            if (datePlans.isNotEmpty() || legacyPlans.isNotEmpty()) {
-                ExtendedFloatingActionButton(
-                    onClick = onCreate,
-                    modifier = Modifier.heightIn(min = 50.dp),
-                    shape = ArmyristPanelShape,
-                    containerColor = ArmyristColors.PrimaryControl,
-                    contentColor = ArmyristColors.OnDark,
-                    elevation = FloatingActionButtonDefaults.elevation(
-                        defaultElevation = 2.dp,
-                        pressedElevation = 3.dp
-                    )
-                ) {
-                    Text("+ 새 시간계획", fontWeight = FontWeight.Bold)
-                }
-            }
         }
     ) { padding ->
         if (datePlans.isEmpty() && legacyPlans.isEmpty()) {
@@ -465,8 +499,9 @@ private fun DateAwarePlanList(
             }
         } else {
             LazyColumn(
-                Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 96.dp),
+                state = listState,
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 24.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 item(key = "timeplan-import-trash") {
@@ -476,99 +511,278 @@ private fun DateAwarePlanList(
                     ) {
                         OutlinedButton(
                             onClick = openImport,
-                            modifier = Modifier.weight(1f).heightIn(min = 42.dp),
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                             shape = ArmyristPanelShape,
                             border = BorderStroke(1.dp, ArmyristColors.Border),
                             colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = ArmyristColors.WorkSurface,
+                                containerColor = ArmyristColors.RaisedSurface,
                                 contentColor = ArmyristColors.PrimaryText
                             ),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                         ) {
-                            Text(
-                                "데이터 불러오기",
-                                style = MaterialTheme.typography.labelLarge
+                            Icon(
+                                Icons.Outlined.FileDownload,
+                                contentDescription = null,
+                                tint = ArmyristColors.PrimaryControl
                             )
+                            Spacer(Modifier.width(8.dp))
+                            Text("데이터 불러오기", style = MaterialTheme.typography.labelLarge)
                         }
+
                         OutlinedButton(
                             onClick = onOpenTrash,
-                            modifier = Modifier.heightIn(min = 42.dp),
+                            modifier = Modifier.heightIn(min = 48.dp),
                             shape = ArmyristPanelShape,
                             border = BorderStroke(1.dp, ArmyristColors.Border),
                             colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = ArmyristColors.WorkSurface,
+                                containerColor = ArmyristColors.RaisedSurface,
                                 contentColor = ArmyristColors.PrimaryText
                             ),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                         ) {
+                            Icon(
+                                Icons.Outlined.RestoreFromTrash,
+                                contentDescription = null,
+                                tint = ArmyristColors.PrimaryControl
+                            )
+                            Spacer(Modifier.width(6.dp))
                             Text(
-                                if (trashCount > 0) "휴지통 $trashCount"
-                                else "휴지통",
+                                if (trashCount > 0) "휴지통 $trashCount" else "휴지통",
                                 style = MaterialTheme.typography.labelLarge
                             )
                         }
                     }
                 }
-                items(datePlans, key = { "v3-${it.id}" }) { plan ->
+
+                itemsIndexed(
+                    orderedPlans,
+                    key = { _, plan -> "v3-${plan.id}" }
+                ) { _, plan ->
+                    val isDragging = draggingPlanId == plan.id
+                    val cardKey = "v3-${plan.id}"
+                    val view = LocalView.current
+                    val autoScrollThresholdPx = with(density) { 72.dp.toPx() }
+                    val maxAutoScrollPx = with(density) { 22.dp.toPx() }
+
                     Card(
-                        onClick = { onOpen(plan.id) },
-                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            if (draggingPlanId == null) onOpen(plan.id)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .zIndex(if (isDragging) 2f else 0f)
+                            .graphicsLayer {
+                                translationY = if (isDragging) dragOffsetY else 0f
+                                scaleX = if (isDragging) 1.01f else 1f
+                                scaleY = if (isDragging) 1.01f else 1f
+                                shadowElevation = if (isDragging) 10f else 0f
+                            },
                         shape = ArmyristPanelShape,
-                        border = BorderStroke(1.dp, ArmyristColors.Border),
-                        colors = CardDefaults.cardColors(containerColor = ArmyristColors.RaisedSurface)
+                        border = BorderStroke(
+                            1.dp,
+                            if (isDragging) ArmyristColors.PrimaryControl
+                            else ArmyristColors.Divider
+                        ),
+                        colors = CardDefaults.cardColors(
+                            containerColor = ArmyristColors.RaisedSurface
+                        )
                     ) {
                         Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 9.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(Modifier.weight(1f)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(width = 42.dp, height = 52.dp)
+                                    .pointerInput(plan.id, orderedPlans.size) {
+                                        detectDragGesturesAfterLongPress(
+                                            onDragStart = {
+                                                val info = listState.layoutInfo.visibleItemsInfo
+                                                    .firstOrNull { it.key == cardKey }
+                                                if (info != null) {
+                                                    draggingPlanId = plan.id
+                                                    dragOffsetY = 0f
+                                                    reorderDirty = false
+                                                    view.performHapticFeedback(
+                                                        HapticFeedbackConstants.LONG_PRESS
+                                                    )
+                                                }
+                                            },
+                                            onDragCancel = {
+                                                finishReorder(commit = false)
+                                            },
+                                            onDragEnd = {
+                                                view.performHapticFeedback(
+                                                    HapticFeedbackConstants.CLOCK_TICK
+                                                )
+                                                finishReorder(commit = true)
+                                            },
+                                            onDrag = { change, dragAmount ->
+                                                if (draggingPlanId != plan.id) return@detectDragGesturesAfterLongPress
+                                                change.consume()
+                                                dragOffsetY += dragAmount.y
+
+                                                val layout = listState.layoutInfo
+                                                val draggedInfo = layout.visibleItemsInfo
+                                                    .firstOrNull { it.key == cardKey }
+                                                    ?: return@detectDragGesturesAfterLongPress
+
+                                                val draggedCenter =
+                                                    draggedInfo.offset +
+                                                        draggedInfo.size / 2f +
+                                                        dragOffsetY
+
+                                                val candidates = layout.visibleItemsInfo.filter {
+                                                    it.key is String &&
+                                                        (it.key as String).startsWith("v3-")
+                                                }
+
+                                                val target = candidates
+                                                    .filter { it.key != cardKey }
+                                                    .minByOrNull {
+                                                        kotlin.math.abs(
+                                                            (it.offset + it.size / 2f) - draggedCenter
+                                                        )
+                                                    }
+
+                                                if (target != null) {
+                                                    val fromIndex = orderedPlans
+                                                        .indexOfFirst { it.id == plan.id }
+                                                    val targetId = (target.key as String)
+                                                        .removePrefix("v3-")
+                                                    val targetIndex = orderedPlans
+                                                        .indexOfFirst { it.id == targetId }
+
+                                                    val crossedTarget =
+                                                        if (targetIndex > fromIndex) {
+                                                            draggedCenter >
+                                                                target.offset + target.size / 2f
+                                                        } else {
+                                                            draggedCenter <
+                                                                target.offset + target.size / 2f
+                                                        }
+
+                                                    if (
+                                                        fromIndex >= 0 &&
+                                                        targetIndex >= 0 &&
+                                                        fromIndex != targetIndex &&
+                                                        crossedTarget
+                                                    ) {
+                                                        val oldOffset = draggedInfo.offset
+                                                        val targetOffset = target.offset
+                                                        val moved = orderedPlans.removeAt(fromIndex)
+                                                        orderedPlans.add(targetIndex, moved)
+                                                        // Keep the card visually under the finger
+                                                        // while the LazyColumn recomposes around it.
+                                                        dragOffsetY += (oldOffset - targetOffset)
+                                                        reorderDirty = true
+                                                        view.performHapticFeedback(
+                                                            HapticFeedbackConstants.CLOCK_TICK
+                                                        )
+                                                    }
+                                                }
+
+                                                // Edge auto-scroll: slow on entering the zone,
+                                                // progressively faster toward the screen edge.
+                                                val viewportStart = layout.viewportStartOffset.toFloat()
+                                                val viewportEnd = layout.viewportEndOffset.toFloat()
+                                                val topDistance =
+                                                    draggedCenter - viewportStart
+                                                val bottomDistance =
+                                                    viewportEnd - draggedCenter
+
+                                                val scrollDelta = when {
+                                                    topDistance < autoScrollThresholdPx -> {
+                                                        val intensity =
+                                                            ((autoScrollThresholdPx - topDistance) /
+                                                                autoScrollThresholdPx)
+                                                                .coerceIn(0f, 1f)
+                                                        -maxAutoScrollPx * intensity
+                                                    }
+                                                    bottomDistance < autoScrollThresholdPx -> {
+                                                        val intensity =
+                                                            ((autoScrollThresholdPx - bottomDistance) /
+                                                                autoScrollThresholdPx)
+                                                                .coerceIn(0f, 1f)
+                                                        maxAutoScrollPx * intensity
+                                                    }
+                                                    else -> 0f
+                                                }
+
+                                                if (scrollDelta != 0f) {
+                                                    reorderScope.launch {
+                                                        listState.scrollBy(scrollDelta)
+                                                    }
+                                                }
+                                            }
+                                        )
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Outlined.DragIndicator,
+                                    contentDescription = "순서 변경 핸들",
+                                    tint = if (isDragging) {
+                                        ArmyristColors.PrimaryControl
+                                    } else {
+                                        ArmyristColors.MutedText
+                                    }
+                                )
+                            }
+
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(start = 2.dp),
+                                verticalArrangement = Arrangement.Center
+                            ) {
                                 Text(
                                     plan.title,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = ArmyristColors.PrimaryText
                                 )
-                                Spacer(Modifier.height(2.dp))
+                                Spacer(Modifier.height(3.dp))
                                 Text(
                                     planSpanText(plan),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = ArmyristColors.SecondaryText
                                 )
                             }
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(2.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                TextButton(
-                                    onClick = { onMoveUp(plan.id) },
-                                    enabled = datePlans.indexOf(plan) > 0,
-                                    modifier = Modifier.heightIn(min = 28.dp),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                                ) {
-                                    Text("↑", style = MaterialTheme.typography.titleMedium)
-                                }
-                                TextButton(
-                                    onClick = { onMoveDown(plan.id) },
-                                    enabled = datePlans.indexOf(plan) < datePlans.lastIndex,
-                                    modifier = Modifier.heightIn(min = 28.dp),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                                ) {
-                                    Text("↓", style = MaterialTheme.typography.titleMedium)
-                                }
-                            }
-                            Spacer(Modifier.width(6.dp))
-                            OutlinedButton(
+
+                            IconButton(
                                 onClick = { renameTarget = plan },
-                                modifier = Modifier.heightIn(min = 34.dp),
-                                shape = ArmyristPanelShape,
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
-                            ) { Text("이름 변경", style = MaterialTheme.typography.labelMedium) }
-                            Spacer(Modifier.width(6.dp))
-                            TextButton(
+                                enabled = !isDragging,
+                                modifier = Modifier.size(44.dp)
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Edit,
+                                    contentDescription = "이름 변경",
+                                    tint = ArmyristColors.PrimaryControl
+                                )
+                            }
+
+                            Box(
+                                Modifier
+                                    .height(26.dp)
+                                    .width(1.dp)
+                                    .alpha(0.65f)
+                                    .background(ArmyristColors.Divider)
+                            )
+
+                            IconButton(
                                 onClick = { deleteTarget = plan },
-                                modifier = Modifier.heightIn(min = 34.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                            ) { Text("삭제", style = MaterialTheme.typography.labelMedium) }
+                                enabled = !isDragging,
+                                modifier = Modifier.size(44.dp)
+                            ) {
+                                Icon(
+                                    Icons.Outlined.DeleteOutline,
+                                    contentDescription = "삭제",
+                                    tint = ArmyristColors.Danger
+                                )
+                            }
                         }
                     }
                 }
@@ -585,7 +799,7 @@ private fun DateAwarePlanList(
                         Row(
                             Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                                .padding(horizontal = 14.dp, vertical = 9.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(
@@ -603,24 +817,57 @@ private fun DateAwarePlanList(
                                 )
                             }
 
-                            TextButton(
-                                onClick = {
-                                    legacyDeleteTarget = id to title
-                                },
-                                modifier = Modifier.heightIn(min = 34.dp),
-                                contentPadding = PaddingValues(
-                                    horizontal = 8.dp,
-                                    vertical = 2.dp
-                                )
+                            IconButton(
+                                onClick = { legacyDeleteTarget = id to title },
+                                modifier = Modifier.size(44.dp)
                             ) {
-                                Text(
-                                    "삭제",
-                                    style = MaterialTheme.typography.labelMedium
+                                Icon(
+                                    Icons.Outlined.DeleteOutline,
+                                    contentDescription = "삭제",
+                                    tint = ArmyristColors.Danger
                                 )
                             }
                         }
                     }
                 }
+
+                item(key = "timeplan-create") {
+                    Button(
+                        onClick = onCreate,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 54.dp),
+                        shape = ArmyristPanelShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ArmyristColors.PrimaryControl,
+                            contentColor = ArmyristColors.OnDark
+                        )
+                    ) {
+                        Text(
+                            "+  새 시간계획 만들기",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                }
+
+                item(key = "timeplan-reorder-help") {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = ArmyristPanelShape,
+                        color = ArmyristColors.WorkSurface,
+                        border = BorderStroke(1.dp, ArmyristColors.Divider)
+                    ) {
+                        Text(
+                            "왼쪽 순서 핸들을 길게 누른 뒤 끌어서 순서를 변경할 수 있습니다. " +
+                                "화면 위·아래 끝으로 이동하면 목록이 자동으로 스크롤됩니다.",
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = ArmyristColors.SecondaryText
+                        )
+                    }
+                }
+            }
             }
         }
     }
