@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 76
-        versionName = "0.4.36-nearby-discovery-diagnostic"
+        versionCode = 77
+        versionName = "0.4.37-nearby-permission-gate-recovery"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
