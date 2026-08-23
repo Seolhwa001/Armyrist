@@ -108,8 +108,25 @@ class DateAwareTimePlanRepository(context: Context) {
 
         val withoutChildren =
             TimePlanExecutionRules.removePointActions(withoutEvent, eventId)
+
+        // Deletion is an atomic parent+children operation. Older plans may contain
+        // stale Action parent/group references from previous patch generations;
+        // sanitize those references here instead of rejecting the point deletion.
+        val validNodeIds = DateTimePlanRules.nodeIds(withoutChildren).toSet()
+        val validGroupIds = withoutChildren.actionGroups.map { it.id }.toSet()
+        val deletionSafe = TimePlanExecutionRules.normalizeActionOrder(
+            withoutChildren.copy(
+                actions = withoutChildren.actions
+                    .filter { it.parentPointId in validNodeIds }
+                    .map { action ->
+                        if (action.groupId != null && action.groupId !in validGroupIds) {
+                            action.copy(groupId = null)
+                        } else action
+                    }
+            )
+        )
         val normalized =
-            DateTimePlanRules.normalizeTopology(withoutChildren)
+            DateTimePlanRules.normalizeTopology(deletionSafe)
 
         if (DateTimePlanRules.validateForPersistence(normalized).isNotEmpty()) {
             return false
