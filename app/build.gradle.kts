@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 105
-        versionName = "0.6.17-midway-delete-narrowing-transaction"
+        versionCode = 106
+        versionName = "0.6.18-completion-rail-visual-fix"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
