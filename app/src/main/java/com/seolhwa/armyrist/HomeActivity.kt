@@ -12,6 +12,11 @@ import androidx.compose.ui.platform.LocalContext
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -20,12 +25,22 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.seolhwa.armyrist.update.ArmyristUpdateManager
 import com.seolhwa.armyrist.update.AutoUpdateCheckHost
+import com.seolhwa.armyrist.update.UpdateReleaseMetadata
 
 class HomeActivity : ComponentActivity() {
+    private var homeAvailableUpdate by mutableStateOf<UpdateReleaseMetadata?>(null)
+
+    override fun onResume() {
+        super.onResume()
+        homeAvailableUpdate = ArmyristUpdateManager(this).knownAvailable()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -65,7 +80,9 @@ class HomeActivity : ComponentActivity() {
                                     DataManagementActivity::class.java
                                 )
                             )
-                        }
+                        },
+                        availableUpdate = homeAvailableUpdate,
+                        onUpdateAvailabilityChanged = { homeAvailableUpdate = it }
                     )
                 }
             }
@@ -80,9 +97,11 @@ private fun HomeScreen(
     onTimePlan: () -> Unit,
     onReportTemplate: () -> Unit,
     onUserProfile: () -> Unit,
-    onDataManagement: () -> Unit
+    onDataManagement: () -> Unit,
+    availableUpdate: UpdateReleaseMetadata?,
+    onUpdateAvailabilityChanged: (UpdateReleaseMetadata?) -> Unit
 ) {
-    AutoUpdateCheckHost()
+    AutoUpdateCheckHost(onUpdateAvailabilityChanged = onUpdateAvailabilityChanged)
 
     LazyColumn(
         modifier = Modifier
@@ -166,18 +185,52 @@ private fun HomeScreen(
                 shape = ArmyristPanelShape,
                 border = BorderStroke(1.dp, ArmyristColors.Border)
             ) {
+                val updatePulse =
+                    if (availableUpdate != null) {
+                        val transition = rememberInfiniteTransition(label = "home-update-pulse")
+                        transition.animateFloat(
+                            initialValue = 0.58f,
+                            targetValue = 1f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(durationMillis = 1400),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "home-update-alpha"
+                        ).value
+                    } else {
+                        1f
+                    }
+
                 Row(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        "내 정보",
+                    Row(
                         modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "내 정보",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        if (availableUpdate != null) {
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                "새 업데이트 발견",
+                                modifier = Modifier.alpha(updatePulse),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color(0xFF60764A),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
                     Text(
-                        "사용자 이름 관리  ›",
+                        if (availableUpdate != null) {
+                            "사용자 · 앱 정보 · ${availableUpdate.versionName}  ›"
+                        } else {
+                            "사용자 · 앱 정보  ›"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = ArmyristColors.SecondaryText
                     )
