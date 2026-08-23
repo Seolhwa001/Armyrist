@@ -193,7 +193,8 @@ object LegacyDateMigration {
 
 object DateAwareTimePlanJson {
     fun encode(p: DateAwareTimePlan): JSONObject = JSONObject()
-        .put("schemaVersion", 5).put("id", p.id).put("title", p.title)
+        .put("schemaVersion", 6).put("id", p.id).put("title", p.title)
+        .put("dateDisplayMode", p.dateDisplayMode.name)
         .put("start", valueToJson(p.start.value).put("dateTimeLocked", p.start.dateTimeLocked))
         .put("midwayEvents", JSONArray().apply { p.midwayEvents.sortedBy { it.order }.forEach { put(eventToJson(it)) } })
         .put("finalPoint", p.finalPoint?.let(::eventToJson) ?: JSONObject.NULL)
@@ -206,7 +207,7 @@ object DateAwareTimePlanJson {
 
     fun decode(j: JSONObject): DateAwareTimePlan {
         val schema = j.getInt("schemaVersion")
-        require(schema in setOf(3, 4, 5))
+        require(schema in setOf(3, 4, 5, 6))
         val mids = j.optJSONArray("midwayEvents") ?: JSONArray()
         val links = j.optJSONArray("links") ?: JSONArray()
         val actionGroups = j.optJSONArray("actionGroups") ?: JSONArray()
@@ -225,7 +226,8 @@ object DateAwareTimePlanJson {
             actionGroups=List(actionGroups.length()){ actionGroupFromJson(actionGroups.getJSONObject(it)) },
             actions=List(actions.length()){ actionFromJson(actions.getJSONObject(it)) },
             memo=if(j.isNull("memo")) null else j.getString("memo"),
-            createdAt=j.getString("createdAt"), updatedAt=j.getString("updatedAt")
+            createdAt=j.getString("createdAt"), updatedAt=j.getString("updatedAt"),
+            dateDisplayMode = runCatching { TimePlanDateDisplayMode.valueOf(j.optString("dateDisplayMode", TimePlanDateDisplayMode.ABSOLUTE.name)) }.getOrDefault(TimePlanDateDisplayMode.ABSOLUTE)
         )
     }
     private fun valueToJson(v: DateTimeValue)=JSONObject().put("dateTime",v.value?.toString()?:JSONObject.NULL).put("origin",v.origin.name)
