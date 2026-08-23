@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 103
-        versionName = "0.6.15-delete-compat-rail-ui-unification"
+        versionCode = 104
+        versionName = "0.6.16-action-compile-fix"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
