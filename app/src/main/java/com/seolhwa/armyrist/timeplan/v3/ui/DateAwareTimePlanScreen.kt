@@ -123,9 +123,26 @@ fun DateAwareTimePlanApp(
             onResult = { sharingId = selected.id },
             onOpenExecution = { mode, pointIds -> onOpenExecution(selected.id, mode, pointIds) },
             onDeleteEvent = { eventId ->
-                val deleted = repository.deleteEvent(selected.id, eventId)
-                if (deleted) revision++
-                deleted
+                // Emergency safety boundary: point deletion must never be allowed to
+                // tear down the whole TimePlan screen if an unexpected runtime error
+                // occurs inside persistence/topology code.
+                val selectedPlanId = selected.id
+                val result = runCatching {
+                    repository.deleteEvent(selectedPlanId, eventId)
+                }.getOrElse {
+                    android.util.Log.e(
+                        "Armyrist-TimePlan",
+                        "MIDWAY delete failed plan=$selectedPlanId event=$eventId",
+                        it
+                    )
+                    false
+                }
+                if (result) {
+                    // Keep the same document selected explicitly across recomposition.
+                    selectedId = selectedPlanId
+                    revision++
+                }
+                result
             },
             onCommit = { changed ->
                 if (repository.commit(changed.copy(updatedAt = System.currentTimeMillis().toString()))) revision++
@@ -433,36 +450,62 @@ private fun DateAwarePlanDetail(
         view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
     }
 
-    LaunchedEffect(pendingDeleteEventId) {
-        val eventId = pendingDeleteEventId ?: return@LaunchedEffect
-        if (deleteEventInProgress) return@LaunchedEffect
+    BackHandler { requestNavigation("BACK") }
 
-        deleteEventInProgress = true
-        try {
-            // The dialog has already left composition at this point.
-            // Actual topology mutation is a single repository transaction.
-            val removedNodeKey = nodeSelectionKey(eventId)
-            val deleted = onDeleteEvent(eventId)
-
-            if (deleted) {
-                selectedKeyList = selectedKeyList.filterNot { key ->
-                    key == removedNodeKey ||
-                        key.startsWith("L:$eventId->") ||
-                        key.endsWith("->$eventId")
-                }
-                editLink = null
-                conflictDetail = null
-                pendingActionShift = null
-            } else {
-                message = "지점을 삭제하지 못했습니다. 현재 시간계획은 유지됩니다."
+    pendingDeleteEventId?.let { eventId ->
+        AlertDialog(
+            onDismissRequest = {
+                if (!deleteEventInProgress) pendingDeleteEventId = null
+            },
+            shape = ArmyristPanelShape,
+            containerColor = ArmyristColors.RaisedSurface,
+            tonalElevation = 0.dp,
+            titleContentColor = ArmyristColors.PrimaryText,
+            textContentColor = ArmyristColors.PrimaryText,
+            title = { Text("중도지점 삭제", fontWeight = FontWeight.Bold) },
+            text = { Text("이 지점과 연결된 실시사항도 함께 삭제됩니다.") },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { pendingDeleteEventId = null },
+                    enabled = !deleteEventInProgress,
+                    shape = ArmyristPanelShape
+                ) { Text("취소") }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (deleteEventInProgress) return@Button
+                        deleteEventInProgress = true
+                        val deleted = onDeleteEvent(eventId)
+                        deleteEventInProgress = false
+                        if (deleted) {
+                            val removedNodeKey = nodeSelectionKey(eventId)
+                            selectedKeyList = selectedKeyList.filterNot { key ->
+                                key == removedNodeKey ||
+                                    key.startsWith("L:$eventId->") ||
+                                    key.endsWith("->$eventId")
+                            }
+                            editLink = null
+                            conflictDetail = null
+                            pendingActionShift = null
+                            pendingDeleteEventId = null
+                        } else {
+                            pendingDeleteEventId = null
+                            message = "지점을 삭제하지 못했습니다. 현재 시간계획은 유지됩니다."
+                        }
+                    },
+                    enabled = !deleteEventInProgress,
+                    shape = ArmyristPanelShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ArmyristColors.PrimaryControl,
+                        contentColor = ArmyristColors.OnDark
+                    )
+                ) { Text("삭제") }
             }
-        } finally {
-            pendingDeleteEventId = null
-            deleteEventInProgress = false
-        }
+        )
     }
 
-    BackHandler { requestNavigation("BACK") }
+    
 
     Scaffold(
         topBar = {
