@@ -5,7 +5,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 
-const val TIME_PLAN_DATE_PORTABLE_SCHEMA_VERSION = 5
+const val TIME_PLAN_DATE_PORTABLE_SCHEMA_VERSION = 6
 
 /**
  * Date-aware TimePlan domain. Duration is always an elapsed amount and never a clock value.
@@ -13,6 +13,7 @@ const val TIME_PLAN_DATE_PORTABLE_SCHEMA_VERSION = 5
 enum class ValueOrigin { EXPLICIT, DERIVED, UNSET }
 enum class TimeEventKind { MIDWAY, FINAL }
 enum class DraftResolution { READY, REVIEW_REQUIRED, UNRESOLVED }
+enum class TimePlanDateDisplayMode { ABSOLUTE, RELATIVE_D_DAY }
 
 data class DateTimeValue(
     val value: LocalDateTime? = null,
@@ -88,6 +89,7 @@ data class DateAwareTimePlan(
     val memo: String? = null,
     val createdAt: String,
     val updatedAt: String,
+    val dateDisplayMode: TimePlanDateDisplayMode = TimePlanDateDisplayMode.ABSOLUTE,
     /** True only for local/portable legacy material that still requires a user-selected base date. */
     val legacyDateMigrationRequired: Boolean = false
 ) {
