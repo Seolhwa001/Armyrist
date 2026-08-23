@@ -517,17 +517,113 @@ private fun TimePlanExecuteScreen(
             }
 
             if (plan.actions.isNotEmpty()) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedButton(onClick = {
-                        bulkSelect = true
-                        selectedActionIds = if (selectedActionIds.toSet().containsAll(plan.actions.map { it.id }.toSet())) emptyList() else plan.actions.map { it.id }
-                    }, modifier = Modifier.weight(1f)) { Text(if (bulkSelect && selectedActionIds.toSet().containsAll(plan.actions.map { it.id }.toSet())) "전체 선택 해제" else "전체 실시사항 선택") }
-                    if (bulkSelect) OutlinedButton(onClick = { bulkSelect = false; selectedActionIds = emptyList() }, modifier = Modifier.weight(1f)) { Text("선택 종료") }
-                }
-                if (bulkSelect && selectedActionIds.isNotEmpty()) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Button(onClick = { onCommit(plan.copy(actions = plan.actions.map { if (it.id in selectedActionIds) it.copy(completionState = ActionCompletionState.COMPLETE, updatedAt = System.currentTimeMillis().toString()) else it })); selectedActionIds = emptyList(); bulkSelect = false }, modifier = Modifier.weight(1f)) { Text("선택 완료") }
-                        OutlinedButton(onClick = { onCommit(plan.copy(actions = plan.actions.map { if (it.id in selectedActionIds) it.copy(completionState = ActionCompletionState.INCOMPLETE, updatedAt = System.currentTimeMillis().toString()) else it })); selectedActionIds = emptyList(); bulkSelect = false }, modifier = Modifier.weight(1f)) { Text("완료 취소") }
+                val allActionIds = plan.actions.map { it.id }
+                if (!bulkSelect) {
+                    OutlinedButton(
+                        onClick = {
+                            bulkSelect = true
+                            selectedActionIds = allActionIds
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = ArmyristPanelShape,
+                        border = BorderStroke(1.dp, ArmyristColors.Border),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = ArmyristColors.WorkSurface,
+                            contentColor = ArmyristColors.PrimaryText
+                        )
+                    ) {
+                        Text("전체 선택", fontWeight = FontWeight.SemiBold)
+                    }
+                } else {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = ArmyristPanelShape,
+                        color = ArmyristColors.WorkSurface,
+                        border = BorderStroke(1.dp, ArmyristColors.Border)
+                    ) {
+                        Column(
+                            Modifier.padding(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                "선택 ${selectedActionIds.size} / ${plan.actions.size}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = ArmyristColors.SecondaryText
+                            )
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = { selectedActionIds = allActionIds },
+                                    modifier = Modifier.weight(1f),
+                                    shape = ArmyristPanelShape
+                                ) {
+                                    Text("전체 선택")
+                                }
+                                OutlinedButton(
+                                    onClick = {
+                                        selectedActionIds = emptyList()
+                                        bulkSelect = false
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    shape = ArmyristPanelShape
+                                ) {
+                                    Text("선택 종료")
+                                }
+                            }
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Button(
+                                    enabled = selectedActionIds.isNotEmpty(),
+                                    onClick = {
+                                        onCommit(
+                                            plan.copy(
+                                                actions = plan.actions.map {
+                                                    if (it.id in selectedActionIds) {
+                                                        it.copy(
+                                                            completionState = ActionCompletionState.COMPLETE,
+                                                            updatedAt = System.currentTimeMillis().toString()
+                                                        )
+                                                    } else it
+                                                }
+                                            )
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    shape = ArmyristPanelShape,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = ArmyristColors.PrimaryControl,
+                                        contentColor = ArmyristColors.OnDark
+                                    )
+                                ) {
+                                    Text("실시 완료")
+                                }
+                                OutlinedButton(
+                                    enabled = selectedActionIds.isNotEmpty(),
+                                    onClick = {
+                                        onCommit(
+                                            plan.copy(
+                                                actions = plan.actions.map {
+                                                    if (it.id in selectedActionIds) {
+                                                        it.copy(
+                                                            completionState = ActionCompletionState.INCOMPLETE,
+                                                            updatedAt = System.currentTimeMillis().toString()
+                                                        )
+                                                    } else it
+                                                }
+                                            )
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    shape = ArmyristPanelShape
+                                ) {
+                                    Text("실시 완료 취소")
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -570,9 +666,20 @@ private fun TimePlanExecuteScreen(
                         modifier = Modifier.fillMaxWidth(),
                         shape = ArmyristPanelShape,
                         colors = CardDefaults.cardColors(
-                            containerColor = if (completed) ArmyristColors.SecondaryControl else ArmyristColors.RaisedSurface
+                            containerColor = when {
+                                bulkSelect && action.id in selectedActionIds -> ArmyristColors.SecondaryControl
+                                completed -> ArmyristColors.SecondaryControl.copy(alpha = 0.72f)
+                                else -> ArmyristColors.RaisedSurface
+                            }
                         ),
-                        border = BorderStroke(1.dp, ArmyristColors.Border)
+                        border = BorderStroke(
+                            1.dp,
+                            if (bulkSelect && action.id in selectedActionIds) {
+                                ArmyristColors.PrimaryControl
+                            } else {
+                                ArmyristColors.Border
+                            }
+                        )
                     ) {
                         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(
