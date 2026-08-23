@@ -106,6 +106,7 @@ object TimePlanActionNotificationManager {
 
     fun isEligible(
         context: Context,
+        plan: DateAwareTimePlan,
         action: TimePlanActionItem,
         nowMillis: Long = System.currentTimeMillis()
     ): Boolean {
@@ -113,7 +114,9 @@ object TimePlanActionNotificationManager {
             .atZone(ZoneId.systemDefault())
             .toInstant()
             .toEpochMilli()
-        return action.notificationMode != com.seolhwa.armyrist.timeplan.v3.domain.ActionNotificationMode.NONE &&
+        return plan.dateDisplayMode !=
+            com.seolhwa.armyrist.timeplan.v3.domain.TimePlanDateDisplayMode.RELATIVE_D_DAY &&
+            action.notificationMode != com.seolhwa.armyrist.timeplan.v3.domain.ActionNotificationMode.NONE &&
             action.completionState == ActionCompletionState.INCOMPLETE &&
             trigger > nowMillis &&
             notificationPermissionGranted(context)
@@ -128,7 +131,7 @@ object TimePlanActionNotificationManager {
         repository.getPlans().forEach { plan ->
             plan.actions.forEach { action ->
                 val key = key(plan.id, action.id)
-                if (isEligible(context, action)) {
+                if (isEligible(context, plan, action)) {
                     schedule(context, plan, action)
                     active += key
                 } else {
@@ -145,7 +148,7 @@ object TimePlanActionNotificationManager {
     }
 
     fun schedule(context: Context, plan: DateAwareTimePlan, action: TimePlanActionItem): Boolean {
-        if (!isEligible(context, action)) {
+        if (!isEligible(context, plan, action)) {
             cancel(context, plan.id, action.id)
             return false
         }

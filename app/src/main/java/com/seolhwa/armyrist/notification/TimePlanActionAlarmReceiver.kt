@@ -8,6 +8,7 @@ import androidx.core.app.NotificationCompat
 import com.seolhwa.armyrist.timeplan.v3.data.DateAwareTimePlanRepository
 import com.seolhwa.armyrist.timeplan.v3.domain.ActionCompletionState
 import com.seolhwa.armyrist.timeplan.v3.domain.ActionNotificationMode
+import com.seolhwa.armyrist.timeplan.v3.domain.TimePlanDateDisplayMode
 import java.time.format.DateTimeFormatter
 
 class TimePlanActionAlarmReceiver : BroadcastReceiver() {
@@ -19,6 +20,7 @@ class TimePlanActionAlarmReceiver : BroadcastReceiver() {
         val action = plan.actions.firstOrNull { it.id == actionId } ?: return
 
         if (
+            plan.dateDisplayMode == TimePlanDateDisplayMode.RELATIVE_D_DAY ||
             action.completionState != ActionCompletionState.INCOMPLETE ||
             action.notificationMode == com.seolhwa.armyrist.timeplan.v3.domain.ActionNotificationMode.NONE ||
             !TimePlanActionNotificationManager.notificationPermissionGranted(context)
