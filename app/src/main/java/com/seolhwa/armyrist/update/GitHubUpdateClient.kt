@@ -59,10 +59,9 @@ class GitHubUpdateClient(
         val title = release.optString("name").trim()
 
         fun extract(raw: String): String? =
-            Regex("(?:^|\\\\s|v)(\\\\d+(?:\\\\.\\\\d+){1,3})(?:$|\\\\s|[-_])")
+            Regex("""\d+(?:\.\d+){1,3}""")
                 .find(raw)
-                ?.groupValues
-                ?.getOrNull(1)
+                ?.value
 
         return extract(tag) ?: extract(title)
     }
