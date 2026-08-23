@@ -85,7 +85,7 @@ class NearbyConnectionsReceiverService : Service() {
 
         if (
             (explicitStart || NearbyConnectionsPoC.isReceiveEnabled(this)) &&
-            NearbyConnectionsPoC.hasRuntimePermissions(this)
+            NearbyPermissionGate.hasRequiredPermissions(this)
         ) {
             startForeground(
                 STATUS_NOTIFICATION_ID,

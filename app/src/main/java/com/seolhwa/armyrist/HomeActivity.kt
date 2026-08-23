@@ -29,7 +29,7 @@ class HomeActivity : ComponentActivity() {
 
         if (
             NearbyConnectionsPoC.isReceiveEnabled(this) &&
-            NearbyConnectionsPoC.hasRuntimePermissions(this)
+            NearbyPermissionGate.hasRequiredPermissions(this)
         ) {
             NearbyConnectionsPoC.startReceiverService(this)
         }
@@ -271,9 +271,7 @@ private fun NearbyReceiveToggle() {
         rememberLauncherForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions()
         ) { result ->
-            val granted =
-                NearbyConnectionsPoC.hasRuntimePermissions(context) &&
-                    result.values.all { it }
+            val granted = NearbyPermissionGate.hasRequiredPermissions(context)
 
             if (granted) {
                 starting = true
@@ -333,7 +331,7 @@ private fun NearbyReceiveToggle() {
                             enabled = false
                             message = "수신 모드가 꺼져 있습니다."
                         } else if (
-                            NearbyConnectionsPoC.hasRuntimePermissions(context)
+                            NearbyPermissionGate.hasRequiredPermissions(context)
                         ) {
                             starting = true
                             enabled = false
@@ -341,7 +339,7 @@ private fun NearbyReceiveToggle() {
                             NearbyConnectionsPoC.startReceiverService(context)
                         } else {
                             launcher.launch(
-                                NearbyConnectionsPoC.runtimePermissions()
+                                NearbyPermissionGate.missingPermissions(context)
                             )
                         }
                     }

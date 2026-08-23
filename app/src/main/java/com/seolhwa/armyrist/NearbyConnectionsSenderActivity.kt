@@ -49,10 +49,10 @@ class NearbyConnectionsSenderActivity : ComponentActivity() {
         registerForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions()
         ) { result ->
-            if (result.values.all { it }) {
+            if (NearbyPermissionGate.hasRequiredPermissions(this)) {
                 startDiscovery()
             } else {
-                status = "주변 기기 권한이 없어 전송을 사용할 수 없습니다."
+                status = "주변 기기를 찾으려면 근처 기기 접근 권한이 필요합니다."
             }
         }
 
@@ -61,11 +61,11 @@ class NearbyConnectionsSenderActivity : ComponentActivity() {
         client = Nearby.getConnectionsClient(this)
         render()
 
-        if (NearbyConnectionsPoC.hasRuntimePermissions(this)) {
+        if (NearbyPermissionGate.hasRequiredPermissions(this)) {
             startDiscovery()
         } else {
             permissionLauncher.launch(
-                NearbyConnectionsPoC.runtimePermissions()
+                NearbyPermissionGate.missingPermissions(this)
             )
         }
     }
@@ -146,9 +146,9 @@ class NearbyConnectionsSenderActivity : ComponentActivity() {
     }
 
     private fun startDiscovery() {
-        if (!NearbyConnectionsPoC.hasRuntimePermissions(this)) {
+        if (!NearbyPermissionGate.hasRequiredPermissions(this)) {
             permissionLauncher.launch(
-                NearbyConnectionsPoC.runtimePermissions()
+                NearbyPermissionGate.missingPermissions(this)
             )
             return
         }
@@ -177,14 +177,7 @@ class NearbyConnectionsSenderActivity : ComponentActivity() {
                 "$diagnostic · serviceId=${NearbyConnectionsPoC.SERVICE_ID} strategy=${NearbyConnectionsPoC.STRATEGY_LABEL}",
                 error
             )
-            status = buildString {
-                append("주변 기기 검색 시작 실패\n")
-                append(diagnostic)
-                append("\nserviceId=")
-                append(NearbyConnectionsPoC.SERVICE_ID)
-                append(" · strategy=")
-                append(NearbyConnectionsPoC.STRATEGY_LABEL)
-            }
+            status = "주변 기기 검색을 시작하지 못했습니다. 다시 시도해주세요."
         }
     }
 

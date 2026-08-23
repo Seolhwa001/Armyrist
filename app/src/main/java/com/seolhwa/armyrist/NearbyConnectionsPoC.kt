@@ -40,32 +40,12 @@ internal object NearbyConnectionsPoC {
      * Nearby Connections permissions from the current Google Android guide.
      * Request only when the user explicitly enables receive mode or opens sender PoC.
      */
-    fun runtimePermissions(): Array<String> {
-        val out = mutableListOf<String>()
+    @Deprecated("Use NearbyPermissionGate directly")
+    fun runtimePermissions(): Array<String> = NearbyPermissionGate.requiredPermissions()
 
-        if (Build.VERSION.SDK_INT in 29..31) {
-            out += Manifest.permission.ACCESS_FINE_LOCATION
-        }
-
-        if (Build.VERSION.SDK_INT >= 31) {
-            out += Manifest.permission.BLUETOOTH_ADVERTISE
-            out += Manifest.permission.BLUETOOTH_CONNECT
-            out += Manifest.permission.BLUETOOTH_SCAN
-        }
-
-        if (Build.VERSION.SDK_INT >= 33) {
-            out += Manifest.permission.NEARBY_WIFI_DEVICES
-            out += Manifest.permission.POST_NOTIFICATIONS
-        }
-
-        return out.distinct().toTypedArray()
-    }
-
+    @Deprecated("Use NearbyPermissionGate directly")
     fun hasRuntimePermissions(context: Context): Boolean =
-        runtimePermissions().all {
-            ContextCompat.checkSelfPermission(context, it) ==
-                PackageManager.PERMISSION_GRANTED
-        }
+        NearbyPermissionGate.hasRequiredPermissions(context)
 
 
     fun diagnosticFailure(operation: String, throwable: Throwable): String {
