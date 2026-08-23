@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 98
-        versionName = "0.6.10-timeplan-ui-build-rework"
+        versionCode = 99
+        versionName = "0.6.11-emergency-midway-delete-stability"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
