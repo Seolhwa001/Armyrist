@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 85
-        versionName = "0.5.7-execution-selection-ux"
+        versionCode = 86
+        versionName = "0.5.8-timeplan-execution-reminder-ux"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
