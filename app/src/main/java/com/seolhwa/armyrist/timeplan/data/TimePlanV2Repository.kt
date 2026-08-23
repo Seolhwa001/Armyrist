@@ -71,6 +71,30 @@ class TimePlanV2Repository(context: Context) {
         return persist(next)
     }
 
+    /**
+     * Encodes one legacy/v2 TimePlan for Common Trash.
+     *
+     * This is deliberately a repository-owned codec so UI code never has to
+     * duplicate the private v2 persistence format.
+     */
+    @Synchronized
+    fun exportTrashPayload(id: String): String? =
+        getPlan(id)?.let { planToJson(it).toString() }
+
+    /**
+     * Restores the exact legacy/v2 snapshot previously exported by
+     * exportTrashPayload(). Existing IDs are never overwritten.
+     */
+    @Synchronized
+    fun restoreTrashPayload(payload: String): Boolean {
+        val restored = runCatching {
+            planFromJson(JSONObject(payload))
+        }.getOrNull() ?: return false
+
+        if (plans.any { it.id == restored.id }) return false
+        return persist(plans + restored)
+    }
+
     @Synchronized
     fun reloadFromPersistence() {
         plans = load()
