@@ -472,24 +472,10 @@ private fun TimePlanPrepareScreen(
             action = action,
             onDismiss = { moveAction = null },
             onMove = { targetPointId ->
-                val targetTime = TimePlanExecutionRules.pointDateTime(plan, targetPointId)
-                val sourceTime = TimePlanExecutionRules.pointDateTime(plan, action.parentPointId)
-                val shiftedTime =
-                    if (targetTime != null && sourceTime != null) {
-                        action.scheduledDateTime.plusMinutes(
-                            java.time.Duration.between(sourceTime, targetTime).toMinutes()
-                        )
-                    } else action.scheduledDateTime
-                val candidate = TimePlanExecutionRules.normalizeActionOrder(
-                    plan.copy(
-                        actions = plan.actions.map {
-                            if (it.id == action.id) it.copy(
-                                parentPointId = targetPointId,
-                                scheduledDateTime = shiftedTime,
-                                updatedAt = System.currentTimeMillis().toString()
-                            ) else it
-                        }
-                    )
+                val candidate = TimePlanExecutionRules.moveActionToParentPreservingTime(
+                    plan = plan,
+                    actionId = action.id,
+                    targetParentPointId = targetPointId
                 )
                 if (!onCommit(candidate)) message = "실시사항을 이동하지 못했습니다."
                 moveAction = null
@@ -1014,22 +1000,10 @@ private fun TimePlanExecuteScreen(
             action = action,
             onDismiss = { moveAction = null },
             onMove = { targetPointId ->
-                val targetTime = TimePlanExecutionRules.pointDateTime(plan, targetPointId)
-                val sourceTime = TimePlanExecutionRules.pointDateTime(plan, action.parentPointId)
-                val shiftedTime =
-                    if (targetTime != null && sourceTime != null) {
-                        action.scheduledDateTime.plusMinutes(
-                            java.time.Duration.between(sourceTime, targetTime).toMinutes()
-                        )
-                    } else action.scheduledDateTime
-                val candidate = TimePlanExecutionRules.normalizeActionOrder(
-                    plan.copy(actions = plan.actions.map {
-                        if (it.id == action.id) it.copy(
-                            parentPointId = targetPointId,
-                            scheduledDateTime = shiftedTime,
-                            updatedAt = System.currentTimeMillis().toString()
-                        ) else it
-                    })
+                val candidate = TimePlanExecutionRules.moveActionToParentPreservingTime(
+                    plan = plan,
+                    actionId = action.id,
+                    targetParentPointId = targetPointId
                 )
                 if (!onCommit(candidate)) message = "실시사항을 이동하지 못했습니다."
                 moveAction = null

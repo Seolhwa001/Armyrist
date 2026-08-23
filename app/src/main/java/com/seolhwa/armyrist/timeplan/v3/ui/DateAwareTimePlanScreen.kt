@@ -316,7 +316,30 @@ fun DateAwareTimePlanApp(
                 result
             },
             onCommit = { changed ->
-                if (repository.commit(changed.copy(updatedAt = System.currentTimeMillis().toString()))) revision++
+                // Re-read the repository before a detail-screen commit. Action edits
+                // and moves are performed in TimePlanExecutionActivity and may have
+                // changed since this detail composable acquired its plan snapshot.
+                //
+                // Never let an older detail snapshot overwrite a newly moved Action
+                // back to its previous parent/time. Intentional "함께 이동" time deltas
+                // are replayed by rebaseDetailActions().
+                val latest = repository.getPlan(changed.id)
+                val safeCandidate =
+                    if (latest != null) {
+                        TimePlanExecutionRules.rebaseDetailActions(
+                            base = selected,
+                            candidate = changed,
+                            current = latest
+                        )
+                    } else {
+                        changed
+                    }
+
+                if (
+                    repository.commit(
+                        safeCandidate.copy(updatedAt = System.currentTimeMillis().toString())
+                    )
+                ) revision++
             }
         )
     }
