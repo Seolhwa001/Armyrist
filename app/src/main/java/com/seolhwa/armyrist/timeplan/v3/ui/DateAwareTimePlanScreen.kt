@@ -312,6 +312,7 @@ private fun DateAwarePlanDetail(
     var conflictDetail by remember { mutableStateOf<TimePlanConflict?>(null) }
     var pendingNavigation by remember { mutableStateOf<String?>(null) }
     var headerMenuOpen by remember { mutableStateOf(false) }
+    var baseDateDialogOpen by rememberSaveable(plan.id) { mutableStateOf(false) }
     var pendingActionShift by remember { mutableStateOf<Pair<DateAwareTimePlan, Map<String, Long>>?>(null) }
     val view = LocalView.current
     val conflicts = remember(plan) { TimePlanConstraintEngine.detect(plan) }
@@ -394,6 +395,15 @@ private fun DateAwarePlanDetail(
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             if (!selectionMode) {
+                OutlinedButton(
+                    onClick = { baseDateDialogOpen = true },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp).heightIn(min = 44.dp),
+                    shape = ArmyristPanelShape,
+                    border = BorderStroke(1.dp, ArmyristColors.Border)
+                ) {
+                    val base = plan.start.value.value?.toLocalDate()
+                    Text(if (plan.dateDisplayMode == TimePlanDateDisplayMode.RELATIVE_D_DAY) "기준일 변경 · 날짜 미설정 (D-Day)" else "기준일 변경 · ${base?.format(DateTimeFormatter.ISO_DATE) ?: "미설정"}")
+                }
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -458,6 +468,24 @@ private fun DateAwarePlanDetail(
                         selectedKeyList = selectedKeys.filterNot { it.startsWith("N:") }
                     },
                     onDone = { selectionMode = false; selectedKeyList = emptyList() }
+                )
+            }
+
+            if (baseDateDialogOpen) {
+                TimePlanBaseDateDialog(
+                    plan = plan,
+                    onDismiss = { baseDateDialogOpen = false },
+                    onApply = { targetDate, relative ->
+                        val oldBase = plan.start.value.value?.toLocalDate()
+                        val changed = if (relative || targetDate == null || oldBase == null) {
+                            plan.copy(dateDisplayMode = if (relative) TimePlanDateDisplayMode.RELATIVE_D_DAY else TimePlanDateDisplayMode.ABSOLUTE)
+                        } else {
+                            shiftWholePlanDates(plan, java.time.temporal.ChronoUnit.DAYS.between(oldBase, targetDate))
+                                .copy(dateDisplayMode = TimePlanDateDisplayMode.ABSOLUTE)
+                        }
+                        onCommit(changed)
+                        baseDateDialogOpen = false
+                    }
                 )
             }
 
@@ -741,6 +769,55 @@ private fun SelectionActionPanel(
     }
 }
 
+private fun shiftWholePlanDates(plan: DateAwareTimePlan, days: Long): DateAwareTimePlan {
+    if (days == 0L) return plan
+    fun shift(v: DateTimeValue) = v.value?.let { DateTimeValue(it.plusDays(days), v.origin) } ?: v
+    fun shiftSpec(spec: EventDateTimeSpec): EventDateTimeSpec = when (spec) {
+        EventDateTimeSpec.Unspecified -> spec
+        is EventDateTimeSpec.Single -> spec.copy(value = shift(spec.value))
+        is EventDateTimeSpec.Range -> spec.copy(start = shift(spec.start), end = shift(spec.end))
+    }
+    return plan.copy(
+        start = plan.start.copy(value = shift(plan.start.value)),
+        midwayEvents = plan.midwayEvents.map { it.copy(timeSpec = shiftSpec(it.timeSpec)) },
+        finalPoint = plan.finalPoint?.let { it.copy(timeSpec = shiftSpec(it.timeSpec)) },
+        end = plan.end.copy(value = shift(plan.end.value)),
+        actions = plan.actions.map { it.copy(scheduledDateTime = it.scheduledDateTime.plusDays(days)) }
+    )
+}
+
+@Composable
+private fun TimePlanBaseDateDialog(
+    plan: DateAwareTimePlan,
+    onDismiss: () -> Unit,
+    onApply: (LocalDate?, Boolean) -> Unit
+) {
+    var calendar by remember { mutableStateOf(false) }
+    var date by remember { mutableStateOf(plan.start.value.value?.toLocalDate() ?: LocalDate.now()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("기준일 변경") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { onApply(LocalDate.now(), false) }, modifier = Modifier.fillMaxWidth()) { Text("오늘 날짜로") }
+                OutlinedButton(onClick = { calendar = true }, modifier = Modifier.fillMaxWidth()) { Text("특정 날짜로 · ${date.format(DateTimeFormatter.ISO_DATE)}") }
+                OutlinedButton(onClick = { onApply(null, true) }, modifier = Modifier.fillMaxWidth()) { Text("날짜 미설정 · D-Day / D+1 / D+2") }
+                Text("기준일을 바꾸면 계획의 모든 지점과 실시사항을 같은 일수만큼 이동합니다. 날짜 미설정은 내부 시간 관계를 보존하고 화면에서 D-Day 기준으로 표시합니다.", style = MaterialTheme.typography.bodySmall, color = ArmyristColors.SecondaryText)
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }
+    )
+    if (calendar) {
+        val state = rememberDatePickerState(initialSelectedDateMillis = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
+        DatePickerDialog(
+            onDismissRequest = { calendar = false },
+            confirmButton = { TextButton(onClick = { state.selectedDateMillis?.let { onApply(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate(), false) }; calendar = false }) { Text("적용") } },
+            dismissButton = { TextButton(onClick = { calendar = false }) { Text("취소") } }
+        ) { DatePicker(state = state) }
+    }
+}
+
 @Composable
 private fun BatchDateDialog(
     initialDate: LocalDate,
@@ -808,7 +885,7 @@ private fun TimelineList(
         nodes.forEachIndexed { index,id ->
             val arrival=DateTimePlanRules.nodeArrival(plan,id)
             val date=arrival?.toLocalDate()
-            if(date!=null && date!=lastDate){ item(key="day-$date") { DayHeader(date) }; lastDate=date }
+            if(date!=null && date!=lastDate){ item(key="day-$date") { DayHeader(date, plan.start.value.value?.toLocalDate(), plan.dateDisplayMode) }; lastDate=date }
             item(key="node-$id") {
                 val nodeConflict = conflicts.firstOrNull { id in it.affectedNodeIds }
                 when(id){
@@ -889,11 +966,12 @@ private fun TimelineList(
     }
 }
 
-@Composable private fun DayHeader(date:LocalDate){
+@Composable private fun DayHeader(date:LocalDate, baseDate:LocalDate?, mode:TimePlanDateDisplayMode){
     val dow=date.dayOfWeek.getDisplayName(TextStyle.SHORT,Locale.KOREAN)
     Row(Modifier.fillMaxWidth().padding(vertical=7.dp),verticalAlignment=Alignment.CenterVertically){
         HorizontalDivider(Modifier.weight(1f))
-        Text("  ${date.format(DateTimeFormatter.ofPattern("MM.dd"))} ($dow)  ",fontWeight=FontWeight.Bold,color=ArmyristColors.PrimaryControl)
+        val label = if (mode == TimePlanDateDisplayMode.RELATIVE_D_DAY && baseDate != null) { val d = java.time.temporal.ChronoUnit.DAYS.between(baseDate, date); if (d == 0L) "D-Day" else "D${if (d > 0) "+" else ""}$d" } else "${date.format(DateTimeFormatter.ofPattern("MM.dd"))} ($dow)"
+        Text("  $label  ",fontWeight=FontWeight.Bold,color=ArmyristColors.PrimaryControl)
         HorizontalDivider(Modifier.weight(1f))
     }
 }

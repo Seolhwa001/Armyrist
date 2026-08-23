@@ -224,6 +224,12 @@ private fun TimePlanPrepareScreen(
                     )
                 }
             }
+            if (plan.actions.isNotEmpty()) {
+                OutlinedButton(
+                    onClick = { selectedActions = if (selectedActions.toSet().containsAll(plan.actions.map { it.id }.toSet())) emptyList() else plan.actions.map { it.id } },
+                    modifier = Modifier.fillMaxWidth(), shape = ArmyristPanelShape
+                ) { Text(if (selectedActions.toSet().containsAll(plan.actions.map { it.id }.toSet())) "전체 실시사항 해제" else "전체 실시사항 선택") }
+            }
             if (selectedActions.isNotEmpty()) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     OutlinedButton(onClick = { batchShift = true }, modifier = Modifier.weight(1f)) { Text("시간 이동") }
@@ -484,6 +490,8 @@ private fun TimePlanExecuteScreen(
 ) {
     var view by rememberSaveable(plan.id) { mutableStateOf(TimePlanExecutionView.TIMELINE) }
     var noteTarget by remember { mutableStateOf<TimePlanActionItem?>(null) }
+    var bulkSelect by rememberSaveable(plan.id) { mutableStateOf(false) }
+    var selectedActionIds by rememberSaveable(plan.id) { mutableStateOf(emptyList<String>()) }
     val summary = TimePlanExecutionRules.summary(plan)
 
     Column(Modifier.fillMaxSize()) {
@@ -506,6 +514,20 @@ private fun TimePlanExecuteScreen(
                     onClick = { view = TimePlanExecutionView.GROUP },
                     modifier = Modifier.weight(1f)
                 )
+            }            if (plan.actions.isNotEmpty()) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton(onClick = {
+                        bulkSelect = true
+                        selectedActionIds = if (selectedActionIds.toSet().containsAll(plan.actions.map { it.id }.toSet())) emptyList() else plan.actions.map { it.id }
+                    }, modifier = Modifier.weight(1f)) { Text(if (bulkSelect && selectedActionIds.toSet().containsAll(plan.actions.map { it.id }.toSet())) "전체 선택 해제" else "전체 실시사항 선택") }
+                    if (bulkSelect) OutlinedButton(onClick = { bulkSelect = false; selectedActionIds = emptyList() }, modifier = Modifier.weight(1f)) { Text("선택 종료") }
+                }
+                if (bulkSelect && selectedActionIds.isNotEmpty()) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Button(onClick = { onCommit(plan.copy(actions = plan.actions.map { if (it.id in selectedActionIds) it.copy(completionState = ActionCompletionState.COMPLETE, updatedAt = System.currentTimeMillis().toString()) else it })); selectedActionIds = emptyList(); bulkSelect = false }, modifier = Modifier.weight(1f)) { Text("선택 완료") }
+                        OutlinedButton(onClick = { onCommit(plan.copy(actions = plan.actions.map { if (it.id in selectedActionIds) it.copy(completionState = ActionCompletionState.INCOMPLETE, updatedAt = System.currentTimeMillis().toString()) else it })); selectedActionIds = emptyList(); bulkSelect = false }, modifier = Modifier.weight(1f)) { Text("완료 취소") }
+                    }
+                }
             }
         }
 
@@ -536,15 +558,12 @@ private fun TimePlanExecuteScreen(
                     val completed = action.completionState == ActionCompletionState.COMPLETE
                     Card(
                         onClick = {
-                            val newState = if (completed) ActionCompletionState.INCOMPLETE else ActionCompletionState.COMPLETE
-                            onCommit(
-                                plan.copy(actions = plan.actions.map {
-                                    if (it.id == action.id) it.copy(
-                                        completionState = newState,
-                                        updatedAt = System.currentTimeMillis().toString()
-                                    ) else it
-                                })
-                            )
+                            if (bulkSelect) {
+                                selectedActionIds = if (action.id in selectedActionIds) selectedActionIds - action.id else selectedActionIds + action.id
+                            } else {
+                                val newState = if (completed) ActionCompletionState.INCOMPLETE else ActionCompletionState.COMPLETE
+                                onCommit(plan.copy(actions = plan.actions.map { if (it.id == action.id) it.copy(completionState = newState, updatedAt = System.currentTimeMillis().toString()) else it }))
+                            }
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape = ArmyristPanelShape,
@@ -555,10 +574,13 @@ private fun TimePlanExecuteScreen(
                     ) {
                         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(
-                                checked = completed,
+                                checked = if (bulkSelect) action.id in selectedActionIds else completed,
                                 onCheckedChange = {
-                                    val newState = if (completed) ActionCompletionState.INCOMPLETE else ActionCompletionState.COMPLETE
-                                    onCommit(plan.copy(actions = plan.actions.map { a -> if (a.id == action.id) a.copy(completionState = newState, updatedAt = System.currentTimeMillis().toString()) else a }))
+                                    if (bulkSelect) selectedActionIds = if (action.id in selectedActionIds) selectedActionIds - action.id else selectedActionIds + action.id
+                                    else {
+                                        val newState = if (completed) ActionCompletionState.INCOMPLETE else ActionCompletionState.COMPLETE
+                                        onCommit(plan.copy(actions = plan.actions.map { a -> if (a.id == action.id) a.copy(completionState = newState, updatedAt = System.currentTimeMillis().toString()) else a }))
+                                    }
                                 }
                             )
                             Column(Modifier.weight(1f)) {
