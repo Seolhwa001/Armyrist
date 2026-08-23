@@ -9,14 +9,17 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -652,7 +655,8 @@ private fun ActionEditDialog(
     onConfirm: (TimePlanActionItem) -> Unit
 ) {
     var content by remember(initial?.id) { mutableStateOf(initial?.content.orEmpty()) }
-    var dateTimeText by remember(initial?.id) { mutableStateOf((initial?.scheduledDateTime ?: baseDateTime).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))) }
+    var scheduledDateTime by remember(initial?.id) { mutableStateOf(initial?.scheduledDateTime ?: baseDateTime) }
+    var editDateTime by remember { mutableStateOf(false) }
     var note by remember(initial?.id) { mutableStateOf(initial?.note.orEmpty()) }
     var groupId by remember(initial?.id) { mutableStateOf(initial?.groupId) }
     var notify by remember(initial?.id) { mutableStateOf(initial?.notificationEnabled ?: false) }
@@ -669,13 +673,22 @@ private fun ActionEditDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(content, { content = it }, label = { Text("내용") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(
-                    dateTimeText,
-                    { dateTimeText = it },
-                    label = { Text("시간 (yyyy-MM-dd HH:mm)") },
+                OutlinedButton(
+                    onClick = { editDateTime = true },
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
+                    shape = ArmyristPanelShape
+                ) {
+                    Column(
+                        Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Text("시간", style = MaterialTheme.typography.labelSmall, color = ArmyristColors.SecondaryText)
+                        Text(
+                            scheduledDateTime.format(DateTimeFormatter.ofPattern("yyyy.MM.dd HH:mm")),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
                 OutlinedTextField(note, { note = it }, label = { Text("비고") }, modifier = Modifier.fillMaxWidth())
                 Box {
                     OutlinedButton(onClick = { groupMenu = true }, modifier = Modifier.fillMaxWidth()) {
@@ -704,16 +717,14 @@ private fun ActionEditDialog(
         },
         confirmButton = {
             Button(onClick = {
-                val parsed = runCatching { LocalDateTime.parse(dateTimeText.trim(), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) }.getOrNull()
                 when {
                     content.isBlank() -> error = "내용을 입력해주세요."
-                    parsed == null -> error = "시간 형식을 확인해주세요."
                     else -> onConfirm(
                         TimePlanActionItem(
                             id = initial?.id ?: UUID.randomUUID().toString(),
                             parentPointId = initial?.parentPointId ?: "TEMP",
                             content = content.trim(),
-                            scheduledDateTime = parsed,
+                            scheduledDateTime = scheduledDateTime,
                             completionState = initial?.completionState ?: ActionCompletionState.INCOMPLETE,
                             notificationEnabled = notify,
                             groupId = groupId,
@@ -727,6 +738,18 @@ private fun ActionEditDialog(
             }, colors = ButtonDefaults.buttonColors(containerColor = ArmyristColors.PrimaryControl)) { Text("확인") }
         }
     )
+
+    if (editDateTime) {
+        ArmyristActionDateTimeEditor(
+            title = "실시사항 시간",
+            initial = scheduledDateTime,
+            onDismiss = { editDateTime = false },
+            onConfirm = {
+                scheduledDateTime = it
+                editDateTime = false
+            }
+        )
+    }
 }
 
 @Composable
@@ -804,14 +827,62 @@ private fun GroupPickerDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                OutlinedButton(onClick = { onSelect(null) }, modifier = Modifier.fillMaxWidth()) { Text("미지정") }
-                groups.sortedBy { it.order }.forEach { group -> OutlinedButton(onClick = { onSelect(group.id) }, modifier = Modifier.fillMaxWidth()) { Text(group.name) } }
+        shape = ArmyristPanelShape,
+        containerColor = ArmyristColors.WorkSurface,
+        title = {
+            Column {
+                Text(title, fontWeight = FontWeight.Bold)
+                Text(
+                    "지정할 그룹을 선택하세요.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ArmyristColors.SecondaryText
+                )
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } }
+        text = {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 420.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                item {
+                    Surface(
+                        color = ArmyristColors.RaisedSurface,
+                        shape = ArmyristPanelShape,
+                        border = BorderStroke(1.dp, ArmyristColors.Border),
+                        modifier = Modifier.fillMaxWidth().clickable { onSelect(null) }
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(Modifier.size(16.dp).background(ArmyristColors.Divider, CircleShape))
+                            Spacer(Modifier.width(10.dp))
+                            Text("미지정", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+                items(groups.sortedBy { it.order }, key = { it.id }) { group ->
+                    val color = actionGroupColor(group.color)
+                    Surface(
+                        color = color.copy(alpha = 0.13f),
+                        shape = ArmyristPanelShape,
+                        border = BorderStroke(1.dp, color.copy(alpha = 0.72f)),
+                        modifier = Modifier.fillMaxWidth().clickable { onSelect(group.id) }
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(Modifier.size(16.dp).background(color, CircleShape))
+                            Spacer(Modifier.width(10.dp))
+                            Text(group.name, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }
     )
 }
 
@@ -821,57 +892,209 @@ private fun ActionGroupManagerDialog(
     onDismiss: () -> Unit,
     onCommit: (DateAwareTimePlan) -> Boolean
 ) {
-    var name by remember { mutableStateOf("") }
-    var renameTarget by remember { mutableStateOf<TimePlanActionGroup?>(null) }
+    var editTarget by remember { mutableStateOf<TimePlanActionGroup?>(null) }
+    var create by remember { mutableStateOf(false) }
+    var deleteTarget by remember { mutableStateOf<TimePlanActionGroup?>(null) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("실시사항 그룹") },
+        shape = ArmyristPanelShape,
+        containerColor = ArmyristColors.WorkSurface,
+        title = { Text("실시사항 그룹 관리", fontWeight = FontWeight.Bold) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(name, { name = it }, label = { Text("새 그룹") }, modifier = Modifier.weight(1f))
-                    TextButton(
-                        enabled = name.isNotBlank(),
-                        onClick = {
-                            onCommit(plan.copy(actionGroups = plan.actionGroups + TimePlanActionGroup(name = name.trim(), order = plan.actionGroups.size)))
-                            name = ""
+            Column {
+                if (plan.actionGroups.isEmpty()) {
+                    Text(
+                        "그룹이 없습니다.",
+                        color = ArmyristColors.SecondaryText,
+                        modifier = Modifier.padding(vertical = 12.dp)
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 360.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                        items(plan.actionGroups.sortedBy { it.order }, key = { it.id }) { group ->
+                            val color = actionGroupColor(group.color)
+                            Surface(
+                                color = color.copy(alpha = 0.12f),
+                                shape = ArmyristPanelShape,
+                                border = BorderStroke(1.dp, color.copy(alpha = 0.65f))
+                            ) {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(Modifier.size(18.dp).background(color, CircleShape))
+                                    Spacer(Modifier.width(9.dp))
+                                    Text(group.name, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                                    TextButton(onClick = { editTarget = group }) { Text("편집") }
+                                    TextButton(onClick = { deleteTarget = group }) { Text("삭제") }
+                                }
+                            }
                         }
-                    ) { Text("추가") }
-                }
-                plan.actionGroups.sortedBy { it.order }.forEach { group ->
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(group.name, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { renameTarget = group }) { Text("이름") }
-                        TextButton(onClick = {
-                            val candidate = plan.copy(
-                                actionGroups = plan.actionGroups.filterNot { it.id == group.id }.mapIndexed { index, g -> g.copy(order = index) },
-                                actions = plan.actions.map { if (it.groupId == group.id) it.copy(groupId = null, updatedAt = System.currentTimeMillis().toString()) else it }
-                            )
-                            onCommit(candidate)
-                        }) { Text("삭제") }
                     }
                 }
+
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    onClick = { create = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = ArmyristPanelShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ArmyristColors.PrimaryControl,
+                        contentColor = ArmyristColors.OnDark
+                    )
+                ) { Text("+ 그룹 추가") }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("완료") } }
+        confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } }
     )
 
-    renameTarget?.let { group ->
-        var renamed by remember(group.id) { mutableStateOf(group.name) }
+    if (create) {
+        ActionGroupEditDialog(
+            title = "그룹 추가",
+            initialName = "",
+            initialColor = actionGroupPalette[plan.actionGroups.size % actionGroupPalette.size],
+            onDismiss = { create = false },
+            onConfirm = { name, color ->
+                onCommit(
+                    plan.copy(
+                        actionGroups = plan.actionGroups + TimePlanActionGroup(
+                            name = name,
+                            order = plan.actionGroups.size,
+                            color = color
+                        )
+                    )
+                )
+                create = false
+            }
+        )
+    }
+
+    editTarget?.let { group ->
+        ActionGroupEditDialog(
+            title = "그룹 편집",
+            initialName = group.name,
+            initialColor = group.color,
+            onDismiss = { editTarget = null },
+            onConfirm = { name, color ->
+                onCommit(
+                    plan.copy(
+                        actionGroups = plan.actionGroups.map {
+                            if (it.id == group.id) it.copy(name = name, color = color) else it
+                        }
+                    )
+                )
+                editTarget = null
+            }
+        )
+    }
+
+    deleteTarget?.let { group ->
         AlertDialog(
-            onDismissRequest = { renameTarget = null },
-            title = { Text("그룹 이름 수정") },
-            text = { OutlinedTextField(renamed, { renamed = it }, modifier = Modifier.fillMaxWidth(), singleLine = true) },
-            dismissButton = { TextButton(onClick = { renameTarget = null }) { Text("취소") } },
+            onDismissRequest = { deleteTarget = null },
+            containerColor = ArmyristColors.WorkSurface,
+            title = { Text("그룹 삭제") },
+            text = { Text("'${group.name}' 그룹을 삭제할까요? 연결된 실시사항은 미지정으로 변경됩니다.") },
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("취소") } },
             confirmButton = {
                 Button(
-                    enabled = renamed.isNotBlank(),
                     onClick = {
-                        onCommit(plan.copy(actionGroups = plan.actionGroups.map { if (it.id == group.id) it.copy(name = renamed.trim()) else it }))
-                        renameTarget = null
-                    }
-                ) { Text("확인") }
+                        onCommit(
+                            plan.copy(
+                                actionGroups = plan.actionGroups
+                                    .filterNot { it.id == group.id }
+                                    .mapIndexed { index, g -> g.copy(order = index) },
+                                actions = plan.actions.map {
+                                    if (it.groupId == group.id) {
+                                        it.copy(groupId = null, updatedAt = System.currentTimeMillis().toString())
+                                    } else it
+                                }
+                            )
+                        )
+                        deleteTarget = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ArmyristColors.PrimaryControl)
+                ) { Text("삭제") }
             }
         )
     }
 }
+
+@Composable
+private fun ActionGroupEditDialog(
+    title: String,
+    initialName: String,
+    initialColor: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String) -> Unit
+) {
+    var name by remember(initialName) { mutableStateOf(initialName) }
+    var color by remember(initialColor) { mutableStateOf(initialColor) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = ArmyristPanelShape,
+        containerColor = ArmyristColors.WorkSurface,
+        title = { Text(title, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("그룹명") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                Text("색상", fontWeight = FontWeight.SemiBold)
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    actionGroupPalette.forEach { option ->
+                        val selected = option.equals(color, ignoreCase = true)
+                        Surface(
+                            modifier = Modifier
+                                .size(if (selected) 38.dp else 34.dp)
+                                .clickable { color = option },
+                            shape = CircleShape,
+                            color = actionGroupColor(option),
+                            tonalElevation = if (selected) 6.dp else 0.dp
+                        ) {
+                            if (selected) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text("✓", color = Color.White)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+        confirmButton = {
+            Button(
+                enabled = name.isNotBlank(),
+                onClick = { onConfirm(name.trim(), color) },
+                colors = ButtonDefaults.buttonColors(containerColor = ArmyristColors.PrimaryControl)
+            ) { Text("확인") }
+        }
+    )
+}
+
+private val actionGroupPalette = listOf(
+    "#7356B6",
+    "#17845D",
+    "#B64A3C",
+    "#1678B8",
+    "#98596F",
+    "#8B7A00",
+    "#7B4F9D",
+    "#4D758C"
+)
+
+private fun actionGroupColor(value: String): Color =
+    runCatching { Color(android.graphics.Color.parseColor(value)) }
+        .getOrDefault(Color(0xFF7A7D61))
+

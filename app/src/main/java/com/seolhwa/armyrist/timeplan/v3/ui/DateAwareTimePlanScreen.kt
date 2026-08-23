@@ -844,8 +844,21 @@ private fun TimelineList(
                 val link=plan.links.firstOrNull{it.fromNodeId==id&&it.toNodeId==to}
                 val linkConflict = conflicts.firstOrNull { it.affectedLink == (id to to) }
                 item(key="link-$id-$to") {
+                    val displayMinutes =
+                        if (link?.durationLocked == true) {
+                            link.durationMinutes
+                        } else {
+                            val fromTime = DateTimePlanRules.nodeDeparture(plan, id)
+                            val toTime = DateTimePlanRules.nodeArrival(plan, to)
+                            if (fromTime != null && toTime != null && !toTime.isBefore(fromTime)) {
+                                java.time.Duration.between(fromTime, toTime).toMinutes()
+                            } else {
+                                null
+                            }
+                        }
                     LinkRow(
                         link=link,
+                        displayMinutes=displayMinutes,
                         selectionMode=selectionMode,
                         selected=linkSelectionKey(id,to) in selectedKeys,
                         conflict=linkConflict,
@@ -999,6 +1012,7 @@ private fun TimelinePointGlyph(isRange: Boolean, emphasized: Boolean) {
 @Composable
 private fun LinkRow(
     link: DateTimeLink?,
+    displayMinutes: Long?,
     selectionMode: Boolean,
     selected: Boolean,
     conflict: TimePlanConflict?,
@@ -1031,7 +1045,7 @@ private fun LinkRow(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "${link?.label?.takeIf { it.isNotBlank() } ?: "경과"} · ${durationText(link?.durationMinutes)}",
+                        "${link?.label?.takeIf { it.isNotBlank() } ?: "경과"} · ${durationText(displayMinutes)}",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium
                     )
@@ -1453,7 +1467,16 @@ fun generateDateAwareResult(plan: DateAwareTimePlan): ToolResult {
         if (index < nodes.lastIndex) {
             val next = nodes[index + 1]
             plan.links.firstOrNull { it.fromNodeId == nodeId && it.toNodeId == next }?.let { link ->
-                val minutes = link.durationMinutes
+                val minutes =
+                    if (link.durationLocked) {
+                        link.durationMinutes
+                    } else {
+                        val fromTime = DateTimePlanRules.nodeDeparture(plan, nodeId)
+                        val toTime = DateTimePlanRules.nodeArrival(plan, next)
+                        if (fromTime != null && toTime != null && !toTime.isBefore(fromTime)) {
+                            java.time.Duration.between(fromTime, toTime).toMinutes()
+                        } else null
+                    }
                 if (minutes != null && minutes > 0L) {
                     lines += "  ↳ ${link.label?.takeIf { it.isNotBlank() } ?: "경과"} · ${durationText(minutes)}"
                 }
