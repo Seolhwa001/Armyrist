@@ -21,6 +21,10 @@ class UpdatePreferences(context: Context) {
         prefs.edit().putLong(KEY_LAST_SUCCESS, atMillis).apply()
     }
 
+    fun markAutomaticCheckDueForDeveloper() {
+        prefs.edit().putLong(KEY_LAST_SUCCESS, 0L).apply()
+    }
+
     fun isAutomaticCheckDue(nowMillis: Long = System.currentTimeMillis()): Boolean {
         val duration = interval.intervalMillis ?: return false
         val last = lastSuccessfulCheck
