@@ -45,4 +45,47 @@ class TimePlanDurationRefreshRegressionTest {
         assertEquals(300L, first.durationMinutes)
         assertEquals(240L, second.durationMinutes)
     }
+
+    @Test
+    fun rangeEventExtendingPastUnlockedEndMovesEndAndRefreshesDuration() {
+        val startTime = LocalDateTime.of(2026, 8, 23, 8, 0)
+        val oldMidStart = LocalDateTime.of(2026, 8, 23, 10, 0)
+        val oldMidEnd = LocalDateTime.of(2026, 8, 23, 11, 0)
+        val oldEnd = LocalDateTime.of(2026, 8, 23, 12, 0)
+        val mid = DateTimeEvent(
+            id = "mid-range",
+            order = 0,
+            kind = TimeEventKind.MIDWAY,
+            name = "휴식",
+            timeSpec = EventDateTimeSpec.Range(
+                DateTimeValue.explicit(oldMidStart),
+                DateTimeValue.explicit(oldMidEnd)
+            )
+        )
+        val plan = DateTimePlanRules.normalizeTopology(
+            DateAwareTimePlan(
+                id = "p-range",
+                title = "test",
+                start = DateTimeAnchor(DateTimeValue.explicit(startTime)),
+                midwayEvents = listOf(mid),
+                end = DateTimeAnchor(DateTimeValue.explicit(oldEnd)),
+                createdAt = "2026-08-23T00:00:00",
+                updatedAt = "2026-08-23T00:00:00"
+            )
+        )
+
+        val changedMid = mid.copy(
+            timeSpec = EventDateTimeSpec.Range(
+                DateTimeValue.explicit(oldMidStart),
+                DateTimeValue.explicit(LocalDateTime.of(2026, 8, 23, 13, 0))
+            )
+        )
+        val changed = DateTimePlanRules.reflowEventEdit(plan, changedMid)!!
+
+        assertEquals(LocalDateTime.of(2026, 8, 23, 14, 0), changed.end.value.value)
+        val afterMid = changed.links.first {
+            it.fromNodeId == "mid-range" && it.toNodeId == DateTimePlanRules.END_ID
+        }
+        assertEquals(60L, afterMid.durationMinutes)
+    }
 }
