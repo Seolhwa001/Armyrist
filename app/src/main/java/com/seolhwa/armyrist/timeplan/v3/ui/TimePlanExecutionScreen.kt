@@ -373,7 +373,7 @@ private fun TimePlanPrepareScreen(
                                             Text(action.content, fontWeight = FontWeight.SemiBold)
                                             Text(
                                                 buildString {
-                                                    append(action.scheduledDateTime.format(dateClock))
+                                                    append(formatActionDateTime(plan, action.scheduledDateTime))
                                                     action.groupId?.let { gid ->
                                                         plan.actionGroups.firstOrNull { it.id == gid }?.let { append(" · ${it.name}") }
                                                     }
@@ -948,7 +948,7 @@ private fun TimePlanExecuteScreen(
                                 Text(action.content, fontWeight = FontWeight.SemiBold)
                                 Text(
                                     buildString {
-                                        append(action.scheduledDateTime.format(dateClock))
+                                        append(formatActionDateTime(plan, action.scheduledDateTime))
                                         if (view == TimePlanExecutionView.TIMELINE) {
                                             append(" · ")
                                             append(TimePlanExecutionRules.pointName(plan, action.parentPointId))
@@ -1141,6 +1141,34 @@ private fun ArmyristModeButton(
 }
 
 private val dateClock = DateTimeFormatter.ofPattern("MM.dd HH:mm")
+
+private fun formatActionDateTime(
+    plan: DateAwareTimePlan,
+    value: LocalDateTime
+): String {
+    if (plan.dateDisplayMode != TimePlanDateDisplayMode.RELATIVE_D_DAY) {
+        return value.format(dateClock)
+    }
+
+    // Relative mode is display-only. Keep the real LocalDateTime intact for
+    // persistence, sorting, alarms, and calculations.
+    val baseDate =
+        DateTimePlanRules.resolvedStart(plan)?.toLocalDate()
+            ?: plan.actions.minOfOrNull { it.scheduledDateTime.toLocalDate() }
+            ?: value.toLocalDate()
+
+    val offset =
+        java.time.temporal.ChronoUnit.DAYS.between(baseDate, value.toLocalDate())
+
+    val dayLabel =
+        if (offset == 0L) {
+            "D-Day"
+        } else {
+            "D${if (offset > 0) "+" else ""}$offset"
+        }
+
+    return "$dayLabel ${value.format(DateTimeFormatter.ofPattern("HH:mm"))}"
+}
 
 @Composable
 private fun ActionEditDialog(
