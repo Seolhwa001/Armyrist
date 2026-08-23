@@ -217,9 +217,9 @@ private fun TimePlanPrepareScreen(
                 ) {
                     Text(
                         if (selectedPoints.toSet().containsAll(allPointIds.toSet()) && allPointIds.isNotEmpty()) {
-                            "전체 지점 해제"
+                            "지점 선택 해제"
                         } else {
-                            "전체 지점 선택"
+                            "지점 전체 선택"
                         }
                     )
                 }
@@ -228,7 +228,7 @@ private fun TimePlanPrepareScreen(
                 OutlinedButton(
                     onClick = { selectedActions = if (selectedActions.toSet().containsAll(plan.actions.map { it.id }.toSet())) emptyList() else plan.actions.map { it.id } },
                     modifier = Modifier.fillMaxWidth(), shape = ArmyristPanelShape
-                ) { Text(if (selectedActions.toSet().containsAll(plan.actions.map { it.id }.toSet())) "전체 실시사항 해제" else "전체 실시사항 선택") }
+                ) { Text(if (selectedActions.toSet().containsAll(plan.actions.map { it.id }.toSet())) "실시사항 선택 해제" else "실시사항 전체 선택") }
             }
             if (selectedActions.isNotEmpty()) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -550,27 +550,15 @@ private fun TimePlanExecuteScreen(
                                 style = MaterialTheme.typography.labelMedium,
                                 color = ArmyristColors.SecondaryText
                             )
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            OutlinedButton(
+                                onClick = {
+                                    selectedActionIds = emptyList()
+                                    bulkSelect = false
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = ArmyristPanelShape
                             ) {
-                                OutlinedButton(
-                                    onClick = { selectedActionIds = allActionIds },
-                                    modifier = Modifier.weight(1f),
-                                    shape = ArmyristPanelShape
-                                ) {
-                                    Text("전체 선택")
-                                }
-                                OutlinedButton(
-                                    onClick = {
-                                        selectedActionIds = emptyList()
-                                        bulkSelect = false
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                    shape = ArmyristPanelShape
-                                ) {
-                                    Text("선택 종료")
-                                }
+                                Text("선택 종료")
                             }
                             Row(
                                 Modifier.fillMaxWidth(),

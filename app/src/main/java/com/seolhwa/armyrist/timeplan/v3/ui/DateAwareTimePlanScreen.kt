@@ -792,29 +792,131 @@ private fun TimePlanBaseDateDialog(
     onDismiss: () -> Unit,
     onApply: (LocalDate?, Boolean) -> Unit
 ) {
+    enum class BaseDateChoice { TODAY, SPECIFIC, RELATIVE }
+
     var calendar by remember { mutableStateOf(false) }
     var date by remember { mutableStateOf(plan.start.value.value?.toLocalDate() ?: LocalDate.now()) }
+    var choice by remember {
+        mutableStateOf(
+            if (plan.dateDisplayMode == TimePlanDateDisplayMode.RELATIVE_D_DAY) {
+                BaseDateChoice.RELATIVE
+            } else {
+                BaseDateChoice.SPECIFIC
+            }
+        )
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("기준일 변경") },
+        shape = ArmyristPanelShape,
+        containerColor = ArmyristColors.RaisedSurface,
+        tonalElevation = 0.dp,
+        title = { Text("기준일 변경", fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { onApply(LocalDate.now(), false) }, modifier = Modifier.fillMaxWidth()) { Text("오늘 날짜로") }
-                OutlinedButton(onClick = { calendar = true }, modifier = Modifier.fillMaxWidth()) { Text("특정 날짜로 · ${date.format(DateTimeFormatter.ISO_DATE)}") }
-                OutlinedButton(onClick = { onApply(null, true) }, modifier = Modifier.fillMaxWidth()) { Text("날짜 미설정 · D-Day / D+1 / D+2") }
-                Text("기준일을 바꾸면 계획의 모든 지점과 실시사항을 같은 일수만큼 이동합니다. 날짜 미설정은 내부 시간 관계를 보존하고 화면에서 D-Day 기준으로 표시합니다.", style = MaterialTheme.typography.bodySmall, color = ArmyristColors.SecondaryText)
+                Text(
+                    "계획의 기준일을 선택합니다.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ArmyristColors.SecondaryText
+                )
+                BaseDateChoiceRow(
+                    selected = choice == BaseDateChoice.TODAY,
+                    title = "오늘 날짜로",
+                    subtitle = LocalDate.now().format(DateTimeFormatter.ISO_DATE),
+                    onClick = { choice = BaseDateChoice.TODAY }
+                )
+                BaseDateChoiceRow(
+                    selected = choice == BaseDateChoice.SPECIFIC,
+                    title = "특정 날짜로",
+                    subtitle = date.format(DateTimeFormatter.ISO_DATE),
+                    onClick = { choice = BaseDateChoice.SPECIFIC; calendar = true }
+                )
+                BaseDateChoiceRow(
+                    selected = choice == BaseDateChoice.RELATIVE,
+                    title = "날짜 미설정",
+                    subtitle = "D-Day / D+1 / D+2",
+                    onClick = { choice = BaseDateChoice.RELATIVE }
+                )
+                Text(
+                    "기준일을 변경하면 계획의 모든 지점과 실시사항을 같은 일수만큼 이동합니다. 날짜 미설정은 내부 시간 관계를 보존하고 D-Day 기준으로 표시합니다.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ArmyristColors.SecondaryText
+                )
             }
         },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss, shape = ArmyristPanelShape) { Text("취소") }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    when (choice) {
+                        BaseDateChoice.TODAY -> onApply(LocalDate.now(), false)
+                        BaseDateChoice.SPECIFIC -> onApply(date, false)
+                        BaseDateChoice.RELATIVE -> onApply(null, true)
+                    }
+                },
+                shape = ArmyristPanelShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ArmyristColors.PrimaryControl,
+                    contentColor = ArmyristColors.OnDark
+                )
+            ) { Text("적용") }
+        }
     )
+
     if (calendar) {
-        val state = rememberDatePickerState(initialSelectedDateMillis = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        )
         DatePickerDialog(
             onDismissRequest = { calendar = false },
-            confirmButton = { TextButton(onClick = { state.selectedDateMillis?.let { onApply(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate(), false) }; calendar = false }) { Text("적용") } },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        state.selectedDateMillis?.let {
+                            date = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()
+                            choice = BaseDateChoice.SPECIFIC
+                        }
+                        calendar = false
+                    }
+                ) { Text("확인") }
+            },
             dismissButton = { TextButton(onClick = { calendar = false }) { Text("취소") } }
         ) { DatePicker(state = state) }
+    }
+}
+
+@Composable
+private fun BaseDateChoiceRow(
+    selected: Boolean,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = ArmyristPanelShape,
+        color = if (selected) ArmyristColors.SecondaryControl else ArmyristColors.WorkSurface,
+        border = BorderStroke(
+            1.dp,
+            if (selected) ArmyristColors.PrimaryControl else ArmyristColors.Border
+        )
+    ) {
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RadioButton(selected = selected, onClick = onClick)
+            Column(Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.SemiBold)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ArmyristColors.SecondaryText
+                )
+            }
+        }
     }
 }
 
