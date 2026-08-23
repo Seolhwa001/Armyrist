@@ -176,7 +176,7 @@ private fun TimePlanPrepareScreen(
     var editAction by remember { mutableStateOf<TimePlanActionItem?>(null) }
     var addForPoint by remember { mutableStateOf<String?>(null) }
     var batchAdd by remember { mutableStateOf(false) }
-    var batchShift by remember { mutableStateOf(false) }
+    var batchPointMove by remember { mutableStateOf(false) }
     var groupManager by remember { mutableStateOf(false) }
     var moveAction by remember { mutableStateOf<TimePlanActionItem?>(null) }
     var batchGroup by remember { mutableStateOf(false) }
@@ -294,10 +294,10 @@ private fun TimePlanPrepareScreen(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         OutlinedButton(
-                            onClick = { batchShift = true },
+                            onClick = { batchPointMove = true },
                             modifier = Modifier.weight(1f),
                             shape = ArmyristPanelShape
-                        ) { Text("시간 이동") }
+                        ) { Text("지점 이동") }
                         OutlinedButton(
                             onClick = { batchGroup = true },
                             modifier = Modifier.weight(1f),
@@ -520,16 +520,24 @@ private fun TimePlanPrepareScreen(
         )
     }
 
-    if (batchShift) {
-        NumberInputDialog(
-            title = "선택 실시사항 시간 이동",
-            description = "+/- 분 단위로 입력합니다.",
-            initial = "10",
-            onDismiss = { batchShift = false },
-            onConfirm = { minutes ->
-                onCommit(TimePlanExecutionRules.batchShift(plan, selectedActions.toSet(), minutes))
-                selectedActions = emptyList()
-                batchShift = false
+    if (batchPointMove) {
+        BatchActionMoveDialog(
+            plan = plan,
+            selectedActionIds = selectedActions.toSet(),
+            onDismiss = { batchPointMove = false },
+            onMove = { targetPointId ->
+                val candidate =
+                    TimePlanExecutionRules.batchMoveActionsToParentPreservingTime(
+                        plan = plan,
+                        actionIds = selectedActions.toSet(),
+                        targetParentPointId = targetPointId
+                    )
+                if (!onCommit(candidate)) {
+                    message = "선택한 실시사항을 이동하지 못했습니다."
+                } else {
+                    selectedActions = emptyList()
+                }
+                batchPointMove = false
             }
         )
     }
@@ -1321,6 +1329,108 @@ private fun ActionMoveDialog(
                 onClick = { onMove(target) },
                 colors = ButtonDefaults.buttonColors(containerColor = ArmyristColors.PrimaryControl)
             ) { Text("이동") }
+        }
+    )
+}
+
+@Composable
+private fun BatchActionMoveDialog(
+    plan: DateAwareTimePlan,
+    selectedActionIds: Set<String>,
+    onDismiss: () -> Unit,
+    onMove: (String) -> Unit
+) {
+    val pointIds = DateTimePlanRules.nodeIds(plan)
+    var target by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false
+        ),
+        title = {
+            Text(
+                "선택 실시사항 지점 이동",
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "선택한 실시사항 ${selectedActionIds.size}개를 이동할 지점을 선택합니다. " +
+                        "실시사항의 지정 시간은 변경되지 않습니다.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ArmyristColors.SecondaryText
+                )
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 420.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(pointIds, key = { it }) { pointId ->
+                        val selected = pointId == target
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { target = pointId },
+                            shape = ArmyristPanelShape,
+                            color =
+                                if (selected) ArmyristColors.SecondaryControl
+                                else ArmyristColors.WorkSurface,
+                            border = BorderStroke(
+                                1.dp,
+                                if (selected) ArmyristColors.PrimaryControl
+                                else ArmyristColors.Border
+                            )
+                        ) {
+                            Row(
+                                Modifier.padding(
+                                    horizontal = 12.dp,
+                                    vertical = 10.dp
+                                ),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = selected,
+                                    onClick = { target = pointId }
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        TimePlanExecutionRules.pointName(plan, pointId),
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    TimePlanExecutionRules
+                                        .pointDateTime(plan, pointId)
+                                        ?.let {
+                                            Text(
+                                                it.format(dateClock),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = ArmyristColors.SecondaryText
+                                            )
+                                        }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("취소")
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = target != null,
+                onClick = { target?.let(onMove) },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ArmyristColors.PrimaryControl
+                )
+            ) {
+                Text("이동")
+            }
         }
     )
 }
