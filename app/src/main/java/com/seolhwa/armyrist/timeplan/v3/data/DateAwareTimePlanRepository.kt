@@ -128,9 +128,25 @@ class DateAwareTimePlanRepository(context: Context) {
         val normalized =
             DateTimePlanRules.normalizeTopology(deletionSafe)
 
-        if (DateTimePlanRules.validateForPersistence(normalized).isNotEmpty()) {
-            return false
-        }
+        // Point deletion is a narrowing operation: it removes one node and its
+        // children. It must not be blocked by unrelated legacy Action defects that
+        // already existed elsewhere in the plan (for example an old blank-content
+        // Action produced by an earlier patch generation).
+        //
+        // Validate only the invariants that this transaction itself can break.
+        val nodeIdsAfterDelete = DateTimePlanRules.nodeIds(normalized)
+        if (normalized.id.isBlank() || normalized.title.isBlank()) return false
+        if (nodeIdsAfterDelete.distinct().size != nodeIdsAfterDelete.size) return false
+
+        val expectedPairs = nodeIdsAfterDelete.zipWithNext().toSet()
+        val actualPairs = normalized.links.map { it.fromNodeId to it.toNodeId }.toSet()
+        if (normalized.links.isNotEmpty() && actualPairs != expectedPairs) return false
+        if (normalized.links.any { it.durationMinutes != null && it.durationMinutes < 0 }) return false
+
+        val validNodes = nodeIdsAfterDelete.toSet()
+        val validGroups = normalized.actionGroups.map { it.id }.toSet()
+        if (normalized.actions.any { it.parentPointId !in validNodes }) return false
+        if (normalized.actions.any { it.groupId != null && it.groupId !in validGroups }) return false
 
         val next = plans.map { plan ->
             if (plan.id == planId) normalized else plan
