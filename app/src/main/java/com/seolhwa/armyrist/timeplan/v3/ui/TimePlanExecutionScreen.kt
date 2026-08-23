@@ -514,7 +514,9 @@ private fun TimePlanExecuteScreen(
                     onClick = { view = TimePlanExecutionView.GROUP },
                     modifier = Modifier.weight(1f)
                 )
-            }            if (plan.actions.isNotEmpty()) {
+            }
+
+            if (plan.actions.isNotEmpty()) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     OutlinedButton(onClick = {
                         bulkSelect = true
