@@ -92,85 +92,79 @@ class DateAwareTimePlanRepository(context: Context) {
         val isMidway = current.midwayEvents.any { it.id == eventId }
         if (!isFinal && !isMidway) return false
 
-        val withoutEvent =
-            if (isFinal) {
-                current.copy(finalPoint = null)
-            } else {
-                current.copy(
-                    midwayEvents = current.midwayEvents
-                        .filterNot { it.id == eventId }
-                        .sortedBy { it.order }
-                        .mapIndexed { index, event ->
-                            event.copy(order = index)
+        // Deletion is intentionally implemented as a narrowing transaction.
+        // Do not run whole-plan validators here: older plans can legitimately carry
+        // unresolved temporal conflicts or legacy Action defects that are unrelated
+        // to the point being removed.
+        val survivingMidways =
+            current.midwayEvents
+                .filterNot { it.id == eventId }
+                .sortedBy { it.order }
+                .mapIndexed { index, event -> event.copy(order = index) }
+
+        val withoutPoint =
+            current.copy(
+                midwayEvents = survivingMidways,
+                finalPoint = if (isFinal) null else current.finalPoint,
+                // Old links are discarded completely. They will be rebuilt only
+                // from the nodes that survive this transaction.
+                links = emptyList(),
+                // Child Actions of the removed point are deleted in the same snapshot.
+                actions = current.actions.filterNot { it.parentPointId == eventId },
+                updatedAt = System.currentTimeMillis().toString()
+            )
+
+        val survivingNodeIds = DateTimePlanRules.nodeIds(withoutPoint).toSet()
+        val survivingGroupIds = withoutPoint.actionGroups.map { it.id }.toSet()
+
+        // Sanitize only references that cannot survive the delete.
+        // Unrelated Action contents/completion/notification state are preserved.
+        val sanitized =
+            TimePlanExecutionRules.normalizeActionOrder(
+                withoutPoint.copy(
+                    actions = withoutPoint.actions
+                        .filter { it.parentPointId in survivingNodeIds }
+                        .map { action ->
+                            if (action.groupId != null && action.groupId !in survivingGroupIds) {
+                                action.copy(groupId = null)
+                            } else {
+                                action
+                            }
                         }
                 )
-            }
-
-        val withoutChildren =
-            TimePlanExecutionRules.removePointActions(withoutEvent, eventId)
-
-        // Deletion is an atomic parent+children operation. Older plans may contain
-        // stale Action parent/group references from previous patch generations;
-        // sanitize those references here instead of rejecting the point deletion.
-        val validNodeIds = DateTimePlanRules.nodeIds(withoutChildren).toSet()
-        val validGroupIds = withoutChildren.actionGroups.map { it.id }.toSet()
-        val deletionSafe = TimePlanExecutionRules.normalizeActionOrder(
-            withoutChildren.copy(
-                actions = withoutChildren.actions
-                    .filter { it.parentPointId in validNodeIds }
-                    .map { action ->
-                        if (action.groupId != null && action.groupId !in validGroupIds) {
-                            action.copy(groupId = null)
-                        } else action
-                    }
             )
-        )
-        // Rebuild the topology from the surviving nodes only.
-        //
-        // Point deletion must not inherit stale links from older patch generations.
-        // Clear links first so normalizeTopology() creates only the adjacent pairs
-        // that remain after the point and its child actions are removed.
-        val normalized =
+
+        val rebuilt =
             DateTimePlanRules.normalizeTopology(
-                deletionSafe.copy(
-                    links = emptyList(),
-                    updatedAt = System.currentTimeMillis().toString()
-                )
+                sanitized.copy(links = emptyList())
             )
 
-        // Point deletion is a narrowing operation: it removes one node and its
-        // children. It must not be blocked by unrelated legacy Action defects that
-        // already existed elsewhere in the plan (for example an old blank-content
-        // Action produced by an earlier patch generation).
-        //
-        // Validate only the invariants that this transaction itself can break.
-        val nodeIdsAfterDelete = DateTimePlanRules.nodeIds(normalized)
-        if (normalized.id.isBlank() || normalized.title.isBlank()) return false
-        if (nodeIdsAfterDelete.distinct().size != nodeIdsAfterDelete.size) return false
-
-        val expectedPairs = nodeIdsAfterDelete.zipWithNext().toSet()
-        val actualPairs = normalized.links.map { it.fromNodeId to it.toNodeId }.toSet()
-        if (normalized.links.isNotEmpty() && actualPairs != expectedPairs) return false
-        // A pre-existing temporal conflict is user-visible validation state, not a
-        // reason to reject deletion. Removing a point is a narrowing operation and
-        // may proceed even while another surviving interval still has a negative
-        // derived duration.
-        val validNodes = nodeIdsAfterDelete.toSet()
-        val validGroups = normalized.actionGroups.map { it.id }.toSet()
-        if (normalized.actions.any { it.parentPointId !in validNodes }) return false
-        if (normalized.actions.any { it.groupId != null && it.groupId !in validGroups }) return false
-
+        // Persist the complete replacement snapshot once. There are deliberately no
+        // additional whole-plan validation gates between reconstruction and persist.
         val next = plans.map { plan ->
-            if (plan.id == planId) normalized else plan
+            if (plan.id == planId) rebuilt else plan
         }
 
-        if (!persist(next)) return false
+        if (!persist(next)) {
+            android.util.Log.e(
+                "Armyrist-TimePlan",
+                "MIDWAY delete persist failed plan=$planId event=$eventId"
+            )
+            return false
+        }
+
         plans = next
 
-        // Reminder scheduling is secondary to core data integrity. A platform alarm
-        // failure must never crash or roll back an already-persisted TimePlan edit.
+        // Alarm reconciliation is secondary. A platform-side scheduling failure must
+        // never undo or report failure for an already-persisted point deletion.
         runCatching {
             TimePlanActionNotificationManager.reconcile(appContext, this)
+        }.onFailure {
+            android.util.Log.e(
+                "Armyrist-TimePlan",
+                "Post-delete notification reconcile failed plan=$planId event=$eventId",
+                it
+            )
         }
 
         return true
