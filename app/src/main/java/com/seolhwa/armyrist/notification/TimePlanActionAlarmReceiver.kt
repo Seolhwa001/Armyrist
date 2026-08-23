@@ -24,6 +24,16 @@ class TimePlanActionAlarmReceiver : BroadcastReceiver() {
         ) return
 
         TimePlanActionNotificationManager.createChannel(context)
+
+        if (action.notificationMode == ActionNotificationMode.MUSIC) {
+            TimePlanActionNotificationManager.startMusicAlarm(
+                context,
+                plan.id,
+                action.id
+            )
+            return
+        }
+
         val scheduledText =
             action.scheduledDateTime.format(DateTimeFormatter.ofPattern("HH:mm"))
         val secondaryText = "${plan.title} · ${scheduledText} 예정"

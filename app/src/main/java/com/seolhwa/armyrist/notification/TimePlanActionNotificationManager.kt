@@ -20,7 +20,7 @@ import java.time.ZoneId
 
 object TimePlanActionNotificationManager {
     private const val CHANNEL_ID_SIMPLE = "timeplan_action_reminder_simple_v2"
-    private const val CHANNEL_ID_MUSIC = "timeplan_action_reminder_music_v2"
+    private const val CHANNEL_ID_MUSIC = "timeplan_action_reminder_music_loop_v3"
     private const val PREFS = "armyrist_timeplan_action_alarms"
     private const val KEY_IDS = "scheduled_ids"
 
@@ -40,18 +40,69 @@ object TimePlanActionNotificationManager {
                 })
             }
             if (manager.getNotificationChannel(CHANNEL_ID_MUSIC) == null) {
-                val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                manager.createNotificationChannel(NotificationChannel(CHANNEL_ID_MUSIC, "시간계획 · 음악 알림", NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = "기기의 기본 알람음을 사용해 더 분명하게 시간계획 실시사항을 알립니다."
-                    setSound(alarmUri, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
-                    enableVibration(true)
-                })
+                manager.createNotificationChannel(
+                    NotificationChannel(
+                        CHANNEL_ID_MUSIC,
+                        "시간계획 · 음악 알림",
+                        NotificationManager.IMPORTANCE_HIGH
+                    ).apply {
+                        description = "사용자가 중지할 때까지 반복되는 시간계획 음악 알림입니다."
+                        // Sound is played by TimePlanMusicAlarmService so it can loop
+                        // until explicit acknowledgement.
+                        setSound(null, null)
+                        enableVibration(true)
+                    }
+                )
             }
         }
     }
 
     fun channelId(action: TimePlanActionItem): String =
         if (action.notificationMode == com.seolhwa.armyrist.timeplan.v3.domain.ActionNotificationMode.MUSIC) CHANNEL_ID_MUSIC else CHANNEL_ID_SIMPLE
+
+    fun musicChannelId(): String = CHANNEL_ID_MUSIC
+
+    fun notificationId(planId: String, actionId: String): Int =
+        requestCode(planId, actionId)
+
+    fun startMusicAlarm(context: Context, planId: String, actionId: String) {
+        val intent = Intent(context, TimePlanMusicAlarmService::class.java).apply {
+            action = TimePlanMusicAlarmService.ACTION_START
+            putExtra(EXTRA_PLAN_ID, planId)
+            putExtra(EXTRA_ACTION_ID, actionId)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(intent)
+        } else {
+            context.startService(intent)
+        }
+    }
+
+    fun stopMusicAlarm(context: Context, planId: String, actionId: String) {
+        context.startService(
+            Intent(context, TimePlanMusicAlarmService::class.java).apply {
+                action = TimePlanMusicAlarmService.ACTION_STOP
+                putExtra(EXTRA_PLAN_ID, planId)
+                putExtra(EXTRA_ACTION_ID, actionId)
+            }
+        )
+    }
+
+    fun stopMusicPendingIntent(
+        context: Context,
+        planId: String,
+        actionId: String
+    ): PendingIntent =
+        PendingIntent.getService(
+            context,
+            requestCode(planId, actionId) xor 0x40000000,
+            Intent(context, TimePlanMusicAlarmService::class.java).apply {
+                action = TimePlanMusicAlarmService.ACTION_STOP
+                putExtra(EXTRA_PLAN_ID, planId)
+                putExtra(EXTRA_ACTION_ID, actionId)
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag()
+        )
 
     fun isEligible(
         context: Context,
@@ -138,6 +189,7 @@ object TimePlanActionNotificationManager {
         }
         context.getSystemService(NotificationManager::class.java)
             .cancel(requestCode(planId, actionId))
+        runCatching { stopMusicAlarm(context, planId, actionId) }
     }
 
     fun openActionPendingIntent(context: Context, planId: String, actionId: String): PendingIntent =
