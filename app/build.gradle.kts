@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 106
-        versionName = "0.6.18-completion-rail-visual-fix"
+        versionCode = 107
+        versionName = "0.6.19-relative-action-date-display"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
