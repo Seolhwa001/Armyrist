@@ -20,6 +20,8 @@ object ArmyristColors {
 
     // Dark military control frame
     val Header = Color(0xFF2F3A26)
+    val HeaderActionSurface = Color(0xFF3B4931)
+    val HeaderActionBorder = Color(0xFFB9C1AE)
     val HeaderRaised = Color(0xFF424A37)
     val PrimaryControl = Color(0xFF4F5A3C)
     val SecondaryControl = Color(0xFFD8DDCC)
