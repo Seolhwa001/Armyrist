@@ -91,4 +91,111 @@ class TimePlanExecutionRulesTest {
         val cleaned = TimePlanExecutionRules.removePointActions(base, "mid")
         assertTrue(cleaned.actions.isEmpty())
     }
+
+    @Test fun movingActionBetweenPointsPreservesAbsoluteScheduledTime() {
+        val base = plan().copy(
+            actions = listOf(
+                TimePlanActionItem(
+                    id = "a",
+                    parentPointId = "mid",
+                    content = "이동 대상",
+                    scheduledDateTime = LocalDateTime.of(2026, 8, 24, 0, 10)
+                )
+            )
+        )
+
+        val moved = TimePlanExecutionRules.moveActionToParentPreservingTime(
+            plan = base,
+            actionId = "a",
+            targetParentPointId = DateTimePlanRules.END_ID
+        )
+
+        val action = moved.actions.single { it.id == "a" }
+        assertEquals(DateTimePlanRules.END_ID, action.parentPointId)
+        assertEquals(LocalDateTime.of(2026, 8, 24, 0, 10), action.scheduledDateTime)
+    }
+
+
+    @Test fun detailCommitDoesNotRestoreOldParentAfterActionWasMovedElsewhere() {
+        val original = plan().copy(
+            actions = listOf(
+                TimePlanActionItem(
+                    id = "a",
+                    parentPointId = "mid",
+                    content = "이동 대상",
+                    scheduledDateTime = LocalDateTime.of(2026, 8, 24, 21, 0)
+                )
+            )
+        )
+
+        val moved = original.copy(
+            actions = listOf(
+                original.actions.single().copy(
+                    parentPointId = DateTimePlanRules.END_ID
+                )
+            )
+        )
+
+        // Represents a point-time edit from a detail screen that still has the
+        // original Action snapshot.
+        val staleDetailCandidate = original.copy(
+            end = original.end.copy(
+                value = DateTimeValue.explicit(
+                    original.end.value.value!!.plusMinutes(10)
+                )
+            )
+        )
+
+        val rebased = TimePlanExecutionRules.rebaseDetailActions(
+            base = original,
+            candidate = staleDetailCandidate,
+            current = moved
+        )
+
+        val action = rebased.actions.single()
+        assertEquals(DateTimePlanRules.END_ID, action.parentPointId)
+        assertEquals(LocalDateTime.of(2026, 8, 24, 21, 0), action.scheduledDateTime)
+    }
+
+    @Test fun detailTogetherMoveReplaysOnlyTimeDeltaOnLatestMovedAction() {
+        val original = plan().copy(
+            actions = listOf(
+                TimePlanActionItem(
+                    id = "a",
+                    parentPointId = "mid",
+                    content = "이동 대상",
+                    scheduledDateTime = LocalDateTime.of(2026, 8, 24, 21, 0)
+                )
+            )
+        )
+
+        val moved = original.copy(
+            actions = listOf(
+                original.actions.single().copy(
+                    parentPointId = DateTimePlanRules.END_ID,
+                    note = "새 비고"
+                )
+            )
+        )
+
+        val togetherMoveCandidate = original.copy(
+            actions = listOf(
+                original.actions.single().copy(
+                    scheduledDateTime = LocalDateTime.of(2026, 8, 24, 21, 10)
+                )
+            )
+        )
+
+        val rebased = TimePlanExecutionRules.rebaseDetailActions(
+            base = original,
+            candidate = togetherMoveCandidate,
+            current = moved
+        )
+
+        val action = rebased.actions.single()
+        assertEquals(DateTimePlanRules.END_ID, action.parentPointId)
+        assertEquals("새 비고", action.note)
+        assertEquals(LocalDateTime.of(2026, 8, 24, 21, 10), action.scheduledDateTime)
+    }
+
 }
