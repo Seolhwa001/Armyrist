@@ -7,6 +7,7 @@ import android.content.Intent
 import androidx.core.app.NotificationCompat
 import com.seolhwa.armyrist.timeplan.v3.data.DateAwareTimePlanRepository
 import com.seolhwa.armyrist.timeplan.v3.domain.ActionCompletionState
+import java.time.format.DateTimeFormatter
 
 class TimePlanActionAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -23,14 +24,22 @@ class TimePlanActionAlarmReceiver : BroadcastReceiver() {
         ) return
 
         TimePlanActionNotificationManager.createChannel(context)
+        val scheduledText =
+            action.scheduledDateTime.format(DateTimeFormatter.ofPattern("HH:mm"))
+        val secondaryText = "${plan.title} · ${scheduledText} 예정"
+
         val notification = NotificationCompat.Builder(
             context,
             TimePlanActionNotificationManager.channelId()
         )
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle(plan.title)
-            .setContentText(action.content)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(action.content))
+            .setContentTitle(action.content)
+            .setContentText(secondaryText)
+            .setStyle(
+                NotificationCompat.BigTextStyle()
+                    .setBigContentTitle(action.content)
+                    .bigText(secondaryText)
+            )
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
