@@ -9,6 +9,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import com.seolhwa.armyrist.TimePlanExecutionActivity
 import com.seolhwa.armyrist.timeplan.v3.data.DateAwareTimePlanRepository
 import com.seolhwa.armyrist.timeplan.v3.domain.ActionCompletionState
@@ -17,7 +19,8 @@ import com.seolhwa.armyrist.timeplan.v3.domain.TimePlanActionItem
 import java.time.ZoneId
 
 object TimePlanActionNotificationManager {
-    private const val CHANNEL_ID = "timeplan_action_reminder_v1"
+    private const val CHANNEL_ID_SIMPLE = "timeplan_action_reminder_simple_v2"
+    private const val CHANNEL_ID_MUSIC = "timeplan_action_reminder_music_v2"
     private const val PREFS = "armyrist_timeplan_action_alarms"
     private const val KEY_IDS = "scheduled_ids"
 
@@ -31,21 +34,24 @@ object TimePlanActionNotificationManager {
     fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = context.getSystemService(NotificationManager::class.java)
-            if (manager.getNotificationChannel(CHANNEL_ID) == null) {
-                manager.createNotificationChannel(
-                    NotificationChannel(
-                        CHANNEL_ID,
-                        "시간계획 실시사항 알림",
-                        NotificationManager.IMPORTANCE_HIGH
-                    ).apply {
-                        description = "시간계획 수행 모드 실시사항 예정 시각 알림"
-                    }
-                )
+            if (manager.getNotificationChannel(CHANNEL_ID_SIMPLE) == null) {
+                manager.createNotificationChannel(NotificationChannel(CHANNEL_ID_SIMPLE, "시간계획 · 간단한 알림", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "짧은 기본 알림음으로 시간계획 실시사항을 알립니다."
+                })
+            }
+            if (manager.getNotificationChannel(CHANNEL_ID_MUSIC) == null) {
+                val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                manager.createNotificationChannel(NotificationChannel(CHANNEL_ID_MUSIC, "시간계획 · 음악 알림", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "기기의 기본 알람음을 사용해 더 분명하게 시간계획 실시사항을 알립니다."
+                    setSound(alarmUri, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
+                    enableVibration(true)
+                })
             }
         }
     }
 
-    fun channelId(): String = CHANNEL_ID
+    fun channelId(action: TimePlanActionItem): String =
+        if (action.notificationMode == com.seolhwa.armyrist.timeplan.v3.domain.ActionNotificationMode.MUSIC) CHANNEL_ID_MUSIC else CHANNEL_ID_SIMPLE
 
     fun isEligible(
         context: Context,
@@ -56,7 +62,7 @@ object TimePlanActionNotificationManager {
             .atZone(ZoneId.systemDefault())
             .toInstant()
             .toEpochMilli()
-        return action.notificationEnabled &&
+        return action.notificationMode != com.seolhwa.armyrist.timeplan.v3.domain.ActionNotificationMode.NONE &&
             action.completionState == ActionCompletionState.INCOMPLETE &&
             trigger > nowMillis &&
             notificationPermissionGranted(context)

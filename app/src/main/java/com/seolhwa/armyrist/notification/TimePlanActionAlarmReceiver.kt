@@ -19,7 +19,7 @@ class TimePlanActionAlarmReceiver : BroadcastReceiver() {
 
         if (
             action.completionState != ActionCompletionState.INCOMPLETE ||
-            !action.notificationEnabled ||
+            action.notificationMode == com.seolhwa.armyrist.timeplan.v3.domain.ActionNotificationMode.NONE ||
             !TimePlanActionNotificationManager.notificationPermissionGranted(context)
         ) return
 
@@ -30,7 +30,7 @@ class TimePlanActionAlarmReceiver : BroadcastReceiver() {
 
         val notification = NotificationCompat.Builder(
             context,
-            TimePlanActionNotificationManager.channelId()
+            TimePlanActionNotificationManager.channelId(action)
         )
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle(action.content)
