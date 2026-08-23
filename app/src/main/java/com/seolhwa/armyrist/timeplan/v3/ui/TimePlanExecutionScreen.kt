@@ -301,7 +301,8 @@ private fun TimePlanPrepareScreen(
                                                     action.groupId?.let { gid ->
                                                         plan.actionGroups.firstOrNull { it.id == gid }?.let { append(" · ${it.name}") }
                                                     }
-                                                    if (action.notificationEnabled) append(" · 알림")
+                                                    if (action.notificationMode == ActionNotificationMode.SIMPLE) append(" · 간단한 알림")
+                                                    if (action.notificationMode == ActionNotificationMode.MUSIC) append(" · 음악 알림")
                                                 },
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = ArmyristColors.SecondaryText
@@ -551,15 +552,12 @@ private fun TimePlanExecuteScreen(
                                 color = ArmyristColors.SecondaryText
                             )
                             OutlinedButton(
-                                onClick = {
-                                    selectedActionIds = emptyList()
-                                    bulkSelect = false
-                                },
+                                onClick = { selectedActionIds = emptyList(); bulkSelect = false },
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = ArmyristPanelShape
-                            ) {
-                                Text("선택 종료")
-                            }
+                                shape = ArmyristPanelShape,
+                                border = BorderStroke(1.dp, ArmyristColors.Border),
+                                colors = ButtonDefaults.outlinedButtonColors(containerColor = ArmyristColors.WorkSurface, contentColor = ArmyristColors.PrimaryText)
+                            ) { Text("선택 종료", fontWeight = FontWeight.SemiBold) }
                             Row(
                                 Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -778,7 +776,8 @@ private fun ActionEditDialog(
     var editDateTime by remember { mutableStateOf(false) }
     var note by remember(initial?.id) { mutableStateOf(initial?.note.orEmpty()) }
     var groupId by remember(initial?.id) { mutableStateOf(initial?.groupId) }
-    var notify by remember(initial?.id) { mutableStateOf(initial?.notificationEnabled ?: false) }
+    var notificationMode by remember(initial?.id) { mutableStateOf(initial?.notificationMode ?: ActionNotificationMode.NONE) }
+    var notificationMenu by remember { mutableStateOf(false) }
     var groupMenu by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -820,10 +819,15 @@ private fun ActionEditDialog(
                         }
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(checked = notify, onCheckedChange = { notify = it })
-                    Spacer(Modifier.width(8.dp))
-                    Text("예정 알림")
+                Box {
+                    OutlinedButton(onClick = { notificationMenu = true }, modifier = Modifier.fillMaxWidth(), shape = ArmyristPanelShape) {
+                        Text(when (notificationMode) { ActionNotificationMode.NONE -> "알림 없음"; ActionNotificationMode.SIMPLE -> "간단한 알림"; ActionNotificationMode.MUSIC -> "음악 알림" })
+                    }
+                    DropdownMenu(expanded = notificationMenu, onDismissRequest = { notificationMenu = false }) {
+                        DropdownMenuItem(text = { Text("알림 없음") }, onClick = { notificationMode = ActionNotificationMode.NONE; notificationMenu = false })
+                        DropdownMenuItem(text = { Text("간단한 알림") }, onClick = { notificationMode = ActionNotificationMode.SIMPLE; notificationMenu = false })
+                        DropdownMenuItem(text = { Text("음악 알림") }, onClick = { notificationMode = ActionNotificationMode.MUSIC; notificationMenu = false })
+                    }
                 }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             }
@@ -845,7 +849,8 @@ private fun ActionEditDialog(
                             content = content.trim(),
                             scheduledDateTime = scheduledDateTime,
                             completionState = initial?.completionState ?: ActionCompletionState.INCOMPLETE,
-                            notificationEnabled = notify,
+                            notificationEnabled = notificationMode != ActionNotificationMode.NONE,
+                            notificationMode = notificationMode,
                             groupId = groupId,
                             note = note.trim().ifBlank { null },
                             order = initial?.order ?: 0,
