@@ -434,10 +434,10 @@ private fun DateAwarePlanList(
     Scaffold(
         topBar = {
             ArmyristTopBar(
-                "시간계획",
-                "TIME PLAN · DATE / MULTI-DAY",
-                "홈",
-                onHome
+                title = "시간계획",
+                subtitle = "TIME PLAN · DATE / MULTI-DAY",
+                onLeading = onHome,
+                leadingIcon = ArmyristTopBarLeadingIcon.HOME
             )
         }
     ) { padding ->
@@ -500,8 +500,8 @@ private fun DateAwarePlanList(
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 24.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                contentPadding = PaddingValues(14.dp, 10.dp, 14.dp, 24.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 item(key = "timeplan-import-trash") {
                     Row(
@@ -576,11 +576,14 @@ private fun DateAwarePlanList(
                                 scaleY = if (isDragging) 1.01f else 1f
                                 shadowElevation = if (isDragging) 10f else 0f
                             },
-                        shape = ArmyristPanelShape,
+                        shape = RoundedCornerShape(10.dp),
                         border = BorderStroke(
                             1.dp,
                             if (isDragging) ArmyristColors.PrimaryControl
-                            else ArmyristColors.Divider
+                            else ArmyristColors.SoftBorder
+                        ),
+                        elevation = CardDefaults.cardElevation(
+                            defaultElevation = if (isDragging) 6.dp else 1.dp
                         ),
                         colors = CardDefaults.cardColors(
                             containerColor = ArmyristColors.RaisedSurface
@@ -589,12 +592,12 @@ private fun DateAwarePlanList(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 10.dp, vertical = 9.dp),
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(width = 42.dp, height = 52.dp)
+                                    .size(width = 38.dp, height = 52.dp)
                                     .pointerInput(plan.id, orderedPlans.size) {
                                         detectDragGesturesAfterLongPress(
                                             onDragStart = {
@@ -734,7 +737,7 @@ private fun DateAwarePlanList(
                             Column(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .padding(start = 2.dp),
+                                    .padding(start = 6.dp),
                                 verticalArrangement = Arrangement.Center
                             ) {
                                 Text(
@@ -779,7 +782,7 @@ private fun DateAwarePlanList(
                                 Icon(
                                     Icons.Outlined.DeleteOutline,
                                     contentDescription = "삭제",
-                                    tint = ArmyristColors.Danger
+                                    tint = ArmyristColors.DangerMuted
                                 )
                             }
                         }
@@ -823,7 +826,7 @@ private fun DateAwarePlanList(
                                 Icon(
                                     Icons.Outlined.DeleteOutline,
                                     contentDescription = "삭제",
-                                    tint = ArmyristColors.Danger
+                                    tint = ArmyristColors.DangerMuted
                                 )
                             }
                         }
@@ -853,17 +856,25 @@ private fun DateAwarePlanList(
                 item(key = "timeplan-reorder-help") {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = ArmyristPanelShape,
-                        color = ArmyristColors.WorkSurface,
-                        border = BorderStroke(1.dp, ArmyristColors.Divider)
+                        shape = RoundedCornerShape(8.dp),
+                        color = ArmyristColors.InfoSurface
                     ) {
-                        Text(
-                            "왼쪽 순서 핸들을 길게 누른 뒤 끌어서 순서를 변경할 수 있습니다. " +
-                                "화면 위·아래 끝으로 이동하면 목록이 자동으로 스크롤됩니다.",
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = ArmyristColors.SecondaryText
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "ⓘ",
+                                color = ArmyristColors.MutedText,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "왼쪽 핸들을 길게 눌러 순서를 변경합니다. 화면 끝에서는 자동 스크롤됩니다.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = ArmyristColors.MutedText
+                            )
+                        }
                     }
                 }
             }
