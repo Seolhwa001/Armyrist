@@ -786,14 +786,18 @@ private fun shiftWholePlanDates(plan: DateAwareTimePlan, days: Long): DateAwareT
     )
 }
 
+private enum class BaseDateChoice {
+    TODAY,
+    SPECIFIC,
+    RELATIVE
+}
+
 @Composable
 private fun TimePlanBaseDateDialog(
     plan: DateAwareTimePlan,
     onDismiss: () -> Unit,
     onApply: (LocalDate?, Boolean) -> Unit
 ) {
-    enum class BaseDateChoice { TODAY, SPECIFIC, RELATIVE }
-
     var calendar by remember { mutableStateOf(false) }
     var date by remember { mutableStateOf(plan.start.value.value?.toLocalDate() ?: LocalDate.now()) }
     var choice by remember {
