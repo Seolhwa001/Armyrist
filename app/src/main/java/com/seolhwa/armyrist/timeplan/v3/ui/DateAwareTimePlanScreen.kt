@@ -1519,42 +1519,260 @@ private fun planSpanText(p: DateAwareTimePlan): String {
 }
 
 @Composable
-private fun DateTimeEditorDialog(title:String,initial:LocalDateTime?,onDismiss:()->Unit,onConfirm:(LocalDateTime)->Unit){
-    val base=initial?:LocalDateTime.now().withSecond(0).withNano(0)
-    var candidate by remember(initial){mutableStateOf(base)}
-    var raw by remember(initial){mutableStateOf("%02d%02d".format(base.hour,base.minute))}
-    var calendar by remember{mutableStateOf(false)}
-    Dialog(onDismissRequest=onDismiss){Card(Modifier.fillMaxWidth(),shape=ArmyristPanelShape){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
-        Text(title,style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)
-        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween){OutlinedButton(onClick={candidate=candidate.minusDays(1)}){Text("-1일")};Text(candidate.toLocalDate().format(DateTimeFormatter.ofPattern("yyyy.MM.dd")),fontWeight=FontWeight.Bold);OutlinedButton(onClick={candidate=candidate.plusDays(1)}){Text("+1일")}}
-        TextButton(onClick={calendar=true},modifier=Modifier.fillMaxWidth()){Text("달력에서 선택")}
-        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(18.dp)){
-            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("시간", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(4.dp))
-                Wheel((0..23).toList(),candidate.hour,{ value -> val next=candidate.withHour(value); candidate=next; raw="%02d%02d".format(next.hour,next.minute)},Modifier.fillMaxWidth())
-            }
-            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("분", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(4.dp))
-                Wheel((0..55 step 5).toList(),nearestFive(candidate.minute),{ value -> val next=candidate.withMinute(value); candidate=next; raw="%02d%02d".format(next.hour,next.minute)},Modifier.fillMaxWidth())
-            }
-        }
-        OutlinedTextField(value=raw,onValueChange={v->val d=v.filter(Char::isDigit).take(4);raw=d;parseHHMM(d)?.let{candidate=candidate.withHour(it.first).withMinute(it.second)}},label={Text("직접입력 · HHMM")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),modifier=Modifier.fillMaxWidth())
-        Surface(
+private fun DateTimeEditorDialog(
+    title: String,
+    initial: LocalDateTime?,
+    onDismiss: () -> Unit,
+    onConfirm: (LocalDateTime) -> Unit
+) {
+    val base = initial ?: LocalDateTime.now().withSecond(0).withNano(0)
+    var candidate by remember(initial) { mutableStateOf(base) }
+    var raw by remember(initial) {
+        mutableStateOf("%02d%02d".format(base.hour, base.minute))
+    }
+    var calendar by remember { mutableStateOf(false) }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false
+        )
+    ) {
+        Card(
             modifier = Modifier.fillMaxWidth(),
             shape = ArmyristPanelShape,
-            color = ArmyristColors.WorkSurface,
-            border = BorderStroke(1.dp, ArmyristColors.Border)
+            border = BorderStroke(1.dp, ArmyristColors.Border),
+            colors = CardDefaults.cardColors(
+                containerColor = ArmyristColors.RaisedSurface
+            )
         ) {
-            Column(Modifier.padding(10.dp)) {
-                Text("변경값", style = MaterialTheme.typography.labelSmall, color = ArmyristColors.SecondaryText)
-                Text(candidate.format(DateTimeFormatter.ofPattern("MM.dd HH:mm")),fontWeight=FontWeight.Bold,color=ArmyristColors.PrimaryControl)
+            Column(
+                Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = ArmyristColors.PrimaryText
+                )
+
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { candidate = candidate.minusDays(1) },
+                        modifier = Modifier.weight(1f).heightIn(min = 38.dp),
+                        shape = ArmyristPanelShape,
+                        border = BorderStroke(1.dp, ArmyristColors.Border),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text("-1일")
+                    }
+
+                    Surface(
+                        modifier = Modifier.weight(2f),
+                        shape = ArmyristPanelShape,
+                        color = ArmyristColors.WorkSurface,
+                        border = BorderStroke(1.dp, ArmyristColors.Border)
+                    ) {
+                        Text(
+                            candidate.toLocalDate()
+                                .format(DateTimeFormatter.ofPattern("yyyy.MM.dd")),
+                            modifier = Modifier.padding(vertical = 9.dp),
+                            textAlign = TextAlign.Center,
+                            fontWeight = FontWeight.Bold,
+                            color = ArmyristColors.PrimaryText
+                        )
+                    }
+
+                    OutlinedButton(
+                        onClick = { candidate = candidate.plusDays(1) },
+                        modifier = Modifier.weight(1f).heightIn(min = 38.dp),
+                        shape = ArmyristPanelShape,
+                        border = BorderStroke(1.dp, ArmyristColors.Border),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text("+1일")
+                    }
+                }
+
+                OutlinedButton(
+                    onClick = { calendar = true },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 38.dp),
+                    shape = ArmyristPanelShape,
+                    border = BorderStroke(1.dp, ArmyristColors.Border),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = ArmyristColors.WorkSurface,
+                        contentColor = ArmyristColors.PrimaryText
+                    )
+                ) {
+                    Text("달력에서 선택")
+                }
+
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Column(
+                        Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            "시간",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = ArmyristColors.SecondaryText
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Wheel(
+                            (0..23).toList(),
+                            candidate.hour,
+                            { value ->
+                                val next = candidate.withHour(value)
+                                candidate = next
+                                raw = "%02d%02d".format(next.hour, next.minute)
+                            },
+                            Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    Column(
+                        Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            "분",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = ArmyristColors.SecondaryText
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Wheel(
+                            (0..55 step 5).toList(),
+                            nearestFive(candidate.minute),
+                            { value ->
+                                val next = candidate.withMinute(value)
+                                candidate = next
+                                raw = "%02d%02d".format(next.hour, next.minute)
+                            },
+                            Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = raw,
+                    onValueChange = { value ->
+                        val digits = value.filter(Char::isDigit).take(4)
+                        raw = digits
+                        parseHHMM(digits)?.let {
+                            candidate = candidate
+                                .withHour(it.first)
+                                .withMinute(it.second)
+                        }
+                    },
+                    label = { Text("직접입력 · HHMM") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = ArmyristColors.PrimaryControl,
+                        cursorColor = ArmyristColors.PrimaryControl
+                    )
+                )
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = ArmyristPanelShape,
+                    color = ArmyristColors.WorkSurface,
+                    border = BorderStroke(1.dp, ArmyristColors.Border)
+                ) {
+                    Column(Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) {
+                        Text(
+                            "변경값",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ArmyristColors.SecondaryText
+                        )
+                        Text(
+                            candidate.format(
+                                DateTimeFormatter.ofPattern("MM.dd HH:mm")
+                            ),
+                            fontWeight = FontWeight.Bold,
+                            color = ArmyristColors.PrimaryControl
+                        )
+                    }
+                }
+
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f).heightIn(min = 40.dp),
+                        shape = ArmyristPanelShape,
+                        border = BorderStroke(1.dp, ArmyristColors.Border)
+                    ) {
+                        Text("취소")
+                    }
+
+                    Button(
+                        onClick = { onConfirm(candidate) },
+                        modifier = Modifier.weight(1f).heightIn(min = 40.dp),
+                        shape = ArmyristPanelShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ArmyristColors.PrimaryControl,
+                            contentColor = ArmyristColors.OnDark
+                        )
+                    ) {
+                        Text("적용")
+                    }
+                }
             }
         }
-        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){OutlinedButton(onClick=onDismiss,modifier=Modifier.weight(1f)){Text("취소")};Button(onClick={onConfirm(candidate)},modifier=Modifier.weight(1f),colors=ButtonDefaults.buttonColors(containerColor=ArmyristColors.PrimaryControl)){Text("적용")}}
-    }}}
-    if(calendar){val state=rememberDatePickerState(initialSelectedDateMillis=candidate.toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli());DatePickerDialog(onDismissRequest={calendar=false},confirmButton={TextButton(onClick={state.selectedDateMillis?.let{ms->candidate=LocalDateTime.of(Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate(),candidate.toLocalTime())};calendar=false}){Text("확인")}},dismissButton={TextButton(onClick={calendar=false}){Text("취소")}}){DatePicker(state=state)}}
+    }
+
+    if (calendar) {
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = candidate.toLocalDate()
+                .atStartOfDay(ZoneOffset.UTC)
+                .toInstant()
+                .toEpochMilli()
+        )
+        DatePickerDialog(
+            onDismissRequest = { calendar = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        state.selectedDateMillis?.let { ms ->
+                            candidate = LocalDateTime.of(
+                                Instant.ofEpochMilli(ms)
+                                    .atZone(ZoneOffset.UTC)
+                                    .toLocalDate(),
+                                candidate.toLocalTime()
+                            )
+                        }
+                        calendar = false
+                    }
+                ) {
+                    Text("확인")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { calendar = false }) {
+                    Text("취소")
+                }
+            }
+        ) {
+            DatePicker(state = state)
+        }
+    }
 }
 
 @Composable

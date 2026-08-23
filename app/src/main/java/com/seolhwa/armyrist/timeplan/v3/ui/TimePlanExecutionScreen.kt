@@ -755,11 +755,26 @@ private fun TimePlanExecuteScreen(
             }
         }
 
-        LazyColumn(
-            state = executionListState,
+        Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
+                .drawBehind {
+                    if (!bulkSelect && view == TimePlanExecutionView.TIMELINE) {
+                        val railX = 40.dp.toPx()
+                        drawLine(
+                            color = ArmyristColors.PrimaryControl.copy(alpha = 0.48f),
+                            start = androidx.compose.ui.geometry.Offset(railX, 32.dp.toPx()),
+                            end = androidx.compose.ui.geometry.Offset(railX, size.height),
+                            strokeWidth = 2.dp.toPx()
+                        )
+                    }
+                }
+        ) {
+        LazyColumn(
+            state = executionListState,
+            modifier = Modifier
+                .fillMaxSize()
                 .onGloballyPositioned { coordinates ->
                     listTopInRoot = coordinates.positionInRoot().y
                     listBottomInRoot = listTopInRoot + coordinates.size.height
@@ -936,6 +951,7 @@ private fun TimePlanExecuteScreen(
                 }
             }
         }
+        }
     }
 
     editAction?.let { action ->
@@ -1032,8 +1048,7 @@ private fun TimePlanExecuteScreen(
 private fun CompletionRailControl(
     completed: Boolean
 ) {
-    val railColor =
-        if (completed) ArmyristColors.PrimaryControl else ArmyristColors.Border
+    val railColor = ArmyristColors.PrimaryControl
 
     Box(
         modifier = Modifier
@@ -1044,7 +1059,7 @@ private fun CompletionRailControl(
         Canvas(Modifier.fillMaxSize()) {
             val x = size.width / 2f
             drawLine(
-                color = railColor.copy(alpha = if (completed) 0.90f else 0.55f),
+                color = railColor.copy(alpha = if (completed) 0.95f else 0.48f),
                 start = androidx.compose.ui.geometry.Offset(x, 0f),
                 end = androidx.compose.ui.geometry.Offset(x, size.height),
                 strokeWidth = if (completed) 3.dp.toPx() else 1.5.dp.toPx()
