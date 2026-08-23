@@ -8,6 +8,14 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import kotlinx.coroutines.launch
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -198,8 +206,9 @@ private fun TimePlanPrepareScreen(
                 ) {
                     OutlinedButton(
                         onClick = { groupManager = true },
-                        modifier = Modifier.weight(1f),
-                        shape = ArmyristPanelShape
+                        modifier = Modifier.weight(1f).heightIn(min = 40.dp),
+                        shape = ArmyristPanelShape,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                     ) { Text("그룹 관리") }
 
                     OutlinedButton(
@@ -215,8 +224,9 @@ private fun TimePlanPrepareScreen(
                                     allPointIds
                                 }
                         },
-                        modifier = Modifier.weight(1f),
-                        shape = ArmyristPanelShape
+                        modifier = Modifier.weight(1f).heightIn(min = 40.dp),
+                        shape = ArmyristPanelShape,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
                             if (
@@ -242,8 +252,9 @@ private fun TimePlanPrepareScreen(
                                     allActionIds
                                 }
                         },
-                        modifier = Modifier.weight(1f),
-                        shape = ArmyristPanelShape
+                        modifier = Modifier.weight(1f).heightIn(min = 40.dp),
+                        shape = ArmyristPanelShape,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         val allActionIds = plan.actions.map { it.id }
                         Text(
@@ -551,6 +562,35 @@ private fun TimePlanExecuteScreen(
     var bulkSelect by rememberSaveable(plan.id) { mutableStateOf(false) }
     var selectedActionIds by rememberSaveable(plan.id) { mutableStateOf(emptyList<String>()) }
     val summary = TimePlanExecutionRules.summary(plan)
+    val executionListState = rememberLazyListState()
+    val actionVerticalBounds = remember { mutableStateMapOf<String, Pair<Float, Float>>() }
+    var listTopInRoot by remember { mutableFloatStateOf(0f) }
+    var listBottomInRoot by remember { mutableFloatStateOf(0f) }
+    var dragTargetState by remember { mutableStateOf<ActionCompletionState?>(null) }
+    var dragVisitedIds by remember { mutableStateOf(emptySet<String>()) }
+    val dragScrollScope = rememberCoroutineScope()
+
+    fun applyRailAt(rootY: Float) {
+        if (bulkSelect) return
+        val target = dragTargetState ?: return
+        val hitId = actionVerticalBounds.entries.firstOrNull { (_, bounds) ->
+            rootY >= bounds.first && rootY <= bounds.second
+        }?.key ?: return
+        if (hitId in dragVisitedIds) return
+        dragVisitedIds = dragVisitedIds + hitId
+        onCommit(
+            plan.copy(
+                actions = plan.actions.map { action ->
+                    if (action.id in dragVisitedIds) {
+                        action.copy(
+                            completionState = target,
+                            updatedAt = System.currentTimeMillis().toString()
+                        )
+                    } else action
+                }
+            )
+        )
+    }
 
     Column(Modifier.fillMaxSize()) {
         ArmyristPanel(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp)) {
@@ -582,8 +622,9 @@ private fun TimePlanExecuteScreen(
                             bulkSelect = true
                             selectedActionIds = allActionIds
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
                         shape = ArmyristPanelShape,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                         border = BorderStroke(1.dp, ArmyristColors.Border),
                         colors = ButtonDefaults.outlinedButtonColors(
                             containerColor = ArmyristColors.WorkSurface,
@@ -600,8 +641,8 @@ private fun TimePlanExecuteScreen(
                         border = BorderStroke(1.dp, ArmyristColors.Border)
                     ) {
                         Column(
-                            Modifier.padding(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                            Modifier.padding(5.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
                                 "선택 ${selectedActionIds.size} / ${plan.actions.size}",
@@ -610,8 +651,9 @@ private fun TimePlanExecuteScreen(
                             )
                             OutlinedButton(
                                 onClick = { selectedActionIds = emptyList(); bulkSelect = false },
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
                                 shape = ArmyristPanelShape,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                                 border = BorderStroke(1.dp, ArmyristColors.Border),
                                 colors = ButtonDefaults.outlinedButtonColors(containerColor = ArmyristColors.WorkSurface, contentColor = ArmyristColors.PrimaryText)
                             ) { Text("선택 종료", fontWeight = FontWeight.SemiBold) }
@@ -635,8 +677,9 @@ private fun TimePlanExecuteScreen(
                                             )
                                         )
                                     },
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier.weight(1f).heightIn(min = 40.dp),
                                     shape = ArmyristPanelShape,
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = ArmyristColors.PrimaryControl,
                                         contentColor = ArmyristColors.OnDark
@@ -660,8 +703,9 @@ private fun TimePlanExecuteScreen(
                                             )
                                         )
                                     },
-                                    modifier = Modifier.weight(1f),
-                                    shape = ArmyristPanelShape
+                                    modifier = Modifier.weight(1f).heightIn(min = 40.dp),
+                                    shape = ArmyristPanelShape,
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                                 ) {
                                     Text("실시 완료 취소")
                                 }
@@ -687,9 +731,14 @@ private fun TimePlanExecuteScreen(
         }
 
         LazyColumn(
-            Modifier
+            state = executionListState,
+            modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .onGloballyPositioned { coordinates ->
+                    listTopInRoot = coordinates.positionInRoot().y
+                    listBottomInRoot = listTopInRoot + coordinates.size.height
+                },
             contentPadding = PaddingValues(8.dp, 4.dp, 8.dp, 96.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -708,7 +757,12 @@ private fun TimePlanExecuteScreen(
                                 onCommit(plan.copy(actions = plan.actions.map { if (it.id == action.id) it.copy(completionState = newState, updatedAt = System.currentTimeMillis().toString()) else it }))
                             }
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onGloballyPositioned { coordinates ->
+                                val top = coordinates.positionInRoot().y
+                                actionVerticalBounds[action.id] = top to (top + coordinates.size.height)
+                            },
                         shape = ArmyristPanelShape,
                         colors = CardDefaults.cardColors(
                             containerColor = when {
@@ -727,16 +781,65 @@ private fun TimePlanExecuteScreen(
                         )
                     ) {
                         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(
-                                checked = if (bulkSelect) action.id in selectedActionIds else completed,
-                                onCheckedChange = {
-                                    if (bulkSelect) selectedActionIds = if (action.id in selectedActionIds) selectedActionIds - action.id else selectedActionIds + action.id
-                                    else {
-                                        val newState = if (completed) ActionCompletionState.INCOMPLETE else ActionCompletionState.COMPLETE
-                                        onCommit(plan.copy(actions = plan.actions.map { a -> if (a.id == action.id) a.copy(completionState = newState, updatedAt = System.currentTimeMillis().toString()) else a }))
+                            if (bulkSelect) {
+                                Checkbox(
+                                    checked = action.id in selectedActionIds,
+                                    onCheckedChange = {
+                                        selectedActionIds = if (action.id in selectedActionIds) {
+                                            selectedActionIds - action.id
+                                        } else {
+                                            selectedActionIds + action.id
+                                        }
                                     }
-                                }
-                            )
+                                )
+                            } else {
+                                CompletionRailControl(
+                                    completed = completed,
+                                    onTap = {
+                                        val newState = if (completed) {
+                                            ActionCompletionState.INCOMPLETE
+                                        } else {
+                                            ActionCompletionState.COMPLETE
+                                        }
+                                        onCommit(
+                                            plan.copy(
+                                                actions = plan.actions.map { a ->
+                                                    if (a.id == action.id) {
+                                                        a.copy(
+                                                            completionState = newState,
+                                                            updatedAt = System.currentTimeMillis().toString()
+                                                        )
+                                                    } else a
+                                                }
+                                            )
+                                        )
+                                    },
+                                    onDragStartAtRootY = { rootY ->
+                                        dragTargetState = if (completed) {
+                                            ActionCompletionState.INCOMPLETE
+                                        } else {
+                                            ActionCompletionState.COMPLETE
+                                        }
+                                        dragVisitedIds = emptySet()
+                                        applyRailAt(rootY)
+                                    },
+                                    onDragAtRootY = { rootY ->
+                                        applyRailAt(rootY)
+                                        when {
+                                            rootY < listTopInRoot + 72f -> {
+                                                dragScrollScope.launch { executionListState.scrollBy(-28f) }
+                                            }
+                                            rootY > listBottomInRoot - 72f -> {
+                                                dragScrollScope.launch { executionListState.scrollBy(28f) }
+                                            }
+                                        }
+                                    },
+                                    onDragEnd = {
+                                        dragTargetState = null
+                                        dragVisitedIds = emptySet()
+                                    }
+                                )
+                            }
                             Column(Modifier.weight(1f)) {
                                 Text(action.content, fontWeight = FontWeight.SemiBold)
                                 Text(
@@ -783,6 +886,56 @@ private fun TimePlanExecuteScreen(
 }
 
 @Composable
+private fun CompletionRailControl(
+    completed: Boolean,
+    onTap: () -> Unit,
+    onDragStartAtRootY: (Float) -> Unit,
+    onDragAtRootY: (Float) -> Unit,
+    onDragEnd: () -> Unit
+) {
+    var topInRoot by remember { mutableFloatStateOf(0f) }
+    val railColor = if (completed) ArmyristColors.PrimaryControl else ArmyristColors.Border
+
+    Box(
+        modifier = Modifier
+            .width(52.dp)
+            .heightIn(min = 58.dp)
+            .onGloballyPositioned { coordinates ->
+                topInRoot = coordinates.positionInRoot().y
+            }
+            .pointerInput(completed) {
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        onDragStartAtRootY(topInRoot + offset.y)
+                    },
+                    onDragEnd = onDragEnd,
+                    onDragCancel = onDragEnd,
+                    onDrag = { change, _ ->
+                        change.consume()
+                        onDragAtRootY(topInRoot + change.position.y)
+                    }
+                )
+            }
+            .clickable(onClick = onTap),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            val x = size.width / 2f
+            drawLine(
+                color = railColor,
+                start = androidx.compose.ui.geometry.Offset(x, 0f),
+                end = androidx.compose.ui.geometry.Offset(x, size.height),
+                strokeWidth = if (completed) 4f else 2f
+            )
+        }
+        Checkbox(
+            checked = completed,
+            onCheckedChange = null
+        )
+    }
+}
+
+@Composable
 private fun ArmyristModeButton(
     label: String,
     selected: Boolean,
@@ -792,26 +945,28 @@ private fun ArmyristModeButton(
     if (selected) {
         Button(
             onClick = onClick,
-            modifier = modifier.heightIn(min = 48.dp),
+            modifier = modifier.heightIn(min = 40.dp),
             shape = ArmyristPanelShape,
             colors = ButtonDefaults.buttonColors(
                 containerColor = ArmyristColors.SecondaryControl,
                 contentColor = ArmyristColors.PrimaryText
             ),
-            border = BorderStroke(1.dp, ArmyristColors.PrimaryControl)
+            border = BorderStroke(1.dp, ArmyristColors.PrimaryControl),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
         ) {
             Text(label, fontWeight = FontWeight.Bold)
         }
     } else {
         OutlinedButton(
             onClick = onClick,
-            modifier = modifier.heightIn(min = 48.dp),
+            modifier = modifier.heightIn(min = 40.dp),
             shape = ArmyristPanelShape,
             border = BorderStroke(1.dp, ArmyristColors.Border),
             colors = ButtonDefaults.outlinedButtonColors(
                 containerColor = ArmyristColors.WorkSurface,
                 contentColor = ArmyristColors.PrimaryText
-            )
+            ),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
         ) {
             Text(label)
         }

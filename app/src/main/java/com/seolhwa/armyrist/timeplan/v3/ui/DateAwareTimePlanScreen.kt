@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -140,6 +141,14 @@ private fun DateAwarePlanList(
 ) {
     var renameTarget by remember { mutableStateOf<DateAwareTimePlan?>(null) }
     var deleteTarget by remember { mutableStateOf<DateAwareTimePlan?>(null) }
+    val context = LocalContext.current
+    val openImport = {
+        context.startActivity(
+            android.content.Intent(context, PortableTransferActivity::class.java).apply {
+                putExtra(PortableTransferActivity.EXTRA_MODE, PortableTransferActivity.MODE_IMPORT)
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -195,6 +204,12 @@ private fun DateAwarePlanList(
                                 contentColor = ArmyristColors.OnDark
                             )
                         ) { Text("새 시간계획 만들기", fontWeight = FontWeight.Bold) }
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = openImport,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                            shape = ArmyristPanelShape
+                        ) { Text("데이터 불러오기") }
                     }
                 }
             }
@@ -204,6 +219,13 @@ private fun DateAwarePlanList(
                 contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 96.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                item(key = "timeplan-import") {
+                    OutlinedButton(
+                        onClick = openImport,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp),
+                        shape = ArmyristPanelShape
+                    ) { Text("데이터 불러오기") }
+                }
                 items(datePlans, key = { "v3-${it.id}" }) { plan ->
                     Card(
                         onClick = { onOpen(plan.id) },
@@ -543,8 +565,20 @@ private fun DateAwarePlanDetail(
             val changed = TimePlanExecutionRules.removePointActions(changedBase, event.id)
             onCommit(DateTimePlanRules.normalizeTopology(changed)); editEvent=null
         }) { changedEvent ->
-            val changed=if(changedEvent.kind==TimeEventKind.FINAL) plan.copy(finalPoint=changedEvent) else plan.copy(midwayEvents=plan.midwayEvents.map{if(it.id==changedEvent.id) changedEvent else it})
-            val candidate = DateTimePlanRules.recalculateForExplicitNodes(changed, setOf(changedEvent.id))
+            // A user-edited event remains explicit. Unlocked later nodes, including END,
+            // follow the event's departure delta. A locked END remains fixed and the
+            // resulting conflict is intentionally surfaced instead of being moved.
+            val candidate = DateTimePlanRules.reflowEventEdit(plan, changedEvent)
+                ?: run {
+                    val changed = if (changedEvent.kind == TimeEventKind.FINAL) {
+                        plan.copy(finalPoint = changedEvent)
+                    } else {
+                        plan.copy(midwayEvents = plan.midwayEvents.map {
+                            if (it.id == changedEvent.id) changedEvent else it
+                        })
+                    }
+                    DateTimePlanRules.recalculateForExplicitNodes(changed, setOf(changedEvent.id))
+                }
             commitWithActionTimeImpact(candidate)
             editEvent=null
         }
@@ -1072,13 +1106,48 @@ private fun TimelineList(
     }
 }
 
-@Composable private fun DayHeader(date:LocalDate, baseDate:LocalDate?, mode:TimePlanDateDisplayMode){
-    val dow=date.dayOfWeek.getDisplayName(TextStyle.SHORT,Locale.KOREAN)
-    Row(Modifier.fillMaxWidth().padding(vertical=7.dp),verticalAlignment=Alignment.CenterVertically){
-        HorizontalDivider(Modifier.weight(1f))
-        val label = if (mode == TimePlanDateDisplayMode.RELATIVE_D_DAY && baseDate != null) { val d = java.time.temporal.ChronoUnit.DAYS.between(baseDate, date); if (d == 0L) "D-Day" else "D${if (d > 0) "+" else ""}$d" } else "${date.format(DateTimeFormatter.ofPattern("MM.dd"))} ($dow)"
-        Text("  $label  ",fontWeight=FontWeight.Bold,color=ArmyristColors.PrimaryControl)
-        HorizontalDivider(Modifier.weight(1f))
+@Composable
+private fun DayHeader(
+    date: LocalDate,
+    baseDate: LocalDate?,
+    mode: TimePlanDateDisplayMode
+) {
+    val dow = date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.KOREAN)
+    val accent = when (Math.floorMod(date.toEpochDay().toInt(), 4)) {
+        0 -> Color(0xFF556B2F)
+        1 -> Color(0xFF49646C)
+        2 -> Color(0xFF765C3D)
+        else -> Color(0xFF6B536F)
+    }
+    val label = if (
+        mode == TimePlanDateDisplayMode.RELATIVE_D_DAY && baseDate != null
+    ) {
+        val d = java.time.temporal.ChronoUnit.DAYS.between(baseDate, date)
+        if (d == 0L) "D-Day" else "D${if (d > 0) "+" else ""}$d"
+    } else {
+        "${date.format(DateTimeFormatter.ofPattern("MM.dd"))} ($dow)"
+    }
+
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        HorizontalDivider(Modifier.width(22.dp), color = accent.copy(alpha = 0.55f))
+        Surface(
+            modifier = Modifier.padding(horizontal = 8.dp),
+            shape = ArmyristPanelShape,
+            color = accent.copy(alpha = 0.11f),
+            border = BorderStroke(1.dp, accent.copy(alpha = 0.42f))
+        ) {
+            Text(
+                label,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                fontWeight = FontWeight.Bold,
+                color = accent
+            )
+        }
+        HorizontalDivider(Modifier.width(22.dp), color = accent.copy(alpha = 0.55f))
     }
 }
 
@@ -1218,9 +1287,10 @@ private fun LinkRow(
                 },
             verticalAlignment = Alignment.CenterVertically
         ) {
-            HorizontalDivider(Modifier.weight(1f), color = ArmyristColors.Border)
+            Spacer(Modifier.weight(1f))
+            HorizontalDivider(Modifier.width(26.dp), color = ArmyristColors.Border)
             Surface(
-                modifier = Modifier.padding(horizontal = 8.dp),
+                modifier = Modifier.padding(horizontal = 6.dp),
                 shape = ArmyristPanelShape,
                 color = if (selected && selectionMode) ArmyristColors.WorkSurface else Color.Transparent
             ) {
@@ -1244,7 +1314,8 @@ private fun LinkRow(
                     }
                 }
             }
-            HorizontalDivider(Modifier.weight(1f), color = ArmyristColors.Border)
+            HorizontalDivider(Modifier.width(26.dp), color = ArmyristColors.Border)
+            Spacer(Modifier.weight(1f))
         }
         Box(Modifier.width(38.dp), contentAlignment = Alignment.Center) {
             TimelineConnectorGlyph()
@@ -1258,7 +1329,23 @@ private fun LinkRow(
 }
 @Composable private fun SummaryCell(label:String,value:String,m:Modifier){Column(m){Text(label,style=MaterialTheme.typography.labelSmall,color=ArmyristColors.SecondaryText);Text(value,fontWeight=FontWeight.Bold)}}
 private fun durationText(m:Long?):String=when{m==null->"미설정";m==0L->"0분";m<60->"${m}분";m%60==0L->"${m/60}시간";else->"${m/60}시간 ${m%60}분"}
-private fun planSpanText(p:DateAwareTimePlan):String{val s=p.start.value.value;val e=p.end.value.value;return if(s!=null&&e!=null)"${s.format(DateTimeFormatter.ofPattern("MM.dd HH:mm"))} → ${e.format(DateTimeFormatter.ofPattern("MM.dd HH:mm"))}" else "날짜/시간 일부 미설정"}
+private fun planSpanText(p: DateAwareTimePlan): String {
+    val s = p.start.value.value
+    val e = p.end.value.value
+    if (s == null || e == null) return "날짜/시간 일부 미설정"
+
+    if (p.dateDisplayMode == TimePlanDateDisplayMode.RELATIVE_D_DAY) {
+        val base = s.toLocalDate()
+        fun relativeLabel(dt: LocalDateTime): String {
+            val day = java.time.temporal.ChronoUnit.DAYS.between(base, dt.toLocalDate())
+            val d = if (day == 0L) "D-Day" else "D${if (day > 0) "+" else ""}$day"
+            return "$d ${dt.format(DateTimeFormatter.ofPattern("HH:mm"))}"
+        }
+        return "${relativeLabel(s)} → ${relativeLabel(e)}"
+    }
+
+    return "${s.format(DateTimeFormatter.ofPattern("MM.dd HH:mm"))} → ${e.format(DateTimeFormatter.ofPattern("MM.dd HH:mm"))}"
+}
 
 @Composable
 private fun DateTimeEditorDialog(title:String,initial:LocalDateTime?,onDismiss:()->Unit,onConfirm:(LocalDateTime)->Unit){
