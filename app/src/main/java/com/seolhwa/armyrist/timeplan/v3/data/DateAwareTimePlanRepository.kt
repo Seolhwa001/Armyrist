@@ -66,6 +66,37 @@ class DateAwareTimePlanRepository(context: Context) {
     }
 
     /**
+     * Restores a complete TimePlan snapshot that was previously moved to Common Trash.
+     *
+     * The snapshot originated from this repository, so restore does not reinterpret
+     * Point/Action data or run migration guesses. Existing IDs are never overwritten.
+     */
+    @Synchronized
+    fun restoreDeletedPlan(snapshot: DateAwareTimePlan): Boolean {
+        if (plans.any { it.id == snapshot.id }) return false
+
+        val restored =
+            DateTimePlanRules.normalizeTopology(
+                snapshot.copy(
+                    updatedAt = System.currentTimeMillis().toString()
+                )
+            )
+
+        val next = plans + restored
+        if (!persist(next)) return false
+
+        plans = next
+
+        // Restore future notification schedules. Scheduling failure is secondary to
+        // successfully restoring the user's local data.
+        runCatching {
+            TimePlanActionNotificationManager.reconcile(appContext, this)
+        }
+
+        return true
+    }
+
+    /**
      * Atomically removes one MIDWAY/FINAL event without ever removing the owning plan.
      *
      * UI code must not synthesize and commit a partially-mutated topology during an
