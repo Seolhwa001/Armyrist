@@ -101,11 +101,19 @@ object TimePlanActionNotificationManager {
         cancel(context, plan.id, action.id)
         val pending = alarmPendingIntent(context, plan.id, action.id)
 
-        // Product contract does not promise exact delivery; do not require exact-alarm permission.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pending)
-        } else {
-            manager.set(AlarmManager.RTC_WAKEUP, triggerAt, pending)
+        // Reminder contract: deliver at the scheduled time even while the screen is off
+        // whenever Android grants exact-alarm capability. If the user/device does not
+        // grant that capability, retain a safe inexact while-idle fallback instead of crashing.
+        val exactAllowed =
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.S || manager.canScheduleExactAlarms()
+
+        when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && exactAllowed ->
+                manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pending)
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ->
+                manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pending)
+            else ->
+                manager.set(AlarmManager.RTC_WAKEUP, triggerAt, pending)
         }
         return true
     }

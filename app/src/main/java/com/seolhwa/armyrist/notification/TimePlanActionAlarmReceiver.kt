@@ -42,6 +42,9 @@ class TimePlanActionAlarmReceiver : BroadcastReceiver() {
             )
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setWhen(System.currentTimeMillis())
+            .setShowWhen(true)
             .setAutoCancel(true)
             .setContentIntent(
                 TimePlanActionNotificationManager.openActionPendingIntent(
