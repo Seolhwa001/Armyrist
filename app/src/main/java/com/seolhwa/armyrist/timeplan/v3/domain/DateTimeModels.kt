@@ -411,65 +411,83 @@ object DateTimePlanRules {
      * This preserves the pre-Date contract without reintroducing <24h/day-offset limits.
      */
     fun reflowEventEdit(existing: DateAwareTimePlan, changedEvent: DateTimeEvent): DateAwareTimePlan? {
-        val ordered = existing.orderedEvents()
-        val index = ordered.indexOfFirst { it.id == changedEvent.id }
-        if (index < 0) return null
-        val oldEvent = ordered[index]
-        val oldArrival = arrival(oldEvent.timeSpec) ?: return null
-        val oldDeparture = departure(oldEvent.timeSpec) ?: return null
+        val oldEvent = existing.orderedEvents().firstOrNull { it.id == changedEvent.id } ?: return null
         val newArrival = arrival(changedEvent.timeSpec) ?: return null
         val newDeparture = departure(changedEvent.timeSpec) ?: return null
         if (newDeparture.isBefore(newArrival)) return null
 
-        var base = if (changedEvent.kind == TimeEventKind.FINAL) {
+        var changed = if (changedEvent.kind == TimeEventKind.FINAL) {
             existing.copy(finalPoint = changedEvent)
         } else {
-            existing.copy(midwayEvents = existing.midwayEvents.map { if (it.id == changedEvent.id) changedEvent else it })
-        }
-
-        val ids = nodeIds(existing)
-        val nodeIndex = ids.indexOf(changedEvent.id)
-        if (nodeIndex < 0) return null
-
-        // Prefix overlap: shift START..previous node backward just enough.
-        if (nodeIndex > 0) {
-            val previousId = ids[nodeIndex - 1]
-            val previousDeparture = nodeDeparture(existing, previousId)
-            if (previousDeparture != null && newArrival.isBefore(previousDeparture)) {
-                val overlap = Duration.between(newArrival, previousDeparture).toMinutes()
-                val prefixIds = ids.take(nodeIndex).toSet()
-                fun shiftValue(v: DateTimeValue): DateTimeValue =
-                    if (v.value == null) v else DateTimeValue.derived(v.value.minusMinutes(overlap))
-                fun shiftSpec(eventId: String, spec: EventDateTimeSpec): EventDateTimeSpec {
-                    if (eventId !in prefixIds) return spec
-                    return when (spec) {
-                        EventDateTimeSpec.Unspecified -> spec
-                        is EventDateTimeSpec.Single -> spec.copy(value = shiftValue(spec.value))
-                        is EventDateTimeSpec.Range -> spec.copy(start = shiftValue(spec.start), end = shiftValue(spec.end))
-                    }
+            existing.copy(
+                midwayEvents = existing.midwayEvents.map {
+                    if (it.id == changedEvent.id) changedEvent else it
                 }
-                base = base.copy(
-                    start = if (START_ID in prefixIds) DateTimeAnchor(shiftValue(base.start.value)) else base.start,
-                    midwayEvents = base.midwayEvents.map { it.copy(timeSpec = shiftSpec(it.id, it.timeSpec)) },
-                    finalPoint = base.finalPoint?.let { it.copy(timeSpec = shiftSpec(it.id, it.timeSpec)) }
+            )
+        }
+
+        // MIDWAY order is a presentation/topology property derived from the absolute
+        // date-time axis. Editing one MIDWAY must not silently overwrite sibling times.
+        changed = changed.copy(
+            midwayEvents = changed.midwayEvents
+                .sortedWith(
+                    compareBy<DateTimeEvent> {
+                        arrival(it.timeSpec) ?: LocalDateTime.MAX
+                    }.thenBy { it.order }
                 )
-            }
+                .mapIndexed { index, event -> event.copy(order = index) }
+        )
+
+        val temporalEvents = changed.midwayEvents + listOfNotNull(changed.finalPoint)
+        val earliestArrival = temporalEvents.mapNotNull { arrival(it.timeSpec) }.minOrNull()
+        val latestDeparture = temporalEvents.mapNotNull { departure(it.timeSpec) }.maxOrNull()
+
+        // A locked anchor is immutable. For an unlocked anchor, the plan envelope may
+        // expand only when an edited/reordered event crosses that boundary.
+        val startValue = changed.start.value.value
+        if (
+            earliestArrival != null &&
+            startValue != null &&
+            earliestArrival.isBefore(startValue) &&
+            !changed.start.dateTimeLocked
+        ) {
+            changed = changed.copy(
+                start = changed.start.copy(
+                    value = DateTimeValue.derived(earliestArrival)
+                )
+            )
         }
 
-        // Suffix follows the departure change exactly.
-        val suffixDelta = Duration.between(oldDeparture, newDeparture).toMinutes()
-        if (suffixDelta != 0L && nodeIndex < ids.lastIndex) {
-            val nextId = ids[nodeIndex + 1]
-            base = shiftFromNode(base, nextId, suffixDelta)
+        val endValue = changed.end.value.value
+        if (
+            latestDeparture != null &&
+            endValue != null &&
+            latestDeparture.isAfter(endValue) &&
+            !changed.end.dateTimeLocked
+        ) {
+            changed = changed.copy(
+                end = changed.end.copy(
+                    value = DateTimeValue.derived(latestDeparture)
+                )
+            )
         }
 
-        // Re-apply edited event after prefix/suffix movement so it cannot become DERIVED.
-        base = if (changedEvent.kind == TimeEventKind.FINAL) {
-            base.copy(finalPoint = changedEvent)
+        // The edited event stays explicit. Other events keep their own date-times.
+        // normalizeTopology derives interval durations from the resulting chronology;
+        // locked duration mismatches remain visible as conflicts instead of being hidden.
+        changed = if (changedEvent.kind == TimeEventKind.FINAL) {
+            changed.copy(finalPoint = changedEvent)
         } else {
-            base.copy(midwayEvents = base.midwayEvents.map { if (it.id == changedEvent.id) changedEvent else it })
+            changed.copy(
+                midwayEvents = changed.midwayEvents.map {
+                    if (it.id == changedEvent.id) {
+                        changedEvent.copy(order = it.order)
+                    } else it
+                }
+            )
         }
-        return normalizeTopology(base)
+
+        return normalizeTopology(changed)
     }
 
     fun eventEditNeedsReflow(existing: DateAwareTimePlan, changedEvent: DateTimeEvent): Boolean {
