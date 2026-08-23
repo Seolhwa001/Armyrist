@@ -59,8 +59,65 @@ class DateAwareTimePlanRepository(context: Context) {
         val next = plans.filterNot { it.id == id }
         if (persist(next)) {
             plans = next
+            runCatching {
+                TimePlanActionNotificationManager.reconcile(appContext, this)
+            }
+        }
+    }
+
+    /**
+     * Atomically removes one MIDWAY/FINAL event without ever removing the owning plan.
+     *
+     * UI code must not synthesize and commit a partially-mutated topology during an
+     * active edit dialog. The repository owns the complete transaction:
+     * current snapshot -> remove event -> remove child actions -> rebuild order/links
+     * -> validate -> persist -> publish.
+     */
+    @Synchronized
+    fun deleteEvent(planId: String, eventId: String): Boolean {
+        val current = plans.firstOrNull { it.id == planId } ?: return false
+
+        val isFinal = current.finalPoint?.id == eventId
+        val isMidway = current.midwayEvents.any { it.id == eventId }
+        if (!isFinal && !isMidway) return false
+
+        val withoutEvent =
+            if (isFinal) {
+                current.copy(finalPoint = null)
+            } else {
+                current.copy(
+                    midwayEvents = current.midwayEvents
+                        .filterNot { it.id == eventId }
+                        .sortedBy { it.order }
+                        .mapIndexed { index, event ->
+                            event.copy(order = index)
+                        }
+                )
+            }
+
+        val withoutChildren =
+            TimePlanExecutionRules.removePointActions(withoutEvent, eventId)
+        val normalized =
+            DateTimePlanRules.normalizeTopology(withoutChildren)
+
+        if (DateTimePlanRules.validateForPersistence(normalized).isNotEmpty()) {
+            return false
+        }
+
+        val next = plans.map { plan ->
+            if (plan.id == planId) normalized else plan
+        }
+
+        if (!persist(next)) return false
+        plans = next
+
+        // Reminder scheduling is secondary to core data integrity. A platform alarm
+        // failure must never crash or roll back an already-persisted TimePlan edit.
+        runCatching {
             TimePlanActionNotificationManager.reconcile(appContext, this)
         }
+
+        return true
     }
 
     @Synchronized
