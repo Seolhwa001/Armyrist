@@ -183,8 +183,8 @@ private fun TimePlanPrepareScreen(
     }
 
     Column(Modifier.fillMaxSize()) {
-        ArmyristPanel(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        ArmyristPanel(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("실시사항 준비", fontWeight = FontWeight.Bold)
                 Text(
                     "지점 ${selectedPoints.size}개 · 실시사항 ${selectedActions.size}개 선택",
@@ -295,8 +295,10 @@ private fun TimePlanPrepareScreen(
         }
 
         LazyColumn(
-            Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(8.dp, 4.dp, 8.dp, 80.dp),
+            Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentPadding = PaddingValues(8.dp, 4.dp, 8.dp, 96.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(allPointIds, key = { "point-$it" }) { pointId ->
@@ -551,7 +553,7 @@ private fun TimePlanExecuteScreen(
     val summary = TimePlanExecutionRules.summary(plan)
 
     Column(Modifier.fillMaxSize()) {
-        ArmyristPanel(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+        ArmyristPanel(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp)) {
             Text("수행 현황", fontWeight = FontWeight.Bold)
             Text(
                 "전체 ${summary.total} · 완료 ${summary.completed} · 미실시 ${summary.incomplete} · 완료율 ${summary.completionRate?.let { "$it%" } ?: "-"}",
@@ -685,8 +687,10 @@ private fun TimePlanExecuteScreen(
         }
 
         LazyColumn(
-            Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(8.dp, 4.dp, 8.dp, 80.dp),
+            Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentPadding = PaddingValues(8.dp, 4.dp, 8.dp, 96.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             sections.forEach { (title, actions) ->
