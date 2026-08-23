@@ -137,27 +137,36 @@ jobs:
           printf 'SHA-256=%s\n' "$CERT_SHA256" \
             > "$RUNNER_TEMP/armyrist-signing-certificate.txt"
 
-      - name: Prepare distribution artifact
+      - name: Prepare stable release package
         shell: bash
         run: |
           set -euo pipefail
 
-          METADATA="app/build/outputs/apk/release/output-metadata.json"
-          VERSION_NAME="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["elements"][0]["versionName"])' "$METADATA")"
-          VERSION_CODE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["elements"][0]["versionCode"])' "$METADATA")"
+          BUILD_METADATA="app/build/outputs/apk/release/output-metadata.json"
+          VERSION_NAME="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["elements"][0]["versionName"])' "$BUILD_METADATA")"
+          VERSION_CODE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["elements"][0]["versionCode"])' "$BUILD_METADATA")"
 
           test -n "$VERSION_NAME"
           test -n "$VERSION_CODE"
 
-          mkdir -p "$RUNNER_TEMP/armyrist-distribution"
-          APK_NAME="Armyrist-${VERSION_NAME}-vc${VERSION_CODE}.apk"
-          cp app/build/outputs/apk/release/app-release.apk \
-            "$RUNNER_TEMP/armyrist-distribution/$APK_NAME"
+          DIST="$RUNNER_TEMP/armyrist-distribution"
+          mkdir -p "$DIST"
+          APK_NAME="Armyrist-${VERSION_NAME}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$DIST/$APK_NAME"
 
-          printf 'versionName=%s\nversionCode=%s\n' "$VERSION_NAME" "$VERSION_CODE" \
-            > "$RUNNER_TEMP/armyrist-distribution/VERSION.txt"
+          python3 scripts/generate_release_metadata.py \
+            --apk "$DIST/$APK_NAME" \
+            --version-name "$VERSION_NAME" \
+            --version-code "$VERSION_CODE" \
+            --notes release/release-notes.txt \
+            --output "$DIST/release.json"
 
-          echo "Built distribution: $APK_NAME"
+          cp release/release-notes.txt "$DIST/RELEASE_NOTES.txt"
+          printf 'versionName=%s\nversionCode=%s\ntag=v%s\n' \
+            "$VERSION_NAME" "$VERSION_CODE" "$VERSION_NAME" \
+            > "$DIST/VERSION.txt"
+
+          echo "Prepared stable release package: $APK_NAME + release.json"
 
       - name: Upload debug/test APK
         uses: actions/upload-artifact@v4
