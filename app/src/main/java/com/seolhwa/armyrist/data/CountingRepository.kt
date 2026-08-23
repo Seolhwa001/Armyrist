@@ -78,6 +78,45 @@ class CountingRepository(context: Context) {
         persist()
     }
 
+    /**
+     * Common Trash snapshot contract for whole Counting sheets.
+     * The payload owns the complete sheet graph: items, groups, calculations and memo.
+     */
+    @Synchronized
+    fun exportSheetTrashPayload(id: String): String? {
+        val sheet = getSheet(id) ?: return null
+        return JSONObject()
+            .put("schemaVersion", 1)
+            .put("sheet", sheetToJson(sheet))
+            .toString()
+    }
+
+    @Synchronized
+    fun deleteSheetForTrash(id: String): Boolean {
+        if (sheets.none { it.id == id }) return false
+        val before = sheets
+        sheets = sheets.filterNot { it.id == id }
+        if (persistChecked()) return true
+        sheets = before
+        return false
+    }
+
+    @Synchronized
+    fun restoreSheetTrashPayload(payload: String): Boolean {
+        val restored = runCatching {
+            val root = JSONObject(payload)
+            if (root.optInt("schemaVersion", -1) != 1) return@runCatching null
+            sheetFromJson(root.getJSONObject("sheet"))
+        }.getOrNull() ?: return false
+
+        if (sheets.any { it.id == restored.id }) return false
+        val before = sheets
+        sheets = sheets + restored
+        if (persistChecked()) return true
+        sheets = before
+        return false
+    }
+
     @Synchronized
     fun addItem(
         sheetId: String,
@@ -406,6 +445,10 @@ class CountingRepository(context: Context) {
     }
 
     private fun persist() {
+        persistChecked()
+    }
+
+    private fun persistChecked(): Boolean {
         val root =
             JSONObject()
                 .put("version", 2)
@@ -416,7 +459,7 @@ class CountingRepository(context: Context) {
                     }
                 )
 
-        prefs.edit().putString(key, root.toString()).commit()
+        return prefs.edit().putString(key, root.toString()).commit()
     }
 
     private fun load(): List<CountingSheet> {
