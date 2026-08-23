@@ -125,8 +125,18 @@ class DateAwareTimePlanRepository(context: Context) {
                     }
             )
         )
+        // Rebuild the topology from the surviving nodes only.
+        //
+        // Point deletion must not inherit stale links from older patch generations.
+        // Clear links first so normalizeTopology() creates only the adjacent pairs
+        // that remain after the point and its child actions are removed.
         val normalized =
-            DateTimePlanRules.normalizeTopology(deletionSafe)
+            DateTimePlanRules.normalizeTopology(
+                deletionSafe.copy(
+                    links = emptyList(),
+                    updatedAt = System.currentTimeMillis().toString()
+                )
+            )
 
         // Point deletion is a narrowing operation: it removes one node and its
         // children. It must not be blocked by unrelated legacy Action defects that
@@ -141,8 +151,10 @@ class DateAwareTimePlanRepository(context: Context) {
         val expectedPairs = nodeIdsAfterDelete.zipWithNext().toSet()
         val actualPairs = normalized.links.map { it.fromNodeId to it.toNodeId }.toSet()
         if (normalized.links.isNotEmpty() && actualPairs != expectedPairs) return false
-        if (normalized.links.any { it.durationMinutes != null && it.durationMinutes < 0 }) return false
-
+        // A pre-existing temporal conflict is user-visible validation state, not a
+        // reason to reject deletion. Removing a point is a narrowing operation and
+        // may proceed even while another surviving interval still has a negative
+        // derived duration.
         val validNodes = nodeIdsAfterDelete.toSet()
         val validGroups = normalized.actionGroups.map { it.id }.toSet()
         if (normalized.actions.any { it.parentPointId !in validNodes }) return false
