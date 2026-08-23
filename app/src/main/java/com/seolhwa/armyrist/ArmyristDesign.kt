@@ -15,11 +15,11 @@ object ArmyristColors {
     // Light work surfaces
     val AppBackground = Color(0xFFE7E9E1)
     val WorkSurface = Color(0xFFF2F3ED)
-    val RaisedSurface = Color(0xFFF8F8F4)
+    val RaisedSurface = Color(0xFFFBFBF7)
     val InputSurface = Color(0xFFFCFCF8)
 
     // Dark military control frame
-    val Header = Color(0xFF343B2C)
+    val Header = Color(0xFF2F3A26)
     val HeaderRaised = Color(0xFF424A37)
     val PrimaryControl = Color(0xFF4F5A3C)
     val SecondaryControl = Color(0xFFD8DDCC)
@@ -35,6 +35,9 @@ object ArmyristColors {
     val Divider = Color(0xFFB9BEB2)
     val Accent = Color(0xFF687447)
     val Danger = Color(0xFF9A3F36)
+    val DangerMuted = Color(0xFFA34D43)
+    val SoftBorder = Color(0xFFD5D8CF)
+    val InfoSurface = Color(0xFFF2F3ED)
 }
 
 private val ArmyristLightScheme = lightColorScheme(

@@ -6,18 +6,26 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Modifier
+
+enum class ArmyristTopBarLeadingIcon { NONE, HOME }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -26,6 +34,7 @@ fun ArmyristTopBar(
     subtitle: String? = null,
     leadingLabel: String = "홈",
     onLeading: () -> Unit,
+    leadingIcon: ArmyristTopBarLeadingIcon = ArmyristTopBarLeadingIcon.NONE,
     secondaryLeadingLabel: String? = null,
     onSecondaryLeading: (() -> Unit)? = null,
     onTitleClick: (() -> Unit)? = null,
@@ -57,18 +66,35 @@ fun ArmyristTopBar(
         },
         navigationIcon = {
             Row {
-                OutlinedButton(
-                    onClick = onLeading,
-                    shape = ArmyristPanelShape,
-                    border = BorderStroke(
-                        1.dp,
-                        ArmyristColors.OnDark.copy(alpha = 0.65f)
-                    ),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = ArmyristColors.OnDark
-                    ),
-                    contentPadding = PaddingValues(horizontal = 9.dp)
-                ) { Text(leadingLabel) }
+                if (leadingIcon == ArmyristTopBarLeadingIcon.HOME) {
+                    IconButton(
+                        onClick = onLeading,
+                        modifier = Modifier
+                            .width(58.dp)
+                            .size(48.dp)
+                    ) {
+                        Icon(
+                            Icons.Outlined.Home,
+                            contentDescription = "홈",
+                            tint = ArmyristColors.OnDark,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                } else {
+                    OutlinedButton(
+                        onClick = onLeading,
+                        shape = ArmyristPanelShape,
+                        border = BorderStroke(
+                            1.dp,
+                            ArmyristColors.OnDark.copy(alpha = 0.65f)
+                        ),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = ArmyristColors.OnDark
+                        ),
+                        contentPadding = PaddingValues(horizontal = 9.dp)
+                    ) { Text(leadingLabel) }
+                }
 
                 if (!secondaryLeadingLabel.isNullOrBlank() && onSecondaryLeading != null) {
                     Spacer(androidx.compose.ui.Modifier.width(4.dp))
