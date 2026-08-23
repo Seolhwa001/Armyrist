@@ -25,6 +25,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -761,17 +762,6 @@ private fun TimePlanExecuteScreen(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .drawBehind {
-                    if (!bulkSelect && view == TimePlanExecutionView.TIMELINE) {
-                        val railX = 40.dp.toPx()
-                        drawLine(
-                            color = ArmyristColors.PrimaryControl.copy(alpha = 0.48f),
-                            start = androidx.compose.ui.geometry.Offset(railX, 32.dp.toPx()),
-                            end = androidx.compose.ui.geometry.Offset(railX, size.height),
-                            strokeWidth = 2.dp.toPx()
-                        )
-                    }
-                }
         ) {
         LazyColumn(
             state = executionListState,
@@ -854,13 +844,17 @@ private fun TimePlanExecuteScreen(
                     }
                 },
             contentPadding = PaddingValues(8.dp, 4.dp, 8.dp, 88.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
             sections.forEach { (title, actions) ->
                 item(key = "header-$title") {
                     Text(title, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp))
                 }
-                items(actions, key = { it.id }) { action ->
+                itemsIndexed(actions, key = { _, action -> action.id }) { actionIndex, action ->
+                    val isFirstRailAction =
+                        view == TimePlanExecutionView.TIMELINE && actionIndex == 0
+                    val isLastRailAction =
+                        view == TimePlanExecutionView.TIMELINE && actionIndex == actions.lastIndex
                     val completed =
                         (dragPreviewStates[action.id] ?: action.completionState) ==
                             ActionCompletionState.COMPLETE
@@ -908,7 +902,32 @@ private fun TimePlanExecuteScreen(
                             }
                         )
                     ) {
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .drawBehind {
+                                    if (!bulkSelect && view == TimePlanExecutionView.TIMELINE) {
+                                        // Row coordinates:
+                                        // 10dp horizontal content padding + 22dp half of the
+                                        // 44dp rail-control column = circle center at 32dp.
+                                        val railX = 32.dp.toPx()
+                                        val centerY = size.height / 2f
+                                        val startY =
+                                            if (isFirstRailAction) centerY else 0f
+                                        val endY =
+                                            if (isLastRailAction) centerY else size.height
+
+                                        drawLine(
+                                            color = ArmyristColors.PrimaryControl.copy(alpha = 0.52f),
+                                            start = androidx.compose.ui.geometry.Offset(railX, startY),
+                                            end = androidx.compose.ui.geometry.Offset(railX, endY),
+                                            strokeWidth = 2.dp.toPx()
+                                        )
+                                    }
+                                }
+                                .padding(horizontal = 10.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             if (bulkSelect) {
                                 Checkbox(
                                     checked = action.id in selectedActionIds,
@@ -1050,30 +1069,23 @@ private fun TimePlanExecuteScreen(
 private fun CompletionRailControl(
     completed: Boolean
 ) {
-    val railColor = ArmyristColors.PrimaryControl
-
     Box(
         modifier = Modifier
             .width(44.dp)
             .heightIn(min = 48.dp),
         contentAlignment = Alignment.Center
     ) {
-        Canvas(Modifier.fillMaxSize()) {
-            val x = size.width / 2f
-            drawLine(
-                color = railColor.copy(alpha = if (completed) 0.95f else 0.48f),
-                start = androidx.compose.ui.geometry.Offset(x, 0f),
-                end = androidx.compose.ui.geometry.Offset(x, size.height),
-                strokeWidth = if (completed) 3.dp.toPx() else 1.5.dp.toPx()
-            )
-        }
         Surface(
             modifier = Modifier.size(28.dp),
             shape = CircleShape,
-            color = if (completed) ArmyristColors.PrimaryControl else ArmyristColors.RaisedSurface,
+            color =
+                if (completed) ArmyristColors.PrimaryControl
+                else ArmyristColors.RaisedSurface,
             border = BorderStroke(
                 2.dp,
-                if (completed) ArmyristColors.PrimaryControl else ArmyristColors.Border
+                ArmyristColors.PrimaryControl.copy(
+                    alpha = if (completed) 1f else 0.62f
+                )
             )
         ) {
             Box(contentAlignment = Alignment.Center) {
