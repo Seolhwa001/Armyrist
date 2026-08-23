@@ -26,6 +26,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.seolhwa.armyrist.*
 import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
 import com.seolhwa.armyrist.stage2.domain.ToolResult
@@ -121,6 +122,11 @@ fun DateAwareTimePlanApp(
             onBack = { selectedId = null },
             onResult = { sharingId = selected.id },
             onOpenExecution = { mode, pointIds -> onOpenExecution(selected.id, mode, pointIds) },
+            onDeleteEvent = { eventId ->
+                val deleted = repository.deleteEvent(selected.id, eventId)
+                if (deleted) revision++
+                deleted
+            },
             onCommit = { changed ->
                 if (repository.commit(changed.copy(updatedAt = System.currentTimeMillis().toString()))) revision++
             }
@@ -358,6 +364,7 @@ private fun DateAwarePlanDetail(
     onBack: () -> Unit,
     onResult: () -> Unit,
     onOpenExecution: (String, Set<String>) -> Unit,
+    onDeleteEvent: (String) -> Boolean,
     onCommit: (DateAwareTimePlan) -> Unit
 ) {
     var editStart by rememberSaveable(plan.id) { mutableStateOf(false) }
@@ -432,44 +439,12 @@ private fun DateAwarePlanDetail(
 
         deleteEventInProgress = true
         try {
-            // Run deletion only after the edit dialog has left composition.
-            // This avoids mutating topology while a dialog still owns references
-            // to the event that is being removed.
-            val currentEvent =
-                plan.midwayEvents.firstOrNull { it.id == eventId }
-                    ?: plan.finalPoint?.takeIf { it.id == eventId }
+            // The dialog has already left composition at this point.
+            // Actual topology mutation is a single repository transaction.
+            val removedNodeKey = nodeSelectionKey(eventId)
+            val deleted = onDeleteEvent(eventId)
 
-            if (currentEvent == null) {
-                pendingDeleteEventId = null
-                return@LaunchedEffect
-            }
-
-            val changedBase =
-                if (currentEvent.kind == TimeEventKind.FINAL) {
-                    plan.copy(finalPoint = null)
-                } else {
-                    plan.copy(
-                        midwayEvents = plan.midwayEvents
-                            .filterNot { it.id == eventId }
-                            .mapIndexed { index, event ->
-                                event.copy(order = index)
-                            }
-                    )
-                }
-
-            val withoutActions =
-                TimePlanExecutionRules.removePointActions(changedBase, eventId)
-            val candidate =
-                DateTimePlanRules.normalizeTopology(withoutActions)
-
-            val validationProblems =
-                DateTimePlanRules.validateForPersistence(candidate)
-
-            if (validationProblems.isNotEmpty()) {
-                message =
-                    "지점을 삭제하지 못했습니다. 시간계획을 확인해주세요."
-            } else {
-                val removedNodeKey = nodeSelectionKey(eventId)
+            if (deleted) {
                 selectedKeyList = selectedKeyList.filterNot { key ->
                     key == removedNodeKey ||
                         key.startsWith("L:$eventId->") ||
@@ -478,7 +453,8 @@ private fun DateAwarePlanDetail(
                 editLink = null
                 conflictDetail = null
                 pendingActionShift = null
-                onCommit(candidate)
+            } else {
+                message = "지점을 삭제하지 못했습니다. 현재 시간계획은 유지됩니다."
             }
         } finally {
             pendingDeleteEventId = null
@@ -1650,12 +1626,209 @@ private fun DateDurationDialog(initial:Long?,initialLabel:String,onDismiss:()->U
 }
 
 @Composable
-private fun DateTimeEventEditDialog(event:DateTimeEvent,onDismiss:()->Unit,onDelete:()->Unit,onConfirm:(DateTimeEvent)->Unit){
-    var name by remember{mutableStateOf(event.name)};var note by remember{mutableStateOf(event.note.orEmpty())};var isRange by remember{mutableStateOf(event.timeSpec is EventDateTimeSpec.Range)}
-    val initialA=DateTimePlanRules.arrival(event.timeSpec)?:LocalDateTime.now().withSecond(0).withNano(0);val initialB=DateTimePlanRules.departure(event.timeSpec)?:initialA
-    var a by remember{mutableStateOf(initialA)};var b by remember{mutableStateOf(initialB)};var editA by remember{mutableStateOf(false)};var editB by remember{mutableStateOf(false)}
-    Dialog(onDismissRequest=onDismiss){Card(Modifier.fillMaxWidth(),shape=ArmyristPanelShape){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){Text(if(event.kind==TimeEventKind.FINAL)"종료지점 편집" else "중도지점 편집",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold);OutlinedTextField(name,{name=it},label={Text("지점명")},modifier=Modifier.fillMaxWidth());OutlinedTextField(note,{note=it},label={Text("비고")},modifier=Modifier.fillMaxWidth());Row(verticalAlignment=Alignment.CenterVertically){Switch(isRange,{isRange=it});Spacer(Modifier.width(8.dp));Text("시간범위 사용")};OutlinedButton(onClick={editA=true},modifier=Modifier.fillMaxWidth()){Text((if(isRange)"시작 " else "시각 ")+a.format(DateTimeFormatter.ofPattern("MM.dd HH:mm")))};if(isRange)OutlinedButton(onClick={editB=true},modifier=Modifier.fillMaxWidth()){Text("종료 ${b.format(DateTimeFormatter.ofPattern("MM.dd HH:mm"))}")};Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){TextButton(onClick=onDelete){Text("삭제")};Spacer(Modifier.weight(1f));OutlinedButton(onClick=onDismiss){Text("취소")};Button(onClick={val spec=if(isRange)EventDateTimeSpec.Range(DateTimeValue.explicit(a),DateTimeValue.explicit(b)) else EventDateTimeSpec.Single(DateTimeValue.explicit(a));onConfirm(event.copy(name=name.trim().ifBlank{event.name},note=note.trim().ifBlank{null},timeSpec=spec))},colors=ButtonDefaults.buttonColors(containerColor=ArmyristColors.PrimaryControl)){Text("확인")}}}}}
-    if(editA)DateTimeEditorDialog(if(isRange)"범위 시작" else "시각",a,{editA=false}){a=it;editA=false};if(editB)DateTimeEditorDialog("범위 종료",b,{editB=false}){b=it;editB=false}
+private fun DateTimeEventEditDialog(
+    event: DateTimeEvent,
+    onDismiss: () -> Unit,
+    onDelete: () -> Unit,
+    onConfirm: (DateTimeEvent) -> Unit
+) {
+    var name by remember(event.id) { mutableStateOf(event.name) }
+    var note by remember(event.id) { mutableStateOf(event.note.orEmpty()) }
+    var isRange by remember(event.id) { mutableStateOf(event.timeSpec is EventDateTimeSpec.Range) }
+    var a by remember(event.id) {
+        mutableStateOf(
+            DateTimePlanRules.arrival(event.timeSpec) ?: LocalDateTime.now()
+        )
+    }
+    var b by remember(event.id) {
+        mutableStateOf(
+            DateTimePlanRules.departure(event.timeSpec)
+                ?: DateTimePlanRules.arrival(event.timeSpec)
+                ?: LocalDateTime.now()
+        )
+    }
+    var editA by remember { mutableStateOf(false) }
+    var editB by remember { mutableStateOf(false) }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false
+        )
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = ArmyristPanelShape,
+            border = BorderStroke(1.dp, ArmyristColors.Border),
+            colors = CardDefaults.cardColors(
+                containerColor = ArmyristColors.RaisedSurface
+            )
+        ) {
+            Column(
+                Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    if (event.kind == TimeEventKind.FINAL) {
+                        "종료지점 편집"
+                    } else {
+                        "중도지점 편집"
+                    },
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = ArmyristColors.PrimaryText
+                )
+
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("지점명") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = ArmyristColors.PrimaryControl,
+                        cursorColor = ArmyristColors.PrimaryControl
+                    )
+                )
+
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text("비고") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = ArmyristColors.PrimaryControl,
+                        cursorColor = ArmyristColors.PrimaryControl
+                    )
+                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Switch(
+                        checked = isRange,
+                        onCheckedChange = { isRange = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = ArmyristColors.WorkSurface,
+                            checkedTrackColor = ArmyristColors.PrimaryControl
+                        )
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("시간범위 사용", color = ArmyristColors.PrimaryText)
+                }
+
+                OutlinedButton(
+                    onClick = { editA = true },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 42.dp),
+                    shape = ArmyristPanelShape,
+                    border = BorderStroke(1.dp, ArmyristColors.Border),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = ArmyristColors.WorkSurface,
+                        contentColor = ArmyristColors.PrimaryText
+                    )
+                ) {
+                    Text(
+                        (if (isRange) "시작 " else "시각 ") +
+                            a.format(DateTimeFormatter.ofPattern("MM.dd HH:mm"))
+                    )
+                }
+
+                if (isRange) {
+                    OutlinedButton(
+                        onClick = { editB = true },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 42.dp),
+                        shape = ArmyristPanelShape,
+                        border = BorderStroke(1.dp, ArmyristColors.Border),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = ArmyristColors.WorkSurface,
+                            contentColor = ArmyristColors.PrimaryText
+                        )
+                    ) {
+                        Text(
+                            "종료 " +
+                                b.format(DateTimeFormatter.ofPattern("MM.dd HH:mm"))
+                        )
+                    }
+                }
+
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TextButton(
+                        onClick = onDelete,
+                        modifier = Modifier.heightIn(min = 38.dp)
+                    ) {
+                        Text("삭제")
+                    }
+
+                    Spacer(Modifier.weight(1f))
+
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.heightIn(min = 38.dp),
+                        shape = ArmyristPanelShape
+                    ) {
+                        Text("취소")
+                    }
+
+                    Button(
+                        onClick = {
+                            val spec =
+                                if (isRange) {
+                                    EventDateTimeSpec.Range(
+                                        DateTimeValue.explicit(a),
+                                        DateTimeValue.explicit(b)
+                                    )
+                                } else {
+                                    EventDateTimeSpec.Single(
+                                        DateTimeValue.explicit(a)
+                                    )
+                                }
+                            onConfirm(
+                                event.copy(
+                                    name = name.trim().ifBlank { event.name },
+                                    note = note.trim().ifBlank { null },
+                                    timeSpec = spec
+                                )
+                            )
+                        },
+                        modifier = Modifier.heightIn(min = 38.dp),
+                        shape = ArmyristPanelShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ArmyristColors.PrimaryControl,
+                            contentColor = ArmyristColors.OnDark
+                        )
+                    ) {
+                        Text("확인")
+                    }
+                }
+            }
+        }
+    }
+
+    if (editA) {
+        DateTimeEditorDialog(
+            if (isRange) "시작 날짜 / 시간" else "날짜 / 시간",
+            a,
+            { editA = false }
+        ) {
+            a = it
+            editA = false
+        }
+    }
+
+    if (editB) {
+        DateTimeEditorDialog(
+            "종료 날짜 / 시간",
+            b,
+            { editB = false }
+        ) {
+            b = it
+            editB = false
+        }
+    }
 }
 
 @Composable private fun LegacyDateMigrationDialog(title:String,onDismiss:()->Unit,onApply:(LocalDate)->Unit){var date by remember{mutableStateOf(LocalDate.now())};var calendar by remember{mutableStateOf(false)};AlertDialog(onDismissRequest=onDismiss,title={Text("기준 날짜 지정")},text={Column(verticalArrangement=Arrangement.spacedBy(10.dp)){Text("‘$title’은 날짜 기능이 추가되기 전에 작성되었습니다.\n계획의 시작 기준 날짜를 선택해주세요.");Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){OutlinedButton(onClick={date=date.minusDays(1)}){Text("-1일")};Text(date.format(DateTimeFormatter.ISO_DATE),fontWeight=FontWeight.Bold);OutlinedButton(onClick={date=date.plusDays(1)}){Text("+1일")}};TextButton(onClick={calendar=true},modifier=Modifier.fillMaxWidth()){Text("달력")};Text("적용 전에는 기존 데이터가 변경되지 않습니다.",style=MaterialTheme.typography.bodySmall,color=ArmyristColors.SecondaryText)}},dismissButton={TextButton(onClick=onDismiss){Text("취소")}},confirmButton={Button(onClick={onApply(date)},colors=ButtonDefaults.buttonColors(containerColor=ArmyristColors.PrimaryControl)){Text("적용")}});if(calendar){val state=rememberDatePickerState(initialSelectedDateMillis=date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli());DatePickerDialog(onDismissRequest={calendar=false},confirmButton={TextButton(onClick={state.selectedDateMillis?.let{date=Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()};calendar=false}){Text("확인")}}){DatePicker(state=state)}}}

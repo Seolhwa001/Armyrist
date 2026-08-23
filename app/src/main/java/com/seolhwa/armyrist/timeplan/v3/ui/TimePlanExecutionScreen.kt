@@ -829,17 +829,21 @@ private fun TimePlanExecuteScreen(
                         shape = ArmyristPanelShape,
                         colors = CardDefaults.cardColors(
                             containerColor = when {
-                                bulkSelect && action.id in selectedActionIds -> ArmyristColors.SecondaryControl
-                                completed -> ArmyristColors.SecondaryControl.copy(alpha = 0.72f)
-                                else -> ArmyristColors.RaisedSurface
+                                bulkSelect && action.id in selectedActionIds ->
+                                    ArmyristColors.SecondaryControl
+                                else ->
+                                    ArmyristColors.RaisedSurface
                             }
                         ),
                         border = BorderStroke(
                             1.dp,
-                            if (bulkSelect && action.id in selectedActionIds) {
-                                ArmyristColors.PrimaryControl
-                            } else {
-                                ArmyristColors.Border
+                            when {
+                                bulkSelect && action.id in selectedActionIds ->
+                                    ArmyristColors.PrimaryControl
+                                completed ->
+                                    ArmyristColors.PrimaryControl.copy(alpha = 0.72f)
+                                else ->
+                                    ArmyristColors.Border
                             }
                         )
                     ) {
