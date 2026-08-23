@@ -111,16 +111,16 @@ fun TimePlanExecutionApp(
                 Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                FilterChip(
+                ArmyristModeButton(
+                    label = "편집/준비",
                     selected = mode == TimePlanExecutionMode.PREPARE,
                     onClick = { mode = TimePlanExecutionMode.PREPARE },
-                    label = { Text("편집/준비") },
                     modifier = Modifier.weight(1f)
                 )
-                FilterChip(
+                ArmyristModeButton(
+                    label = "수행 모드",
                     selected = mode == TimePlanExecutionMode.EXECUTE,
                     onClick = { mode = TimePlanExecutionMode.EXECUTE },
-                    label = { Text("수행 모드") },
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -192,10 +192,33 @@ private fun TimePlanPrepareScreen(
                 }
                 TextButton(onClick = { groupManager = true }) { Text("그룹") }
             }
-            if (selectedPoints.isNotEmpty()) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedButton(onClick = { batchAdd = true }, modifier = Modifier.weight(1f)) { Text("일괄 추가") }
-                    TextButton(onClick = { selectedPoints = emptyList() }, modifier = Modifier.weight(1f)) { Text("지점 해제") }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (selectedPoints.isNotEmpty()) {
+                    OutlinedButton(
+                        onClick = { batchAdd = true },
+                        modifier = Modifier.weight(1f),
+                        shape = ArmyristPanelShape
+                    ) { Text("일괄 추가") }
+                }
+                OutlinedButton(
+                    onClick = {
+                        selectedPoints =
+                            if (selectedPoints.toSet().containsAll(allPointIds.toSet())) {
+                                emptyList()
+                            } else {
+                                allPointIds
+                            }
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = ArmyristPanelShape
+                ) {
+                    Text(
+                        if (selectedPoints.toSet().containsAll(allPointIds.toSet()) && allPointIds.isNotEmpty()) {
+                            "전체 지점 해제"
+                        } else {
+                            "전체 지점 선택"
+                        }
+                    )
                 }
             }
             if (selectedActions.isNotEmpty()) {
@@ -245,13 +268,16 @@ private fun TimePlanPrepareScreen(
                             pointActions.forEach { action ->
                                 val selected = action.id in selectedActions
                                 Surface(
-                                    modifier = Modifier.fillMaxWidth().clickable { editAction = action },
+                                    modifier = Modifier.fillMaxWidth(),
                                     shape = ArmyristPanelShape,
                                     color = if (selected) ArmyristColors.SecondaryControl else ArmyristColors.WorkSurface,
                                     border = BorderStroke(1.dp, ArmyristColors.Border)
                                 ) {
                                     Row(
-                                        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .clickable { editAction = action }
+                                            .padding(horizontal = 8.dp, vertical = 6.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Checkbox(
@@ -275,6 +301,12 @@ private fun TimePlanPrepareScreen(
                                                 Text("비고: $it", style = MaterialTheme.typography.bodySmall)
                                             }
                                         }
+                                        Text(
+                                            "편집",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = ArmyristColors.PrimaryControl,
+                                            modifier = Modifier.padding(start = 6.dp)
+                                        )
                                     }
                                 }
                             }
@@ -459,16 +491,16 @@ private fun TimePlanExecuteScreen(
                 style = MaterialTheme.typography.bodySmall
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                FilterChip(
+                ArmyristModeButton(
+                    label = "시간순",
                     selected = view == TimePlanExecutionView.TIMELINE,
                     onClick = { view = TimePlanExecutionView.TIMELINE },
-                    label = { Text("시간순") },
                     modifier = Modifier.weight(1f)
                 )
-                FilterChip(
+                ArmyristModeButton(
+                    label = "그룹별",
                     selected = view == TimePlanExecutionView.GROUP,
                     onClick = { view = TimePlanExecutionView.GROUP },
-                    label = { Text("그룹별") },
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -571,6 +603,42 @@ private fun TimePlanExecuteScreen(
     }
 }
 
+@Composable
+private fun ArmyristModeButton(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (selected) {
+        Button(
+            onClick = onClick,
+            modifier = modifier.heightIn(min = 48.dp),
+            shape = ArmyristPanelShape,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = ArmyristColors.SecondaryControl,
+                contentColor = ArmyristColors.PrimaryText
+            ),
+            border = BorderStroke(1.dp, ArmyristColors.PrimaryControl)
+        ) {
+            Text(label, fontWeight = FontWeight.Bold)
+        }
+    } else {
+        OutlinedButton(
+            onClick = onClick,
+            modifier = modifier.heightIn(min = 48.dp),
+            shape = ArmyristPanelShape,
+            border = BorderStroke(1.dp, ArmyristColors.Border),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = ArmyristColors.WorkSurface,
+                contentColor = ArmyristColors.PrimaryText
+            )
+        ) {
+            Text(label)
+        }
+    }
+}
+
 private val dateClock = DateTimeFormatter.ofPattern("MM.dd HH:mm")
 
 @Composable
@@ -594,6 +662,10 @@ private fun ActionEditDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
+        containerColor = ArmyristColors.RaisedSurface,
+        tonalElevation = 0.dp,
+        titleContentColor = ArmyristColors.PrimaryText,
+        textContentColor = ArmyristColors.PrimaryText,
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(content, { content = it }, label = { Text("내용") }, modifier = Modifier.fillMaxWidth())
@@ -673,6 +745,10 @@ private fun BatchAddDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("실시사항 일괄 추가") },
+        containerColor = ArmyristColors.RaisedSurface,
+        tonalElevation = 0.dp,
+        titleContentColor = ArmyristColors.PrimaryText,
+        textContentColor = ArmyristColors.PrimaryText,
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("선택 지점 ${count}개")

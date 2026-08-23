@@ -432,8 +432,11 @@ private fun DateAwarePlanDetail(
                     }
                 }
             } else {
+                val allNodeSelectionKeys =
+                    DateTimePlanRules.nodeIds(plan).map(::nodeSelectionKey).toSet()
                 SelectionActionPanel(
                     selectedKeys = selectedKeys,
+                    allNodeSelectionKeys = allNodeSelectionKeys,
                     canBatchDate = selectedKeys.isNotEmpty() && selectedKeys.all { it.startsWith("N:") },
                     onBatchDate = {
                         val nodeIds = selectedKeys.map { it.removePrefix("N:") }.toSet()
@@ -447,6 +450,12 @@ private fun DateAwarePlanDetail(
                         val nodeIds = selectedKeys.filter { it.startsWith("N:") }.map { it.removePrefix("N:") }.toSet()
                         if (nodeIds.isEmpty()) message = "실시사항을 편집할 지점을 선택해주세요."
                         else onOpenExecution(TimePlanExecutionActivity.MODE_PREPARE, nodeIds)
+                    },
+                    onSelectAllNodes = {
+                        selectedKeyList = allNodeSelectionKeys.toList()
+                    },
+                    onClearNodes = {
+                        selectedKeyList = selectedKeys.filterNot { it.startsWith("N:") }
                     },
                     onDone = { selectionMode = false; selectedKeyList = emptyList() }
                 )
@@ -556,10 +565,15 @@ private fun DateAwarePlanDetail(
                 )
             },
             dismissButton = {
-                TextButton(onClick = {
-                    onCommit(candidate)
-                    pendingActionShift = null
-                }) { Text("Action 시간 유지") }
+                Row {
+                    TextButton(onClick = { pendingActionShift = null }) {
+                        Text("취소")
+                    }
+                    TextButton(onClick = {
+                        onCommit(candidate)
+                        pendingActionShift = null
+                    }) { Text("실시사항 시간 유지") }
+                }
             },
             confirmButton = {
                 Button(
@@ -573,7 +587,9 @@ private fun DateAwarePlanDetail(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor=ArmyristColors.PrimaryControl)
                 ) { Text("함께 이동") }
-            }
+            },
+            containerColor = ArmyristColors.RaisedSurface,
+            tonalElevation = 0.dp
         )
     }
 
@@ -655,11 +671,14 @@ private fun conflictTitle(type: TimePlanConflictType): String = when(type) {
 @Composable
 private fun SelectionActionPanel(
     selectedKeys: Set<String>,
+    allNodeSelectionKeys: Set<String>,
     canBatchDate: Boolean,
     onBatchDate: () -> Unit,
     onLock: () -> Unit,
     onUnlock: () -> Unit,
     onActionEdit: () -> Unit,
+    onSelectAllNodes: () -> Unit,
+    onClearNodes: () -> Unit,
     onDone: () -> Unit
 ) {
     Surface(
@@ -672,11 +691,20 @@ private fun SelectionActionPanel(
             Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
+            val selectedNodeKeys = selectedKeys.filter { it.startsWith("N:") }.toSet()
+            val allNodesSelected =
+                allNodeSelectionKeys.isNotEmpty() &&
+                    selectedNodeKeys.containsAll(allNodeSelectionKeys)
             Row(
-                Modifier.fillMaxWidth().heightIn(min = 38.dp),
+                Modifier.fillMaxWidth().heightIn(min = 40.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("✓ ${selectedKeys.size}개 선택", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                TextButton(
+                    onClick = if (allNodesSelected) onClearNodes else onSelectAllNodes
+                ) {
+                    Text(if (allNodesSelected) "지점 전체 해제" else "전체 지점 선택")
+                }
                 TextButton(onClick = onDone) { Text("완료") }
             }
             Row(
@@ -688,7 +716,7 @@ private fun SelectionActionPanel(
                     enabled = selectedKeys.any { it.startsWith("N:") },
                     modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
-                ) { Text("실시사항") }
+                ) { Text("실시사항 편집") }
                 if (canBatchDate) {
                     OutlinedButton(
                         onClick = onBatchDate,
