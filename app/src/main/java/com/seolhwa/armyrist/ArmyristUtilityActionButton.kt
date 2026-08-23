@@ -20,7 +20,7 @@ fun ArmyristUtilityActionButton(
     OutlinedButton(
         onClick = onClick,
         modifier = modifier.heightIn(min = 52.dp),
-        shape = ArmyristPanelShape,
+        shape = ArmyristControlShape,
         border = BorderStroke(
             1.dp,
             ArmyristColors.Border

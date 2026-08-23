@@ -65,7 +65,9 @@ fun ArmyristTheme(content: @Composable () -> Unit) {
     )
 }
 
-val ArmyristPanelShape: Shape = RoundedCornerShape(3.dp)
+// Armyrist common UI language: soft work cards, compact controls, functional icons.
+val ArmyristPanelShape: Shape = RoundedCornerShape(12.dp)
+val ArmyristControlShape: Shape = RoundedCornerShape(10.dp)
 
 @Composable
 fun ArmyristPanel(

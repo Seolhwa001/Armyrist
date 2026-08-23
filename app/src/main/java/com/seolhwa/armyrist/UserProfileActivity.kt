@@ -79,6 +79,7 @@ private fun UserProfileScreen(
                 title = "내 정보",
                 subtitle = "PROFILE · APP INFORMATION · AUTO SAVE",
                 leadingLabel = "홈",
+                leadingIcon = ArmyristTopBarLeadingIcon.HOME,
                 onLeading = {
                     saveIfNeeded()
                     onBack()

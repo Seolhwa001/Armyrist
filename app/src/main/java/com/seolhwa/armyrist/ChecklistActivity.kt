@@ -33,6 +33,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -406,22 +410,19 @@ private fun ChecklistListScreen(
                 title = "체크리스트",
                 subtitle = "CHECKLIST · 반복 점검 · AUTO SAVE",
                 leadingLabel = "홈",
+                leadingIcon = ArmyristTopBarLeadingIcon.HOME,
                 onLeading = onHome
             )
         },
-        floatingActionButton = {
+        bottomBar = {
             if (checklists.isNotEmpty()) {
-                ExtendedFloatingActionButton(
-                    onClick = onCreate,
-                    modifier = Modifier.heightIn(min = 58.dp),
-                    shape = ArmyristPanelShape,
-                    containerColor = ArmyristColors.PrimaryControl,
-                    contentColor = ArmyristColors.OnDark
-                ) {
-                    Text(
-                        "+ 새 체크리스트",
-                        fontWeight = FontWeight.Bold
-                    )
+                Surface(color = ArmyristColors.AppBackground) {
+                    Button(
+                        onClick = onCreate,
+                        modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 14.dp, vertical = 10.dp).heightIn(min = 54.dp),
+                        shape = ArmyristControlShape,
+                        colors = ButtonDefaults.buttonColors(containerColor = ArmyristColors.PrimaryControl, contentColor = ArmyristColors.OnDark)
+                    ) { Text("+  새 체크리스트 만들기", fontWeight = FontWeight.Bold) }
                 }
             }
         }
@@ -467,7 +468,11 @@ private fun ChecklistListScreen(
                             onClick = openImport,
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                             shape = ArmyristPanelShape
-                        ) { Text("데이터 불러오기") }
+                        ) {
+                        Icon(Icons.Outlined.FileDownload, contentDescription = null, tint = ArmyristColors.PrimaryControl)
+                        Spacer(Modifier.width(8.dp))
+                        Text("데이터 불러오기")
+                    }
                     }
                 }
             }
@@ -482,7 +487,11 @@ private fun ChecklistListScreen(
                         onClick = openImport,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp),
                         shape = ArmyristPanelShape
-                    ) { Text("데이터 불러오기") }
+                    ) {
+                        Icon(Icons.Outlined.FileDownload, contentDescription = null, tint = ArmyristColors.PrimaryControl)
+                        Spacer(Modifier.width(8.dp))
+                        Text("데이터 불러오기")
+                    }
                 }
                 items(checklists, key = { it.id }) { checklist ->
                     val p = ChecklistRules.progress(checklist.items)
@@ -511,8 +520,13 @@ private fun ChecklistListScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            TextButton(onClick = { renameTarget = checklist }) { Text("이름") }
-                            TextButton(onClick = { deleteTarget = checklist }) { Text("삭제") }
+                            IconButton(onClick = { renameTarget = checklist }) {
+                                Icon(Icons.Outlined.Edit, contentDescription = "이름 변경", tint = ArmyristColors.PrimaryControl)
+                            }
+                            VerticalDivider(modifier = Modifier.height(30.dp), color = ArmyristColors.SoftBorder)
+                            IconButton(onClick = { deleteTarget = checklist }) {
+                                Icon(Icons.Outlined.DeleteOutline, contentDescription = "삭제", tint = ArmyristColors.Danger)
+                            }
                         }
                     }
                 }
@@ -640,6 +654,7 @@ private fun ChecklistDetailScreen(
                 title = checklist.title,
                 subtitle = "CHECKLIST · 항목 ${checklist.items.size} · AUTO SAVE",
                 leadingLabel = "홈",
+                leadingIcon = ArmyristTopBarLeadingIcon.HOME,
                 onLeading = onHome,
                 secondaryLeadingLabel = "메뉴",
                 onSecondaryLeading = onBack,

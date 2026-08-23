@@ -115,6 +115,7 @@ private fun TemplateList(
                 title = "보고 양식",
                 subtitle = "REPORT TEMPLATE · AUTO SAVE",
                 leadingLabel = "홈",
+                leadingIcon = ArmyristTopBarLeadingIcon.HOME,
                 onLeading = onHome
             )
         },
@@ -250,6 +251,7 @@ private fun TemplateEditor(
                     },
                 subtitle = "REPORT TEMPLATE · EDIT",
                 leadingLabel = "홈",
+                leadingIcon = ArmyristTopBarLeadingIcon.HOME,
                 onLeading = onHome
             )
         }

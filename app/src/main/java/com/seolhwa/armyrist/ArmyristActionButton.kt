@@ -23,7 +23,7 @@ fun ArmyristActionButton(
         Button(
             onClick = onClick,
             modifier = sized,
-            shape = ArmyristPanelShape,
+            shape = ArmyristControlShape,
             colors = ButtonDefaults.buttonColors(
                 containerColor = ArmyristColors.PrimaryControl,
                 contentColor = ArmyristColors.OnDark
@@ -35,7 +35,7 @@ fun ArmyristActionButton(
         OutlinedButton(
             onClick = onClick,
             modifier = sized,
-            shape = ArmyristPanelShape,
+            shape = ArmyristControlShape,
             border = BorderStroke(1.dp, ArmyristColors.PrimaryControl),
             colors = ButtonDefaults.outlinedButtonColors(
                 containerColor = ArmyristColors.WorkSurface,

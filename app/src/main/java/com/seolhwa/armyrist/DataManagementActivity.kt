@@ -215,6 +215,7 @@ private fun DataManagementScreen(
                 title = "데이터 관리",
                 subtitle = "DATA · BACKUP / RESTORE · OFFLINE",
                 leadingLabel = "홈",
+                leadingIcon = ArmyristTopBarLeadingIcon.HOME,
                 onLeading = onBack
             )
         }

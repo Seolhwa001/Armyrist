@@ -34,6 +34,10 @@ import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -291,22 +295,19 @@ private fun SheetListScreen(
                 title = "실셈",
                 subtitle = "COUNTING / 현장 수량 기록",
                 leadingLabel = "홈",
+                leadingIcon = ArmyristTopBarLeadingIcon.HOME,
                 onLeading = onHome
             )
         },
-        floatingActionButton = {
+        bottomBar = {
             if (sheets.isNotEmpty()) {
-                ExtendedFloatingActionButton(
-                    onClick = onCreate,
-                    modifier = Modifier.heightIn(min = 58.dp),
-                    shape = ArmyristPanelShape,
-                    containerColor = ArmyristColors.PrimaryControl,
-                    contentColor = ArmyristColors.OnDark
-                ) {
-                    Text(
-                        "+ 새 실셈",
-                        fontWeight = FontWeight.Bold
-                    )
+                Surface(color = ArmyristColors.AppBackground) {
+                    Button(
+                        onClick = onCreate,
+                        modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 14.dp, vertical = 10.dp).heightIn(min = 54.dp),
+                        shape = ArmyristControlShape,
+                        colors = ButtonDefaults.buttonColors(containerColor = ArmyristColors.PrimaryControl, contentColor = ArmyristColors.OnDark)
+                    ) { Text("+  새 실셈 만들기", fontWeight = FontWeight.Bold) }
                 }
             }
         }
@@ -362,7 +363,11 @@ private fun SheetListScreen(
                             onClick = openImport,
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                             shape = ArmyristPanelShape
-                        ) { Text("데이터 불러오기") }
+                        ) {
+                        Icon(Icons.Outlined.FileDownload, contentDescription = null, tint = ArmyristColors.PrimaryControl)
+                        Spacer(Modifier.width(8.dp))
+                        Text("데이터 불러오기")
+                    }
                     }
                 }
             }
@@ -384,7 +389,11 @@ private fun SheetListScreen(
                         onClick = openImport,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp),
                         shape = ArmyristPanelShape
-                    ) { Text("데이터 불러오기") }
+                    ) {
+                        Icon(Icons.Outlined.FileDownload, contentDescription = null, tint = ArmyristColors.PrimaryControl)
+                        Spacer(Modifier.width(8.dp))
+                        Text("데이터 불러오기")
+                    }
                 }
                 items(sheets, key = { it.id }) { sheet ->
                     Card(
@@ -418,8 +427,13 @@ private fun SheetListScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            TextButton(onClick = { renameTarget = sheet }) { Text("이름") }
-                            TextButton(onClick = { deleteTarget = sheet }) { Text("삭제") }
+                            IconButton(onClick = { renameTarget = sheet }) {
+                                Icon(Icons.Outlined.Edit, contentDescription = "이름 변경", tint = ArmyristColors.PrimaryControl)
+                            }
+                            VerticalDivider(modifier = Modifier.height(30.dp), color = ArmyristColors.SoftBorder)
+                            IconButton(onClick = { deleteTarget = sheet }) {
+                                Icon(Icons.Outlined.DeleteOutline, contentDescription = "삭제", tint = ArmyristColors.Danger)
+                            }
                         }
                     }
                 }
@@ -520,6 +534,7 @@ private fun CountingScreen(
                 title = sheet.title,
                 subtitle = "COUNTING · 항목 ${sheet.items.size} · AUTO SAVE",
                 leadingLabel = "홈",
+                leadingIcon = ArmyristTopBarLeadingIcon.HOME,
                 onLeading = onHome,
                 secondaryLeadingLabel = "메뉴",
                 onSecondaryLeading = onBack,
