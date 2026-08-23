@@ -68,4 +68,107 @@ class DateTimePlanRulesTest {
         val p=DateAwareTimePlan("p","x",DateTimeAnchor(DateTimeValue.explicit(dt(14,9))),listOf(e),null,DateTimeAnchor(DateTimeValue.explicit(dt(14,10))),createdAt="0",updatedAt="0")
         assertTrue(DateTimePlanRules.validate(p).isNotEmpty())
     }
+
+    @Test fun eventEditNeverMovesLockedStart() {
+        val mid = DateTimeEvent(
+            "m1", TimeEventKind.MIDWAY, 0, "중도1",
+            EventDateTimeSpec.Single(DateTimeValue.explicit(dt(14, 23, 50)))
+        )
+        val plan = DateTimePlanRules.normalizeTopology(
+            DateAwareTimePlan(
+                "p", "x",
+                DateTimeAnchor(DateTimeValue.explicit(dt(14, 23, 50)), dateTimeLocked = true),
+                listOf(mid),
+                null,
+                DateTimeAnchor(DateTimeValue.explicit(dt(15, 1, 0))),
+                createdAt = "0", updatedAt = "0"
+            )
+        )
+        val edited = mid.copy(
+            timeSpec = EventDateTimeSpec.Single(DateTimeValue.explicit(dt(14, 23, 45)))
+        )
+
+        val changed = DateTimePlanRules.reflowEventEdit(plan, edited)!!
+        assertEquals(dt(14, 23, 50), changed.start.value.value)
+        assertTrue(changed.start.dateTimeLocked)
+    }
+
+    @Test fun eventEditReordersMidwaysAndExpandsUnlockedStart() {
+        val mid1 = DateTimeEvent(
+            "m1", TimeEventKind.MIDWAY, 0, "중도1",
+            EventDateTimeSpec.Single(DateTimeValue.explicit(dt(15, 0, 30)))
+        )
+        val mid2 = DateTimeEvent(
+            "m2", TimeEventKind.MIDWAY, 1, "중도2",
+            EventDateTimeSpec.Single(DateTimeValue.explicit(dt(14, 23, 40)))
+        )
+        val plan = DateTimePlanRules.normalizeTopology(
+            DateAwareTimePlan(
+                "p", "x",
+                DateTimeAnchor(DateTimeValue.explicit(dt(14, 23, 50))),
+                listOf(mid1, mid2),
+                null,
+                DateTimeAnchor(DateTimeValue.explicit(dt(15, 2, 0))),
+                createdAt = "0", updatedAt = "0"
+            )
+        )
+        val edited = mid1.copy(
+            timeSpec = EventDateTimeSpec.Single(DateTimeValue.explicit(dt(14, 23, 35)))
+        )
+
+        val changed = DateTimePlanRules.reflowEventEdit(plan, edited)!!
+        assertEquals(dt(14, 23, 35), changed.start.value.value)
+        assertEquals(listOf("m1", "m2"), changed.midwayEvents.map { it.id })
+        assertEquals(0L, changed.links.first().durationMinutes)
+        assertEquals(5L, changed.links[1].durationMinutes)
+    }
+
+    @Test fun rangePastEndExpandsUnlockedEnd() {
+        val mid = DateTimeEvent(
+            "m1", TimeEventKind.MIDWAY, 0, "범위",
+            EventDateTimeSpec.Range(
+                DateTimeValue.explicit(dt(14, 22, 0)),
+                DateTimeValue.explicit(dt(15, 1, 30))
+            )
+        )
+        val plan = DateTimePlanRules.normalizeTopology(
+            DateAwareTimePlan(
+                "p", "x",
+                DateTimeAnchor(DateTimeValue.explicit(dt(14, 20, 0))),
+                listOf(mid),
+                null,
+                DateTimeAnchor(DateTimeValue.explicit(dt(15, 0, 30))),
+                createdAt = "0", updatedAt = "0"
+            )
+        )
+
+        val changed = DateTimePlanRules.reflowEventEdit(plan, mid)!!
+        assertEquals(dt(15, 1, 30), changed.end.value.value)
+        assertEquals(0L, changed.links.last().durationMinutes)
+    }
+
+    @Test fun rangePastLockedEndKeepsLockedEnd() {
+        val mid = DateTimeEvent(
+            "m1", TimeEventKind.MIDWAY, 0, "범위",
+            EventDateTimeSpec.Range(
+                DateTimeValue.explicit(dt(14, 22, 0)),
+                DateTimeValue.explicit(dt(15, 1, 30))
+            )
+        )
+        val plan = DateTimePlanRules.normalizeTopology(
+            DateAwareTimePlan(
+                "p", "x",
+                DateTimeAnchor(DateTimeValue.explicit(dt(14, 20, 0))),
+                listOf(mid),
+                null,
+                DateTimeAnchor(DateTimeValue.explicit(dt(15, 0, 30)), dateTimeLocked = true),
+                createdAt = "0", updatedAt = "0"
+            )
+        )
+
+        val changed = DateTimePlanRules.reflowEventEdit(plan, mid)!!
+        assertEquals(dt(15, 0, 30), changed.end.value.value)
+        assertTrue(changed.end.dateTimeLocked)
+    }
+
 }
