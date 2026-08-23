@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
 import com.seolhwa.armyrist.stage2.domain.ReportTemplate
+import com.seolhwa.armyrist.stage2.domain.ReportDetailMode
 import com.seolhwa.armyrist.stage2.domain.ToolResult
 import java.io.File
 import java.text.SimpleDateFormat
@@ -62,7 +63,8 @@ fun CommonShareScreen(
     result: ToolResult,
     onBack: () -> Unit,
     portableType: ArmyristPortableDataType? = null,
-    portableRootId: String? = null
+    portableRootId: String? = null,
+    detailedResult: ToolResult? = null
 ) {
     BackHandler(onBack = onBack)
     val context = LocalContext.current
@@ -70,6 +72,8 @@ fun CommonShareScreen(
     val default = templates.firstOrNull { it.isDefault }
     var selectedId by rememberSaveable { mutableStateOf(default?.id ?: NONE_TEMPLATE) }
     val selected = templates.firstOrNull { it.id == selectedId }
+    var reportDetailMode by rememberSaveable { mutableStateOf(ReportDetailMode.COMPACT) }
+    val activeResult = if (reportDetailMode == ReportDetailMode.DETAILED && detailedResult != null) detailedResult else result
 
     var pendingSaveBytes by remember { mutableStateOf<ByteArray?>(null) }
     var encrypt by rememberSaveable { mutableStateOf(false) }
@@ -102,23 +106,23 @@ fun CommonShareScreen(
         }
     }
 
-    val capturedAt = remember(selectedId, result) { Date() }
+    val capturedAt = remember(selectedId, activeResult) { Date() }
     val capturedUserName =
-        remember(selectedId, result) {
+        remember(selectedId, activeResult) {
             repo.getUserProfile().displayName
         }
 
     val finalText =
         remember(
             selectedId,
-            result,
+            activeResult,
             templates,
             capturedAt,
             capturedUserName
         ) {
             applyReportTemplate(
                 template = selected,
-                result = result,
+                result = activeResult,
                 userName = capturedUserName,
                 now = capturedAt
             )
@@ -250,6 +254,34 @@ fun CommonShareScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(Modifier.height(8.dp))
+
+                if (detailedResult != null) {
+                    Text("보고 방식", fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = reportDetailMode == ReportDetailMode.COMPACT,
+                            onClick = { reportDetailMode = ReportDetailMode.COMPACT },
+                            label = { Text("간결 보고") },
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilterChip(
+                            selected = reportDetailMode == ReportDetailMode.DETAILED,
+                            onClick = { reportDetailMode = ReportDetailMode.DETAILED },
+                            label = { Text("상세 보고") },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Text(
+                        if (reportDetailMode == ReportDetailMode.COMPACT) "핵심 결과와 미실시 항목 중심" else "전체 수행 내역 포함",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ArmyristColors.SecondaryText
+                    )
+                    Spacer(Modifier.height(10.dp))
+                }
 
                 var expanded by remember { mutableStateOf(false) }
                 Box {

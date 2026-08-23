@@ -1,6 +1,7 @@
 package com.seolhwa.armyrist
 
 import android.os.Bundle
+import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,7 +20,19 @@ class TimePlanActivity : ComponentActivity() {
                         repository = app.dateAwareTimePlanRepository,
                         legacyRepository = app.timePlanV2Repository,
                         coreRepository = app.coreSuiteRepository,
-                        onHome = { finish() }
+                        onHome = { finish() },
+                        onOpenExecution = { planId, mode, pointIds ->
+                            startActivity(
+                                Intent(this@TimePlanActivity, TimePlanExecutionActivity::class.java).apply {
+                                    putExtra(TimePlanExecutionActivity.EXTRA_PLAN_ID, planId)
+                                    putExtra(TimePlanExecutionActivity.EXTRA_MODE, mode)
+                                    putStringArrayListExtra(
+                                        TimePlanExecutionActivity.EXTRA_POINT_IDS,
+                                        ArrayList(pointIds)
+                                    )
+                                }
+                            )
+                        }
                     )
                 }
             }

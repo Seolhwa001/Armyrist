@@ -3,6 +3,7 @@ package com.seolhwa.armyrist
 import android.app.Application
 import com.seolhwa.armyrist.data.CountingRepository
 import com.seolhwa.armyrist.notification.ChecklistNotificationManager
+import com.seolhwa.armyrist.notification.TimePlanActionNotificationManager
 import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
 import com.seolhwa.armyrist.timeplan.data.TimePlanV2MigrationCoordinator
 import com.seolhwa.armyrist.timeplan.data.TimePlanV2Repository
@@ -40,6 +41,10 @@ class ArmyristApplication : Application() {
             this,
             coreSuiteRepository
         )
+        TimePlanActionNotificationManager.reconcile(
+            this,
+            dateAwareTimePlanRepository
+        )
     }
 
     fun reloadAfterPortableDataChange() {
@@ -58,6 +63,10 @@ class ArmyristApplication : Application() {
         ChecklistNotificationManager.reconcile(
             this,
             coreSuiteRepository
+        )
+        TimePlanActionNotificationManager.reconcile(
+            this,
+            dateAwareTimePlanRepository
         )
     }
 
