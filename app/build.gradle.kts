@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 102
-        versionName = "0.6.14-execution-ui-action-move-longpress"
+        versionCode = 103
+        versionName = "0.6.15-delete-compat-rail-ui-unification"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
