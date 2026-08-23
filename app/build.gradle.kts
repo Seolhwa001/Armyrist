@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 80
-        versionName = "0.5.2-timeplan-ui-duration-group-rework"
+        versionCode = 81
+        versionName = "0.5.3-timeplan-execution-date-selection"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
