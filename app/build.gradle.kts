@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 96
-        versionName = "0.6.8-completion-rail-architecture-rework"
+        versionCode = 97
+        versionName = "0.6.9-timeplan-ui-consistency-pass"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
