@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 94
-        versionName = "0.6.6-timeline-regression-test-rework"
+        versionCode = 95
+        versionName = "0.6.7-execution-rail-stability-ui"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
