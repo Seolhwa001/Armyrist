@@ -1,6 +1,7 @@
 package com.seolhwa.armyrist.timeplan.v3.data
 
 import android.content.Context
+import com.seolhwa.armyrist.notification.TimePlanActionNotificationManager
 import com.seolhwa.armyrist.timeplan.domain.RevisedTimePlan
 import com.seolhwa.armyrist.timeplan.domain.EventTimeSpec as LegacySpec
 import com.seolhwa.armyrist.timeplan.domain.TimeEventKind as LegacyKind
@@ -13,7 +14,8 @@ import java.time.LocalTime
 import java.util.UUID
 
 class DateAwareTimePlanRepository(context: Context) {
-    private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private val appContext = context.applicationContext
+    private val prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     @Volatile private var plans: List<DateAwareTimePlan> = load()
 
     @Synchronized fun reloadFromPersistence() { plans = load() }
@@ -37,6 +39,7 @@ class DateAwareTimePlanRepository(context: Context) {
         val next = plans + plan
         check(persist(next)) { "Failed to persist new TimePlan." }
         plans = next
+        TimePlanActionNotificationManager.reconcile(appContext, this)
         return plan
     }
 
@@ -48,12 +51,16 @@ class DateAwareTimePlanRepository(context: Context) {
         val next = if (plans.any { it.id == value.id }) plans.map { if (it.id == value.id) normalized else it } else plans + normalized
         if (!persist(next)) return false
         plans = next
+        TimePlanActionNotificationManager.reconcile(appContext, this)
         return true
     }
 
     @Synchronized fun delete(id: String) {
         val next = plans.filterNot { it.id == id }
-        if (persist(next)) plans = next
+        if (persist(next)) {
+            plans = next
+            TimePlanActionNotificationManager.reconcile(appContext, this)
+        }
     }
 
     @Synchronized
@@ -63,6 +70,7 @@ class DateAwareTimePlanRepository(context: Context) {
         val next = plans + DateTimePlanRules.normalizeTopology(fresh)
         if (!persist(next)) return null
         plans = next
+        TimePlanActionNotificationManager.reconcile(appContext, this)
         return fresh.id
     }
 
@@ -72,6 +80,7 @@ class DateAwareTimePlanRepository(context: Context) {
         val next = restored.map(DateTimePlanRules::normalizeTopology)
         if (!persist(next)) return false
         plans = next
+        TimePlanActionNotificationManager.reconcile(appContext, this)
         return true
     }
 
@@ -91,6 +100,7 @@ class DateAwareTimePlanRepository(context: Context) {
         val next = plans.filterNot { it.id == normalized.id } + normalized
         if (!persist(next)) return null
         plans = next
+        TimePlanActionNotificationManager.reconcile(appContext, this)
         return normalized
     }
 
@@ -106,7 +116,7 @@ class DateAwareTimePlanRepository(context: Context) {
         return runCatching {
             val root = JSONObject(raw)
             val storedSchema = root.getInt("schemaVersion")
-            require(storedSchema == 3 || storedSchema == SCHEMA)
+            require(storedSchema in setOf(3, 4, SCHEMA))
             val a = root.optJSONArray("plans") ?: JSONArray()
             List(a.length()) { DateAwareTimePlanJson.decode(a.getJSONObject(it)) }
         }.getOrDefault(emptyList())
@@ -115,7 +125,7 @@ class DateAwareTimePlanRepository(context: Context) {
     companion object {
         const val PREFS = "armyrist_timeplan_v3"
         const val KEY = "snapshot_v3"
-        const val SCHEMA = 4
+        const val SCHEMA = 5
     }
 }
 
@@ -183,20 +193,24 @@ object LegacyDateMigration {
 
 object DateAwareTimePlanJson {
     fun encode(p: DateAwareTimePlan): JSONObject = JSONObject()
-        .put("schemaVersion", 4).put("id", p.id).put("title", p.title)
+        .put("schemaVersion", 5).put("id", p.id).put("title", p.title)
         .put("start", valueToJson(p.start.value).put("dateTimeLocked", p.start.dateTimeLocked))
         .put("midwayEvents", JSONArray().apply { p.midwayEvents.sortedBy { it.order }.forEach { put(eventToJson(it)) } })
         .put("finalPoint", p.finalPoint?.let(::eventToJson) ?: JSONObject.NULL)
         .put("end", valueToJson(p.end.value).put("dateTimeLocked", p.end.dateTimeLocked))
         .put("links", JSONArray().apply { p.links.forEach { put(linkToJson(it)) } })
+        .put("actionGroups", JSONArray().apply { p.actionGroups.sortedBy { it.order }.forEach { put(actionGroupToJson(it)) } })
+        .put("actions", JSONArray().apply { p.actions.sortedWith(compareBy<TimePlanActionItem> { it.parentPointId }.thenBy { it.order }).forEach { put(actionToJson(it)) } })
         .put("memo", p.memo ?: JSONObject.NULL)
         .put("createdAt", p.createdAt).put("updatedAt", p.updatedAt)
 
     fun decode(j: JSONObject): DateAwareTimePlan {
         val schema = j.getInt("schemaVersion")
-        require(schema == 3 || schema == 4)
+        require(schema in setOf(3, 4, 5))
         val mids = j.optJSONArray("midwayEvents") ?: JSONArray()
         val links = j.optJSONArray("links") ?: JSONArray()
+        val actionGroups = j.optJSONArray("actionGroups") ?: JSONArray()
+        val actions = j.optJSONArray("actions") ?: JSONArray()
         return DateAwareTimePlan(
             id=j.getString("id"), title=j.getString("title"),
             start=j.getJSONObject("start").let { a ->
@@ -208,6 +222,8 @@ object DateAwareTimePlanJson {
                 DateTimeAnchor(valueFromJson(a), a.optBoolean("dateTimeLocked", false))
             },
             links=List(links.length()){ linkFromJson(links.getJSONObject(it)) },
+            actionGroups=List(actionGroups.length()){ actionGroupFromJson(actionGroups.getJSONObject(it)) },
+            actions=List(actions.length()){ actionFromJson(actions.getJSONObject(it)) },
             memo=if(j.isNull("memo")) null else j.getString("memo"),
             createdAt=j.getString("createdAt"), updatedAt=j.getString("updatedAt")
         )
@@ -245,5 +261,38 @@ object DateAwareTimePlanJson {
         ValueOrigin.valueOf(j.getString("origin")),
         if(j.isNull("label")) null else j.getString("label"),
         j.optBoolean("durationLocked", false)
+    )
+    private fun actionGroupToJson(g: TimePlanActionGroup) = JSONObject()
+        .put("id", g.id).put("name", g.name).put("order", g.order).put("color", g.color)
+    private fun actionGroupFromJson(j: JSONObject) = TimePlanActionGroup(
+        id = j.getString("id"),
+        name = j.getString("name"),
+        order = j.getInt("order"),
+        color = j.optString("color", "#7A7D61")
+    )
+    private fun actionToJson(a: TimePlanActionItem) = JSONObject()
+        .put("id", a.id)
+        .put("parentPointId", a.parentPointId)
+        .put("content", a.content)
+        .put("scheduledDateTime", a.scheduledDateTime.toString())
+        .put("completionState", a.completionState.name)
+        .put("notificationEnabled", a.notificationEnabled)
+        .put("groupId", a.groupId ?: JSONObject.NULL)
+        .put("note", a.note ?: JSONObject.NULL)
+        .put("order", a.order)
+        .put("createdAt", a.createdAt)
+        .put("updatedAt", a.updatedAt)
+    private fun actionFromJson(j: JSONObject) = TimePlanActionItem(
+        id = j.getString("id"),
+        parentPointId = j.getString("parentPointId"),
+        content = j.getString("content"),
+        scheduledDateTime = LocalDateTime.parse(j.getString("scheduledDateTime")),
+        completionState = ActionCompletionState.valueOf(j.optString("completionState", ActionCompletionState.INCOMPLETE.name)),
+        notificationEnabled = j.optBoolean("notificationEnabled", false),
+        groupId = if (j.isNull("groupId")) null else j.getString("groupId"),
+        note = if (j.isNull("note")) null else j.getString("note"),
+        order = j.optInt("order", 0),
+        createdAt = j.optString("createdAt", System.currentTimeMillis().toString()),
+        updatedAt = j.optString("updatedAt", System.currentTimeMillis().toString())
     )
 }
