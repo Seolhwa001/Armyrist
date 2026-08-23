@@ -656,7 +656,14 @@ private fun ChecklistListScreen(
             text = { Text("'${target.title}'을 삭제합니다.") },
             confirmButton = {
                 TextButton(onClick = {
-                    onDelete(target.id)
+                    val moved = onDeleteToTrash(target.id)
+                    if (!moved) {
+                        Toast.makeText(
+                            context,
+                            "휴지통으로 이동하지 못했습니다.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
                     deleteTarget = null
                 }) { Text("삭제") }
             },
