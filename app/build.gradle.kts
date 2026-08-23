@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 87
-        versionName = "0.5.9-basedate-enum-build-rework"
+        versionCode = 88
+        versionName = "0.6.0-timeplan-notification-ui-home-scroll"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
