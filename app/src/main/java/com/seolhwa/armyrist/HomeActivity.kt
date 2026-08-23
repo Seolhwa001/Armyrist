@@ -15,8 +15,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -82,137 +81,145 @@ private fun HomeScreen(
     onUserProfile: () -> Unit,
     onDataManagement: () -> Unit
 ) {
-    Column(
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .statusBarsPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .statusBarsPadding(),
+        contentPadding = PaddingValues(
+            start = 14.dp,
+            end = 14.dp,
+            top = 12.dp,
+            bottom = 28.dp
+        ),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        ArmyristPanel(
-            modifier = Modifier.fillMaxWidth(),
-            dark = true,
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
-        ) {
-            Row(
+        item {
+            ArmyristPanel(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                dark = true,
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
             ) {
-                Column(Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "ARMYRIST",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        ArmyristSystemLabel("ARMYRIST SYSTEM", onDark = true)
+                    }
                     Text(
-                        "ARMYRIST",
-                        style = MaterialTheme.typography.headlineSmall,
+                        "SYS: NORMAL",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color(0xFFD7E0B9),
                         fontWeight = FontWeight.Bold
                     )
-                    Spacer(Modifier.height(2.dp))
-                    ArmyristSystemLabel(
-                        "ARMYRIST SYSTEM",
-                        onDark = true
+                }
+            }
+        }
+
+        item { ArmyristSectionLabel("업무 도구") }
+        item {
+            HomeToolPanel(
+                title = "실셈",
+                subtitle = "수량 기록 · 그룹 집계 · 결과 공유",
+                onClick = onCounting
+            )
+        }
+        item {
+            HomeToolPanel(
+                title = "체크리스트",
+                subtitle = "반복 점검 · 상태 관리 · 진행 현황",
+                onClick = onChecklist
+            )
+        }
+        item {
+            HomeToolPanel(
+                title = "시간계획",
+                subtitle = "시각 · 경과시간 · 중도 지점 관리",
+                onClick = onTimePlan
+            )
+        }
+        item {
+            HomeToolPanel(
+                title = "보고 양식",
+                subtitle = "공통 결과 전달 양식 관리",
+                onClick = onReportTemplate
+            )
+        }
+
+        item { ArmyristSectionLabel("공통 / 설정") }
+
+        item {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onUserProfile),
+                color = ArmyristColors.WorkSurface,
+                shape = ArmyristPanelShape,
+                border = BorderStroke(1.dp, ArmyristColors.Border)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "내 정보",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "사용자 이름 관리  ›",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ArmyristColors.SecondaryText
                     )
                 }
-                Text(
-                    "SYS: NORMAL",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color(0xFFD7E0B9),
-                    fontWeight = FontWeight.Bold
-                )
             }
         }
 
-        ArmyristSectionLabel("업무 도구")
+        item { NearbyReceiveToggle() }
 
-        HomeToolPanel(
-            title = "실셈",
-            subtitle = "수량 기록 · 그룹 집계 · 결과 공유",
-            onClick = onCounting
-        )
-        HomeToolPanel(
-            title = "체크리스트",
-            subtitle = "반복 점검 · 상태 관리 · 진행 현황",
-            onClick = onChecklist
-        )
-        HomeToolPanel(
-            title = "시간계획",
-            subtitle = "시각 · 경과시간 · 중도 지점 관리",
-            onClick = onTimePlan
-        )
-        HomeToolPanel(
-            title = "보고 양식",
-            subtitle = "공통 결과 전달 양식 관리",
-            onClick = onReportTemplate
-        )
-
-        Spacer(Modifier.height(2.dp))
-        ArmyristSectionLabel("공통 / 설정")
-
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onUserProfile),
-            color = ArmyristColors.WorkSurface,
-            shape = ArmyristPanelShape,
-            border = BorderStroke(1.dp, ArmyristColors.Border)
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
-                verticalAlignment = Alignment.CenterVertically
+        item {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onDataManagement),
+                color = ArmyristColors.WorkSurface,
+                shape = ArmyristPanelShape,
+                border = BorderStroke(1.dp, ArmyristColors.Border)
             ) {
-                Text(
-                    "내 정보",
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    "사용자 이름 관리  ›",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ArmyristColors.SecondaryText
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "데이터 관리",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "백업 · 복원  ›",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ArmyristColors.SecondaryText
+                    )
+                }
             }
         }
 
-
-        NearbyReceiveToggle()
-
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onDataManagement),
-            color = ArmyristColors.WorkSurface,
-            shape = ArmyristPanelShape,
-            border = BorderStroke(1.dp, ArmyristColors.Border)
-        ) {
-            Row(
-                modifier = Modifier.padding(
-                    horizontal = 14.dp,
-                    vertical = 13.dp
-                ),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "데이터 관리",
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    "백업 · 복원  ›",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ArmyristColors.SecondaryText
-                )
-            }
+        item {
+            ArmyristSystemLabel(
+                "CORE SUITE v1  ·  OFFLINE READY",
+                modifier = Modifier.fillMaxWidth()
+            )
         }
-
-        Spacer(Modifier.height(8.dp))
-
-        ArmyristSystemLabel(
-            "CORE SUITE v1  ·  OFFLINE READY",
-            modifier = Modifier.fillMaxWidth()
-        )
     }
 }
-
 
 @Composable
 private fun NearbyReceiveToggle() {
