@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 91
-        versionName = "0.6.3-timeplan-action-scroll-density"
+        versionCode = 92
+        versionName = "0.6.4-timeplan-flow-import-date-rail"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
