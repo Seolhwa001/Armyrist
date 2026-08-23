@@ -33,6 +33,9 @@ import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
 import com.seolhwa.armyrist.stage2.domain.ToolResult
 import com.seolhwa.armyrist.timeplan.data.TimePlanV2Repository
 import com.seolhwa.armyrist.timeplan.v3.data.DateAwareTimePlanRepository
+import com.seolhwa.armyrist.timeplan.v3.data.DateAwareTimePlanJson
+import com.seolhwa.armyrist.trash.*
+import org.json.JSONObject
 import com.seolhwa.armyrist.timeplan.v3.domain.*
 import com.seolhwa.armyrist.voice.*
 import java.time.*
@@ -46,14 +49,83 @@ fun DateAwareTimePlanApp(
     repository: DateAwareTimePlanRepository,
     legacyRepository: TimePlanV2Repository,
     coreRepository: CoreSuiteRepository,
+    trashRepository: CommonTrashRepository,
     onHome: () -> Unit,
     onOpenExecution: (String, String, Set<String>) -> Unit
 ) {
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedLegacyId by rememberSaveable { mutableStateOf<String?>(null) }
     var sharingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var trashOpen by rememberSaveable { mutableStateOf(false) }
+    var trashMessage by remember { mutableStateOf<String?>(null) }
     var revision by remember { mutableIntStateOf(0) }
     @Suppress("UNUSED_VARIABLE") val observed = revision
+
+    if (trashOpen) {
+        val trashItems =
+            trashRepository.getItems(TrashToolType.TIME_PLAN)
+
+        CommonTrashScreen(
+            toolLabel = "시간계획",
+            items = trashItems,
+            retentionDays = trashRepository.retentionDays(),
+            onBack = { trashOpen = false },
+            onRetentionChange = { days ->
+                trashRepository.setRetentionDays(days)
+                revision++
+            },
+            onRestore = { item ->
+                val restored =
+                    runCatching {
+                        DateAwareTimePlanJson.decode(JSONObject(item.payload))
+                    }.getOrNull()
+
+                when {
+                    restored == null -> {
+                        trashMessage = "휴지통 데이터를 읽지 못했습니다."
+                    }
+                    repository.contains(restored.id) -> {
+                        trashMessage = "같은 시간계획이 이미 존재하여 복구하지 않았습니다."
+                    }
+                    repository.restoreDeletedPlan(restored) -> {
+                        trashRepository.permanentlyDelete(item.id)
+                        revision++
+                    }
+                    else -> {
+                        trashMessage = "시간계획을 복구하지 못했습니다."
+                    }
+                }
+            },
+            onPermanentDelete = { item ->
+                trashRepository.permanentlyDelete(item.id)
+                revision++
+            }
+        )
+
+        trashMessage?.let { message ->
+            AlertDialog(
+                onDismissRequest = { trashMessage = null },
+                shape = ArmyristPanelShape,
+                containerColor = ArmyristColors.RaisedSurface,
+                tonalElevation = 0.dp,
+                title = { Text("확인", fontWeight = FontWeight.Bold) },
+                text = { Text(message) },
+                confirmButton = {
+                    Button(
+                        onClick = { trashMessage = null },
+                        shape = ArmyristPanelShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ArmyristColors.PrimaryControl,
+                            contentColor = ArmyristColors.OnDark
+                        )
+                    ) {
+                        Text("확인")
+                    }
+                }
+            )
+        }
+        return
+    }
 
     val sharing = sharingId?.let(repository::getPlan)
     if (sharing != null) {
@@ -109,10 +181,28 @@ fun DateAwareTimePlanApp(
                     }
                 }
             },
+            onOpenTrash = { trashOpen = true },
+            trashCount = trashRepository.getItems(TrashToolType.TIME_PLAN).size,
             onDelete = { id ->
-                repository.delete(id)
-                if (selectedId == id) selectedId = null
-                revision++
+                val current = repository.getPlan(id)
+                if (current != null) {
+                    val trashItem =
+                        trashRepository.moveToTrash(
+                            toolType = TrashToolType.TIME_PLAN,
+                            originalId = current.id,
+                            title = current.title,
+                            payloadVersion = 6,
+                            payload = DateAwareTimePlanJson.encode(current).toString()
+                        )
+
+                    if (trashItem != null) {
+                        repository.delete(id)
+                        if (selectedId == id) selectedId = null
+                        revision++
+                    } else {
+                        trashMessage = "휴지통에 저장하지 못해 삭제를 취소했습니다."
+                    }
+                }
             },
             onOpenLegacy = { selectedLegacyId = it }
         )
@@ -160,6 +250,8 @@ private fun DateAwarePlanList(
     onCreate: () -> Unit,
     onOpen: (String) -> Unit,
     onRename: (String, String) -> Unit,
+    onOpenTrash: () -> Unit,
+    trashCount: Int,
     onDelete: (String) -> Unit,
     onOpenLegacy: (String) -> Unit
 ) {
@@ -233,11 +325,26 @@ private fun DateAwarePlanList(
                             )
                         ) { Text("새 시간계획 만들기", fontWeight = FontWeight.Bold) }
                         Spacer(Modifier.height(8.dp))
-                        OutlinedButton(
-                            onClick = openImport,
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                            shape = ArmyristPanelShape
-                        ) { Text("데이터 불러오기") }
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = openImport,
+                                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                                shape = ArmyristPanelShape
+                            ) { Text("데이터 불러오기") }
+                            OutlinedButton(
+                                onClick = onOpenTrash,
+                                modifier = Modifier.heightIn(min = 48.dp),
+                                shape = ArmyristPanelShape
+                            ) {
+                                Text(
+                                    if (trashCount > 0) "휴지통 ($trashCount)"
+                                    else "휴지통"
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -247,18 +354,45 @@ private fun DateAwarePlanList(
                 contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 96.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                item(key = "timeplan-import") {
-                    OutlinedButton(
-                        onClick = openImport,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 42.dp),
-                        shape = ArmyristPanelShape,
-                        border = BorderStroke(1.dp, ArmyristColors.Border),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = ArmyristColors.WorkSurface,
-                            contentColor = ArmyristColors.PrimaryText
-                        ),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                    ) { Text("데이터 불러오기", style = MaterialTheme.typography.labelLarge) }
+                item(key = "timeplan-import-trash") {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = openImport,
+                            modifier = Modifier.weight(1f).heightIn(min = 42.dp),
+                            shape = ArmyristPanelShape,
+                            border = BorderStroke(1.dp, ArmyristColors.Border),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = ArmyristColors.WorkSurface,
+                                contentColor = ArmyristColors.PrimaryText
+                            ),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                "데이터 불러오기",
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = onOpenTrash,
+                            modifier = Modifier.heightIn(min = 42.dp),
+                            shape = ArmyristPanelShape,
+                            border = BorderStroke(1.dp, ArmyristColors.Border),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = ArmyristColors.WorkSurface,
+                                contentColor = ArmyristColors.PrimaryText
+                            ),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                if (trashCount > 0) "휴지통 $trashCount"
+                                else "휴지통",
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                        }
+                    }
                 }
                 items(datePlans, key = { "v3-${it.id}" }) { plan ->
                     Card(
@@ -345,10 +479,10 @@ private fun DateAwarePlanList(
             tonalElevation = 0.dp,
             titleContentColor = ArmyristColors.PrimaryText,
             textContentColor = ArmyristColors.PrimaryText,
-            title = { Text("시간계획 삭제", fontWeight = FontWeight.Bold) },
+            title = { Text("휴지통으로 이동", fontWeight = FontWeight.Bold) },
             text = {
                 Text(
-                    "'${target.title}'을 삭제합니다. 이 작업은 복구할 수 없습니다.",
+                    "'${target.title}'을 휴지통으로 이동합니다. 자동 삭제 전에는 복구할 수 있습니다.",
                     style = MaterialTheme.typography.bodyMedium
                 )
             },
@@ -369,7 +503,7 @@ private fun DateAwarePlanList(
                         containerColor = ArmyristColors.PrimaryControl,
                         contentColor = ArmyristColors.OnDark
                     )
-                ) { Text("삭제") }
+                ) { Text("휴지통으로 이동") }
             }
         )
     }
