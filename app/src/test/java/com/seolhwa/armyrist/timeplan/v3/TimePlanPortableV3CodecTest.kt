@@ -46,7 +46,7 @@ class TimePlanPortableV3CodecTest {
         ))
         p=DateTimePlanRules.setLinkLock(p,DateTimePlanRules.START_ID,"m",true)
         val encoded=TimePlanPortableV3Codec.encode(p)
-        assertEquals(5,encoded.getInt("schemaVersion"))
+        assertEquals(TimePlanPortableV3Codec.SCHEMA_VERSION, encoded.getInt("schemaVersion"))
         val decoded=TimePlanPortableV3Codec.decode(encoded)
         assertTrue(decoded.start.dateTimeLocked)
         assertTrue(decoded.midwayEvents.first().dateTimeLocked)
