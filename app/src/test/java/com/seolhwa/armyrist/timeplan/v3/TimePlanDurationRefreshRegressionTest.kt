@@ -82,10 +82,14 @@ class TimePlanDurationRefreshRegressionTest {
         )
         val changed = DateTimePlanRules.reflowEventEdit(plan, changedMid)!!
 
-        assertEquals(LocalDateTime.of(2026, 8, 23, 14, 0), changed.end.value.value)
+        // 0.6.5 chronology contract:
+        // an unlocked END expands only as far as necessary to contain the edited range.
+        // Therefore a range ending at 13:00 moves END to 13:00 and the following
+        // interval becomes 0 minutes instead of preserving the old 60-minute gap.
+        assertEquals(LocalDateTime.of(2026, 8, 23, 13, 0), changed.end.value.value)
         val afterMid = changed.links.first {
             it.fromNodeId == "mid-range" && it.toNodeId == DateTimePlanRules.END_ID
         }
-        assertEquals(60L, afterMid.durationMinutes)
+        assertEquals(0L, afterMid.durationMinutes)
     }
 }
