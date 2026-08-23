@@ -79,4 +79,17 @@ class GitHubUpdateClientTest {
             )
         }
     }
+
+    @Test
+    fun stableVersionNameCanBeReadFromHistoricalTag() {
+        val release = JSONObject("""{"tag_name":"v0.6.25","name":"Armyrist 0.6.25"}""")
+        assertEquals("0.6.25", client.stableVersionNameFromRelease(release))
+    }
+
+    @Test
+    fun stableVersionNameCanFallBackToHistoricalReleaseTitle() {
+        val release = JSONObject("""{"tag_name":"","name":"Armyrist 0.6.25"}""")
+        assertEquals("0.6.25", client.stableVersionNameFromRelease(release))
+    }
+
 }
