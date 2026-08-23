@@ -24,7 +24,9 @@ class TimePlanDurationRefreshRegressionTest {
                 title = "test",
                 start = DateTimeAnchor(DateTimeValue.explicit(startTime)),
                 midwayEvents = listOf(mid),
-                end = DateTimeAnchor(DateTimeValue.explicit(endTime))
+                end = DateTimeAnchor(DateTimeValue.explicit(endTime)),
+                createdAt = "2026-08-23T00:00:00",
+                updatedAt = "2026-08-23T00:00:00"
             )
         )
 
