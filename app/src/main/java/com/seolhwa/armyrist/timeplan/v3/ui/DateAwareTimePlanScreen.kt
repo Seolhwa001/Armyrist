@@ -44,6 +44,9 @@ import java.time.format.TextStyle
 import java.util.Locale
 import java.util.UUID
 
+private const val DATE_AWARE_TRASH_PAYLOAD_VERSION = 6
+private const val LEGACY_TRASH_PAYLOAD_VERSION = 2
+
 @Composable
 fun DateAwareTimePlanApp(
     repository: DateAwareTimePlanRepository,
@@ -75,24 +78,39 @@ fun DateAwareTimePlanApp(
                 revision++
             },
             onRestore = { item ->
-                val restored =
-                    runCatching {
-                        DateAwareTimePlanJson.decode(JSONObject(item.payload))
-                    }.getOrNull()
+                when (item.payloadVersion) {
+                    LEGACY_TRASH_PAYLOAD_VERSION -> {
+                        if (legacyRepository.restoreTrashPayload(item.payload)) {
+                            trashRepository.permanentlyDelete(item.id)
+                            revision++
+                        } else {
+                            trashMessage =
+                                "이전 형식 시간계획을 복구하지 못했습니다. 같은 계획이 이미 존재하는지 확인해주세요."
+                        }
+                    }
 
-                when {
-                    restored == null -> {
-                        trashMessage = "휴지통 데이터를 읽지 못했습니다."
-                    }
-                    repository.contains(restored.id) -> {
-                        trashMessage = "같은 시간계획이 이미 존재하여 복구하지 않았습니다."
-                    }
-                    repository.restoreDeletedPlan(restored) -> {
-                        trashRepository.permanentlyDelete(item.id)
-                        revision++
-                    }
                     else -> {
-                        trashMessage = "시간계획을 복구하지 못했습니다."
+                        val restored =
+                            runCatching {
+                                DateAwareTimePlanJson.decode(JSONObject(item.payload))
+                            }.getOrNull()
+
+                        when {
+                            restored == null -> {
+                                trashMessage = "휴지통 데이터를 읽지 못했습니다."
+                            }
+                            repository.contains(restored.id) -> {
+                                trashMessage =
+                                    "같은 시간계획이 이미 존재하여 복구하지 않았습니다."
+                            }
+                            repository.restoreDeletedPlan(restored) -> {
+                                trashRepository.permanentlyDelete(item.id)
+                                revision++
+                            }
+                            else -> {
+                                trashMessage = "시간계획을 복구하지 못했습니다."
+                            }
+                        }
                     }
                 }
             },
@@ -191,7 +209,7 @@ fun DateAwareTimePlanApp(
                             toolType = TrashToolType.TIME_PLAN,
                             originalId = current.id,
                             title = current.title,
-                            payloadVersion = 6,
+                            payloadVersion = DATE_AWARE_TRASH_PAYLOAD_VERSION,
                             payload = DateAwareTimePlanJson.encode(current).toString()
                         )
 
@@ -201,6 +219,43 @@ fun DateAwareTimePlanApp(
                         revision++
                     } else {
                         trashMessage = "휴지통에 저장하지 못해 삭제를 취소했습니다."
+                    }
+                }
+            },
+            onDeleteLegacy = { id ->
+                val legacy = legacyRepository.getPlan(id)
+                val payload = legacyRepository.exportTrashPayload(id)
+
+                if (legacy == null || payload == null) {
+                    trashMessage = "이전 형식 시간계획을 읽지 못해 삭제를 취소했습니다."
+                } else {
+                    val trashItem =
+                        trashRepository.moveToTrash(
+                            toolType = TrashToolType.TIME_PLAN,
+                            originalId = legacy.id,
+                            title = legacy.title,
+                            payloadVersion = LEGACY_TRASH_PAYLOAD_VERSION,
+                            payload = payload
+                        )
+
+                    when {
+                        trashItem == null -> {
+                            trashMessage = "휴지통에 저장하지 못해 삭제를 취소했습니다."
+                        }
+
+                        legacyRepository.delete(id) -> {
+                            if (selectedLegacyId == id) selectedLegacyId = null
+                            revision++
+                        }
+
+                        else -> {
+                            // Keep deletion atomic from the user's perspective:
+                            // if the active legacy store could not remove the plan,
+                            // roll back the just-created Trash duplicate.
+                            trashRepository.permanentlyDelete(trashItem.id)
+                            trashMessage =
+                                "이전 형식 시간계획을 삭제하지 못했습니다. 원본은 유지됩니다."
+                        }
                     }
                 }
             },
@@ -253,10 +308,14 @@ private fun DateAwarePlanList(
     onOpenTrash: () -> Unit,
     trashCount: Int,
     onDelete: (String) -> Unit,
+    onDeleteLegacy: (String) -> Unit,
     onOpenLegacy: (String) -> Unit
 ) {
     var renameTarget by remember { mutableStateOf<DateAwareTimePlan?>(null) }
     var deleteTarget by remember { mutableStateOf<DateAwareTimePlan?>(null) }
+    var legacyDeleteTarget by remember {
+        mutableStateOf<Pair<String, String>?>(null)
+    }
     val context = LocalContext.current
     val openImport = {
         context.startActivity(
@@ -436,22 +495,51 @@ private fun DateAwarePlanList(
                     }
                 }
 
-                items(legacyPlans, key = { "legacy-${it.first}" }) { (id,title) ->
+                items(legacyPlans, key = { "legacy-${it.first}" }) { (id, title) ->
                     Card(
-                        onClick = { onOpenLegacy(id) },
                         modifier = Modifier.fillMaxWidth(),
                         shape = ArmyristPanelShape,
                         border = BorderStroke(1.dp, ArmyristColors.PrimaryControl),
-                        colors = CardDefaults.cardColors(containerColor = ArmyristColors.WorkSurface)
+                        colors = CardDefaults.cardColors(
+                            containerColor = ArmyristColors.WorkSurface
+                        )
                     ) {
-                        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                            Text(title, fontWeight = FontWeight.Bold)
-                            Spacer(Modifier.height(3.dp))
-                            Text(
-                                "날짜 기능 이전 계획 · 기준 날짜 지정 필요",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = ArmyristColors.PrimaryControl
-                            )
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { onOpenLegacy(id) }
+                                    .padding(vertical = 2.dp)
+                            ) {
+                                Text(title, fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.height(3.dp))
+                                Text(
+                                    "날짜 기능 이전 계획 · 기준 날짜 지정 필요",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = ArmyristColors.PrimaryControl
+                                )
+                            }
+
+                            TextButton(
+                                onClick = {
+                                    legacyDeleteTarget = id to title
+                                },
+                                modifier = Modifier.heightIn(min = 34.dp),
+                                contentPadding = PaddingValues(
+                                    horizontal = 8.dp,
+                                    vertical = 2.dp
+                                )
+                            ) {
+                                Text(
+                                    "삭제",
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
                         }
                     }
                 }
@@ -469,6 +557,52 @@ private fun DateAwarePlanList(
             renameTarget = null
             if (value.isNotBlank()) onRename(target.id, value)
         }
+    }
+
+    legacyDeleteTarget?.let { (id, title) ->
+        AlertDialog(
+            onDismissRequest = { legacyDeleteTarget = null },
+            shape = ArmyristPanelShape,
+            containerColor = ArmyristColors.RaisedSurface,
+            tonalElevation = 0.dp,
+            titleContentColor = ArmyristColors.PrimaryText,
+            textContentColor = ArmyristColors.PrimaryText,
+            title = {
+                Text(
+                    "휴지통으로 이동",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    "'$title'은 날짜 기능 이전 형식입니다. 휴지통으로 이동한 뒤에도 이전 형식 그대로 복구할 수 있습니다.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { legacyDeleteTarget = null },
+                    shape = ArmyristPanelShape
+                ) {
+                    Text("취소")
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        legacyDeleteTarget = null
+                        onDeleteLegacy(id)
+                    },
+                    shape = ArmyristPanelShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ArmyristColors.PrimaryControl,
+                        contentColor = ArmyristColors.OnDark
+                    )
+                ) {
+                    Text("휴지통으로 이동")
+                }
+            }
+        )
     }
 
     deleteTarget?.let { target ->
