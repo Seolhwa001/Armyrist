@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 101
-        versionName = "0.6.13-emergency-delete-guard-active-alarm"
+        versionCode = 102
+        versionName = "0.6.14-execution-ui-action-move-longpress"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
