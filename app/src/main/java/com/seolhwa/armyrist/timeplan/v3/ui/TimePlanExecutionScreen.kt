@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import com.seolhwa.armyrist.*
 import com.seolhwa.armyrist.notification.TimePlanActionNotificationManager
 import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
@@ -568,22 +569,13 @@ private fun TimePlanExecuteScreen(
     val actionVerticalBounds = remember { mutableStateMapOf<String, Pair<Float, Float>>() }
     var listTopInRoot by remember { mutableFloatStateOf(0f) }
     var listBottomInRoot by remember { mutableFloatStateOf(0f) }
-    var dragTargetState by remember { mutableStateOf<ActionCompletionState?>(null) }
-    var dragVisitedIds by remember { mutableStateOf(emptySet<String>()) }
     val dragPreviewStates = remember { mutableStateMapOf<String, ActionCompletionState>() }
     val dragScrollScope = rememberCoroutineScope()
 
-    fun applyRailAt(rootY: Float) {
-        if (bulkSelect) return
-        val target = dragTargetState ?: return
-        val hitId = actionVerticalBounds.entries.firstOrNull { (_, bounds) ->
+    fun actionIdAt(rootY: Float): String? =
+        actionVerticalBounds.entries.firstOrNull { (_, bounds) ->
             rootY >= bounds.first && rootY <= bounds.second
-        }?.key ?: return
-        if (hitId in dragVisitedIds) return
-
-        dragVisitedIds = dragVisitedIds + hitId
-        dragPreviewStates[hitId] = target
-    }
+        }?.key
 
     Column(Modifier.fillMaxSize()) {
         ArmyristPanel(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp)) {
@@ -731,6 +723,78 @@ private fun TimePlanExecuteScreen(
                 .onGloballyPositioned { coordinates ->
                     listTopInRoot = coordinates.positionInRoot().y
                     listBottomInRoot = listTopInRoot + coordinates.size.height
+                }
+                .pointerInput(plan.id, plan.actions, bulkSelect) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val railWidthPx = 52.dp.toPx()
+
+                        // Only a gesture that STARTS in the left rail belongs to
+                        // Completion Rail. Everything else remains normal scrolling.
+                        if (bulkSelect || down.position.x > railWidthPx) {
+                            return@awaitEachGesture
+                        }
+
+                        val startRootY = listTopInRoot + down.position.y
+                        val startId = actionIdAt(startRootY)
+                            ?: return@awaitEachGesture
+                        val startAction = plan.actions.firstOrNull { it.id == startId }
+                            ?: return@awaitEachGesture
+                        val target =
+                            if (startAction.completionState == ActionCompletionState.COMPLETE) {
+                                ActionCompletionState.INCOMPLETE
+                            } else {
+                                ActionCompletionState.COMPLETE
+                            }
+
+                        down.consume()
+                        dragPreviewStates.clear()
+                        val visited = linkedSetOf<String>()
+
+                        fun visit(rootY: Float) {
+                            val id = actionIdAt(rootY) ?: return
+                            if (visited.add(id)) {
+                                dragPreviewStates[id] = target
+                            }
+                        }
+
+                        visit(startRootY)
+
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) break
+
+                            change.consume()
+                            visit(listTopInRoot + change.position.y)
+
+                            val edge = 64.dp.toPx()
+                            when {
+                                change.position.y < edge ->
+                                    dragScrollScope.launch { executionListState.scrollBy(-18.dp.toPx()) }
+                                change.position.y > size.height - edge ->
+                                    dragScrollScope.launch { executionListState.scrollBy(18.dp.toPx()) }
+                            }
+                        }
+
+                        val updates = dragPreviewStates.toMap()
+                        if (updates.isNotEmpty()) {
+                            val now = System.currentTimeMillis().toString()
+                            onCommit(
+                                plan.copy(
+                                    actions = plan.actions.map { action ->
+                                        updates[action.id]?.let { state ->
+                                            action.copy(
+                                                completionState = state,
+                                                updatedAt = now
+                                            )
+                                        } ?: action
+                                    }
+                                )
+                            )
+                        }
+                        dragPreviewStates.clear()
+                    }
                 },
             contentPadding = PaddingValues(8.dp, 4.dp, 8.dp, 88.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -793,68 +857,7 @@ private fun TimePlanExecuteScreen(
                                 )
                             } else {
                                 CompletionRailControl(
-                                    completed = completed,
-                                    onTap = {
-                                        val newState = if (completed) {
-                                            ActionCompletionState.INCOMPLETE
-                                        } else {
-                                            ActionCompletionState.COMPLETE
-                                        }
-                                        onCommit(
-                                            plan.copy(
-                                                actions = plan.actions.map { a ->
-                                                    if (a.id == action.id) {
-                                                        a.copy(
-                                                            completionState = newState,
-                                                            updatedAt = System.currentTimeMillis().toString()
-                                                        )
-                                                    } else a
-                                                }
-                                            )
-                                        )
-                                    },
-                                    onDragStartAtRootY = { rootY ->
-                                        dragPreviewStates.clear()
-                                        dragTargetState = if (completed) {
-                                            ActionCompletionState.INCOMPLETE
-                                        } else {
-                                            ActionCompletionState.COMPLETE
-                                        }
-                                        dragVisitedIds = emptySet()
-                                        applyRailAt(rootY)
-                                    },
-                                    onDragAtRootY = { rootY ->
-                                        applyRailAt(rootY)
-                                        when {
-                                            rootY < listTopInRoot + 72f -> {
-                                                dragScrollScope.launch { executionListState.scrollBy(-28f) }
-                                            }
-                                            rootY > listBottomInRoot - 72f -> {
-                                                dragScrollScope.launch { executionListState.scrollBy(28f) }
-                                            }
-                                        }
-                                    },
-                                    onDragEnd = {
-                                        val updates = dragPreviewStates.toMap()
-                                        if (updates.isNotEmpty()) {
-                                            val now = System.currentTimeMillis().toString()
-                                            onCommit(
-                                                plan.copy(
-                                                    actions = plan.actions.map { action ->
-                                                        updates[action.id]?.let { state ->
-                                                            action.copy(
-                                                                completionState = state,
-                                                                updatedAt = now
-                                                            )
-                                                        } ?: action
-                                                    }
-                                                )
-                                            )
-                                        }
-                                        dragPreviewStates.clear()
-                                        dragTargetState = null
-                                        dragVisitedIds = emptySet()
-                                    }
+                                    completed = completed
                                 )
                             }
                             Column(Modifier.weight(1f)) {
@@ -908,59 +911,15 @@ private fun TimePlanExecuteScreen(
 
 @Composable
 private fun CompletionRailControl(
-    completed: Boolean,
-    onTap: () -> Unit,
-    onDragStartAtRootY: (Float) -> Unit,
-    onDragAtRootY: (Float) -> Unit,
-    onDragEnd: () -> Unit
+    completed: Boolean
 ) {
-    var topInRoot by remember { mutableFloatStateOf(0f) }
-    val railColor = if (completed) {
-        ArmyristColors.PrimaryControl
-    } else {
-        ArmyristColors.Border
-    }
+    val railColor =
+        if (completed) ArmyristColors.PrimaryControl else ArmyristColors.Border
 
     Box(
         modifier = Modifier
             .width(44.dp)
-            .heightIn(min = 48.dp)
-            .onGloballyPositioned { coordinates ->
-                topInRoot = coordinates.positionInRoot().y
-            }
-            .pointerInput(completed) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    // A gesture that begins on the Completion Rail belongs to the rail,
-                    // not to LazyColumn scrolling.
-                    down.consume()
-
-                    var dragging = false
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-
-                        if (!change.pressed) break
-
-                        val deltaY = change.position.y - down.position.y
-                        if (!dragging && abs(deltaY) >= 6f) {
-                            dragging = true
-                            onDragStartAtRootY(topInRoot + down.position.y)
-                        }
-
-                        if (dragging) {
-                            change.consume()
-                            onDragAtRootY(topInRoot + change.position.y)
-                        }
-                    }
-
-                    if (dragging) {
-                        onDragEnd()
-                    } else {
-                        onTap()
-                    }
-                }
-            },
+            .heightIn(min = 48.dp),
         contentAlignment = Alignment.Center
     ) {
         Canvas(Modifier.fillMaxSize()) {
@@ -972,7 +931,6 @@ private fun CompletionRailControl(
                 strokeWidth = if (completed) 3.dp.toPx() else 1.5.dp.toPx()
             )
         }
-
         Surface(
             modifier = Modifier.size(28.dp),
             shape = CircleShape,
@@ -1058,6 +1016,10 @@ private fun ActionEditDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false
+        ),
         title = { Text(title) },
         containerColor = ArmyristColors.RaisedSurface,
         tonalElevation = 0.dp,
@@ -1166,6 +1128,10 @@ private fun BatchAddDialog(
     var groupMenu by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false
+        ),
         title = { Text("실시사항 일괄 추가") },
         containerColor = ArmyristColors.RaisedSurface,
         tonalElevation = 0.dp,
