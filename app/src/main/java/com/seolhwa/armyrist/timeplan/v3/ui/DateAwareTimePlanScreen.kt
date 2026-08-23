@@ -216,6 +216,12 @@ fun DateAwareTimePlanApp(
                 selectedId = plan.id
             },
             onOpen = { selectedId = it },
+            onMoveUp = { id ->
+                if (repository.movePlan(id, -1)) revision++
+            },
+            onMoveDown = { id ->
+                if (repository.movePlan(id, 1)) revision++
+            },
             onRename = { id, title ->
                 repository.getPlan(id)?.let { current ->
                     if (title.isNotBlank()) {
@@ -352,6 +358,8 @@ private fun DateAwarePlanList(
     onHome: () -> Unit,
     onCreate: () -> Unit,
     onOpen: (String) -> Unit,
+    onMoveUp: (String) -> Unit,
+    onMoveDown: (String) -> Unit,
     onRename: (String, String) -> Unit,
     onOpenTrash: () -> Unit,
     trashCount: Int,
@@ -527,6 +535,28 @@ private fun DateAwarePlanList(
                                     color = ArmyristColors.SecondaryText
                                 )
                             }
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                TextButton(
+                                    onClick = { onMoveUp(plan.id) },
+                                    enabled = datePlans.indexOf(plan) > 0,
+                                    modifier = Modifier.heightIn(min = 28.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                                ) {
+                                    Text("↑", style = MaterialTheme.typography.titleMedium)
+                                }
+                                TextButton(
+                                    onClick = { onMoveDown(plan.id) },
+                                    enabled = datePlans.indexOf(plan) < datePlans.lastIndex,
+                                    modifier = Modifier.heightIn(min = 28.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                                ) {
+                                    Text("↓", style = MaterialTheme.typography.titleMedium)
+                                }
+                            }
+                            Spacer(Modifier.width(6.dp))
                             OutlinedButton(
                                 onClick = { renameTarget = plan },
                                 modifier = Modifier.heightIn(min = 34.dp),
