@@ -1153,7 +1153,7 @@ private fun formatActionDateTime(
     // Relative mode is display-only. Keep the real LocalDateTime intact for
     // persistence, sorting, alarms, and calculations.
     val baseDate =
-        DateTimePlanRules.resolvedStart(plan)?.toLocalDate()
+        plan.start.value.value?.toLocalDate()
             ?: plan.actions.minOfOrNull { it.scheduledDateTime.toLocalDate() }
             ?: value.toLocalDate()
 
