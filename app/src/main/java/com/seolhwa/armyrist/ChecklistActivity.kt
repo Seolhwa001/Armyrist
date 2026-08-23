@@ -391,6 +391,14 @@ private fun ChecklistListScreen(
 ) {
     var renameTarget by remember { mutableStateOf<Checklist?>(null) }
     var deleteTarget by remember { mutableStateOf<Checklist?>(null) }
+    val context = LocalContext.current
+    val openImport = {
+        context.startActivity(
+            android.content.Intent(context, PortableTransferActivity::class.java).apply {
+                putExtra(PortableTransferActivity.EXTRA_MODE, PortableTransferActivity.MODE_IMPORT)
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -454,6 +462,12 @@ private fun ChecklistListScreen(
                                 contentColor = ArmyristColors.OnDark
                             )
                         ) { Text("새 체크리스트 만들기") }
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = openImport,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                            shape = ArmyristPanelShape
+                        ) { Text("데이터 불러오기") }
                     }
                 }
             }
@@ -463,6 +477,13 @@ private fun ChecklistListScreen(
                 contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 96.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                item(key = "checklist-import") {
+                    OutlinedButton(
+                        onClick = openImport,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp),
+                        shape = ArmyristPanelShape
+                    ) { Text("데이터 불러오기") }
+                }
                 items(checklists, key = { it.id }) { checklist ->
                     val p = ChecklistRules.progress(checklist.items)
                     Card(

@@ -276,6 +276,14 @@ private fun SheetListScreen(
 ) {
     var renameTarget by remember { mutableStateOf<CountingSheet?>(null) }
     var deleteTarget by remember { mutableStateOf<CountingSheet?>(null) }
+    val context = LocalContext.current
+    val openImport = {
+        context.startActivity(
+            android.content.Intent(context, PortableTransferActivity::class.java).apply {
+                putExtra(PortableTransferActivity.EXTRA_MODE, PortableTransferActivity.MODE_IMPORT)
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -349,6 +357,12 @@ private fun SheetListScreen(
                                 fontWeight = FontWeight.Bold
                             )
                         }
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = openImport,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                            shape = ArmyristPanelShape
+                        ) { Text("데이터 불러오기") }
                     }
                 }
             }
@@ -365,6 +379,13 @@ private fun SheetListScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                item(key = "counting-import") {
+                    OutlinedButton(
+                        onClick = openImport,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp),
+                        shape = ArmyristPanelShape
+                    ) { Text("데이터 불러오기") }
+                }
                 items(sheets, key = { it.id }) { sheet ->
                     Card(
                         onClick = { onOpen(sheet.id) },
