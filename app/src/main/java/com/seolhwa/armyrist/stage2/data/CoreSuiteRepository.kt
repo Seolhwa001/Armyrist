@@ -91,6 +91,52 @@ class CoreSuiteRepository(context: Context) {
         persist()
     }
 
+    /**
+     * Common Trash payload for a whole Checklist.
+     * The existing checklist JSON serializer owns groups, active/deleted items,
+     * memo and notification settings, so no parallel schema is invented here.
+     */
+    @Synchronized
+    fun exportChecklistTrashPayload(id: String): String? {
+        val checklist = getChecklist(id) ?: return null
+        return JSONObject()
+            .put("schemaVersion", 1)
+            .put("checklist", checklistToJson(checklist))
+            .toString()
+    }
+
+    @Synchronized
+    fun deleteChecklistForTrash(id: String): Boolean {
+        if (checklists.none { it.id == id }) return false
+
+        val before = checklists
+        checklists = checklists.filterNot { it.id == id }
+
+        if (persistChecked()) return true
+
+        checklists = before
+        return false
+    }
+
+    @Synchronized
+    fun restoreChecklistTrashPayload(payload: String): Boolean {
+        val restored = runCatching {
+            val root = JSONObject(payload)
+            if (root.optInt("schemaVersion", -1) != 1) return@runCatching null
+            checklistFromJson(root.getJSONObject("checklist"))
+        }.getOrNull() ?: return false
+
+        if (checklists.any { it.id == restored.id }) return false
+
+        val before = checklists
+        checklists = checklists + restored
+
+        if (persistChecked()) return true
+
+        checklists = before
+        return false
+    }
+
     @Synchronized
     fun addChecklistItem(
         checklistId: String,
@@ -524,6 +570,10 @@ class CoreSuiteRepository(context: Context) {
     }
 
     private fun persist() {
+        persistChecked()
+    }
+
+    private fun persistChecked(): Boolean {
         val root = JSONObject()
             .put("version", 1)
             .put("checklists", JSONArray().apply {
@@ -539,7 +589,7 @@ class CoreSuiteRepository(context: Context) {
                 reportTemplates.forEach { put(templateToJson(it)) }
             })
 
-        prefs.edit()
+        return prefs.edit()
             .putString(snapshotKey, root.toString())
             .commit()
     }
