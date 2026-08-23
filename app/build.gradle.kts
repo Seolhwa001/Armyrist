@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 110
-        versionName = "0.6.22-legacy-timeplan-trash-delete"
+        versionCode = 111
+        versionName = "0.6.23-legacy-shadow-trash-back-fix"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
