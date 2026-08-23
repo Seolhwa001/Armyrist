@@ -7,6 +7,11 @@ data class ToolResult(
     val body: String
 )
 
+enum class ReportDetailMode {
+    COMPACT,
+    DETAILED
+}
+
 enum class ChecklistStatus {
     INCOMPLETE,
     COMPLETE,
