@@ -142,10 +142,22 @@ jobs:
         run: |
           set -euo pipefail
 
+          METADATA="app/build/outputs/apk/release/output-metadata.json"
+          VERSION_NAME="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["elements"][0]["versionName"])' "$METADATA")"
+          VERSION_CODE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["elements"][0]["versionCode"])' "$METADATA")"
+
+          test -n "$VERSION_NAME"
+          test -n "$VERSION_CODE"
+
           mkdir -p "$RUNNER_TEMP/armyrist-distribution"
-          cp \
-            app/build/outputs/apk/release/app-release.apk \
-            "$RUNNER_TEMP/armyrist-distribution/Armyrist-0.4.5-voice-session.apk"
+          APK_NAME="Armyrist-${VERSION_NAME}-vc${VERSION_CODE}.apk"
+          cp app/build/outputs/apk/release/app-release.apk \
+            "$RUNNER_TEMP/armyrist-distribution/$APK_NAME"
+
+          printf 'versionName=%s\nversionCode=%s\n' "$VERSION_NAME" "$VERSION_CODE" \
+            > "$RUNNER_TEMP/armyrist-distribution/VERSION.txt"
+
+          echo "Built distribution: $APK_NAME"
 
       - name: Upload debug/test APK
         uses: actions/upload-artifact@v4
@@ -157,8 +169,8 @@ jobs:
       - name: Upload stable distribution APK
         uses: actions/upload-artifact@v4
         with:
-          name: Armyrist-0.4.5-stable-distribution
-          path: ${{ runner.temp }}/armyrist-distribution/Armyrist-0.4.5-voice-session.apk
+          name: Armyrist-stable-distribution
+          path: ${{ runner.temp }}/armyrist-distribution/
           if-no-files-found: error
 
       - name: Upload signing certificate fingerprint
