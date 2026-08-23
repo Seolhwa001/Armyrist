@@ -19,7 +19,33 @@ class DateAwareTimePlanRepository(context: Context) {
     @Volatile private var plans: List<DateAwareTimePlan> = load()
 
     @Synchronized fun reloadFromPersistence() { plans = load() }
-    @Synchronized fun getPlans(): List<DateAwareTimePlan> = plans.sortedByDescending { it.updatedAt.toLongOrNull() ?: 0L }
+
+    @Synchronized
+    fun getPlans(): List<DateAwareTimePlan> {
+        val fallback = plans.sortedByDescending { it.updatedAt.toLongOrNull() ?: 0L }
+        val storedOrder = loadPlanOrder()
+        if (storedOrder.isEmpty()) return fallback
+
+        val byId = plans.associateBy { it.id }
+        val ordered = storedOrder.mapNotNull(byId::get)
+        val missing = fallback.filter { it.id !in storedOrder.toSet() }
+        return ordered + missing
+    }
+
+    @Synchronized
+    fun movePlan(planId: String, direction: Int): Boolean {
+        if (direction == 0) return true
+        val displayed = getPlans().toMutableList()
+        val from = displayed.indexOfFirst { it.id == planId }
+        if (from < 0) return false
+        val to = (from + direction).coerceIn(0, displayed.lastIndex)
+        if (from == to) return true
+
+        val item = displayed.removeAt(from)
+        displayed.add(to, item)
+        return savePlanOrder(displayed.map { it.id })
+    }
+
     @Synchronized fun getPlan(id: String): DateAwareTimePlan? = plans.firstOrNull { it.id == id }
     @Synchronized fun contains(id: String): Boolean = plans.any { it.id == id }
 
@@ -39,6 +65,9 @@ class DateAwareTimePlanRepository(context: Context) {
         val next = plans + plan
         check(persist(next)) { "Failed to persist new TimePlan." }
         plans = next
+        if (loadPlanOrder().isNotEmpty()) {
+            savePlanOrder(listOf(plan.id) + getPlans().map { it.id }.filterNot { it == plan.id })
+        }
         TimePlanActionNotificationManager.reconcile(appContext, this)
         return plan
     }
@@ -59,6 +88,10 @@ class DateAwareTimePlanRepository(context: Context) {
         val next = plans.filterNot { it.id == id }
         if (persist(next)) {
             plans = next
+            val storedOrder = loadPlanOrder()
+            if (storedOrder.isNotEmpty()) {
+                savePlanOrder(storedOrder.filterNot { it == id })
+            }
             runCatching {
                 TimePlanActionNotificationManager.reconcile(appContext, this)
             }
@@ -86,6 +119,9 @@ class DateAwareTimePlanRepository(context: Context) {
         if (!persist(next)) return false
 
         plans = next
+        if (loadPlanOrder().isNotEmpty()) {
+            savePlanOrder(listOf(restored.id) + getPlans().map { it.id }.filterNot { it == restored.id })
+        }
 
         // Restore future notification schedules. Scheduling failure is secondary to
         // successfully restoring the user's local data.
@@ -208,6 +244,9 @@ class DateAwareTimePlanRepository(context: Context) {
         val next = plans + DateTimePlanRules.normalizeTopology(fresh)
         if (!persist(next)) return null
         plans = next
+        if (loadPlanOrder().isNotEmpty()) {
+            savePlanOrder(listOf(fresh.id) + getPlans().map { it.id }.filterNot { it == fresh.id })
+        }
         TimePlanActionNotificationManager.reconcile(appContext, this)
         return fresh.id
     }
@@ -218,6 +257,7 @@ class DateAwareTimePlanRepository(context: Context) {
         val next = restored.map(DateTimePlanRules::normalizeTopology)
         if (!persist(next)) return false
         plans = next
+        savePlanOrder(next.map { it.id })
         TimePlanActionNotificationManager.reconcile(appContext, this)
         return true
     }
@@ -260,9 +300,22 @@ class DateAwareTimePlanRepository(context: Context) {
         }.getOrDefault(emptyList())
     }
 
+    private fun loadPlanOrder(): List<String> =
+        prefs.getString(KEY_PLAN_ORDER, null)
+            ?.split('|')
+            ?.map(String::trim)
+            ?.filter(String::isNotEmpty)
+            .orEmpty()
+
+    private fun savePlanOrder(ids: List<String>): Boolean =
+        prefs.edit()
+            .putString(KEY_PLAN_ORDER, ids.distinct().joinToString("|"))
+            .commit()
+
     companion object {
         const val PREFS = "armyrist_timeplan_v3"
         const val KEY = "snapshot_v3"
+        const val KEY_PLAN_ORDER = "plan_order_v1"
         const val SCHEMA = 5
     }
 }
