@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 89
-        versionName = "0.6.1-music-alarm-prepare-ui-home-scroll"
+        versionCode = 90
+        versionName = "0.6.2-music-alarm-import-build-rework"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
