@@ -278,7 +278,8 @@ object DateAwareTimePlanJson {
         .put("content", a.content)
         .put("scheduledDateTime", a.scheduledDateTime.toString())
         .put("completionState", a.completionState.name)
-        .put("notificationEnabled", a.notificationEnabled)
+        .put("notificationEnabled", a.notificationMode != ActionNotificationMode.NONE)
+        .put("notificationMode", a.notificationMode.name)
         .put("groupId", a.groupId ?: JSONObject.NULL)
         .put("note", a.note ?: JSONObject.NULL)
         .put("order", a.order)
@@ -291,6 +292,7 @@ object DateAwareTimePlanJson {
         scheduledDateTime = LocalDateTime.parse(j.getString("scheduledDateTime")),
         completionState = ActionCompletionState.valueOf(j.optString("completionState", ActionCompletionState.INCOMPLETE.name)),
         notificationEnabled = j.optBoolean("notificationEnabled", false),
+        notificationMode = runCatching { ActionNotificationMode.valueOf(j.optString("notificationMode")) }.getOrElse { if (j.optBoolean("notificationEnabled", false)) ActionNotificationMode.SIMPLE else ActionNotificationMode.NONE },
         groupId = if (j.isNull("groupId")) null else j.getString("groupId"),
         note = if (j.isNull("note")) null else j.getString("note"),
         order = j.optInt("order", 0),
