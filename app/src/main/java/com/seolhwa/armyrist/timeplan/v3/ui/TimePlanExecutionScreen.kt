@@ -184,57 +184,112 @@ private fun TimePlanPrepareScreen(
 
     Column(Modifier.fillMaxSize()) {
         ArmyristPanel(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("실시사항 준비", fontWeight = FontWeight.Bold)
-                    Text(
-                        "지점 ${selectedPoints.size}개 · 실시사항 ${selectedActions.size}개 선택",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = ArmyristColors.SecondaryText
-                    )
-                }
-                TextButton(onClick = { groupManager = true }) { Text("그룹") }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (selectedPoints.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("실시사항 준비", fontWeight = FontWeight.Bold)
+                Text(
+                    "지점 ${selectedPoints.size}개 · 실시사항 ${selectedActions.size}개 선택",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ArmyristColors.SecondaryText
+                )
+
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     OutlinedButton(
-                        onClick = { batchAdd = true },
+                        onClick = { groupManager = true },
                         modifier = Modifier.weight(1f),
                         shape = ArmyristPanelShape
-                    ) { Text("일괄 추가") }
+                    ) { Text("그룹 관리") }
+
+                    OutlinedButton(
+                        onClick = {
+                            selectedPoints =
+                                if (
+                                    selectedPoints.toSet()
+                                        .containsAll(allPointIds.toSet()) &&
+                                    allPointIds.isNotEmpty()
+                                ) {
+                                    emptyList()
+                                } else {
+                                    allPointIds
+                                }
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = ArmyristPanelShape
+                    ) {
+                        Text(
+                            if (
+                                selectedPoints.toSet()
+                                    .containsAll(allPointIds.toSet()) &&
+                                allPointIds.isNotEmpty()
+                            ) "지점 해제" else "지점 전체"
+                        )
+                    }
+
+                    OutlinedButton(
+                        enabled = plan.actions.isNotEmpty(),
+                        onClick = {
+                            val allActionIds = plan.actions.map { it.id }
+                            selectedActions =
+                                if (
+                                    selectedActions.toSet()
+                                        .containsAll(allActionIds.toSet()) &&
+                                    allActionIds.isNotEmpty()
+                                ) {
+                                    emptyList()
+                                } else {
+                                    allActionIds
+                                }
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = ArmyristPanelShape
+                    ) {
+                        val allActionIds = plan.actions.map { it.id }
+                        Text(
+                            if (
+                                selectedActions.toSet()
+                                    .containsAll(allActionIds.toSet()) &&
+                                allActionIds.isNotEmpty()
+                            ) "실시사항 해제" else "실시사항 전체"
+                        )
+                    }
                 }
-                OutlinedButton(
-                    onClick = {
-                        selectedPoints =
-                            if (selectedPoints.toSet().containsAll(allPointIds.toSet())) {
-                                emptyList()
-                            } else {
-                                allPointIds
-                            }
-                    },
-                    modifier = Modifier.weight(1f),
-                    shape = ArmyristPanelShape
-                ) {
-                    Text(
-                        if (selectedPoints.toSet().containsAll(allPointIds.toSet()) && allPointIds.isNotEmpty()) {
-                            "지점 선택 해제"
-                        } else {
-                            "지점 전체 선택"
-                        }
-                    )
+
+                if (selectedPoints.isNotEmpty()) {
+                    Button(
+                        onClick = { batchAdd = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = ArmyristPanelShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ArmyristColors.SecondaryControl,
+                            contentColor = ArmyristColors.PrimaryText
+                        ),
+                        border = BorderStroke(1.dp, ArmyristColors.PrimaryControl)
+                    ) { Text("선택 지점에 실시사항 일괄 추가") }
                 }
-            }
-            if (plan.actions.isNotEmpty()) {
-                OutlinedButton(
-                    onClick = { selectedActions = if (selectedActions.toSet().containsAll(plan.actions.map { it.id }.toSet())) emptyList() else plan.actions.map { it.id } },
-                    modifier = Modifier.fillMaxWidth(), shape = ArmyristPanelShape
-                ) { Text(if (selectedActions.toSet().containsAll(plan.actions.map { it.id }.toSet())) "실시사항 선택 해제" else "실시사항 전체 선택") }
-            }
-            if (selectedActions.isNotEmpty()) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    OutlinedButton(onClick = { batchShift = true }, modifier = Modifier.weight(1f)) { Text("시간 이동") }
-                    OutlinedButton(onClick = { batchGroup = true }, modifier = Modifier.weight(1f)) { Text("그룹 지정") }
-                    OutlinedButton(onClick = { confirmDeleteSelected = true }, modifier = Modifier.weight(1f)) { Text("삭제") }
+
+                if (selectedActions.isNotEmpty()) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { batchShift = true },
+                            modifier = Modifier.weight(1f),
+                            shape = ArmyristPanelShape
+                        ) { Text("시간 이동") }
+                        OutlinedButton(
+                            onClick = { batchGroup = true },
+                            modifier = Modifier.weight(1f),
+                            shape = ArmyristPanelShape
+                        ) { Text("그룹 지정") }
+                        OutlinedButton(
+                            onClick = { confirmDeleteSelected = true },
+                            modifier = Modifier.weight(1f),
+                            shape = ArmyristPanelShape
+                        ) { Text("삭제") }
+                    }
                 }
             }
         }
