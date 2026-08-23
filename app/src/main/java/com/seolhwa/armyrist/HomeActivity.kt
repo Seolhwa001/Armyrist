@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.seolhwa.armyrist.update.AutoUpdateCheckHost
 
 class HomeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -81,6 +82,8 @@ private fun HomeScreen(
     onUserProfile: () -> Unit,
     onDataManagement: () -> Unit
 ) {
+    AutoUpdateCheckHost()
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
