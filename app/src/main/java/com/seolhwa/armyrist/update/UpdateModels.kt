@@ -51,6 +51,25 @@ data class InstalledVersion(
             .find(versionName)
             ?.value
             ?: versionName
+
+    companion object {
+        fun compareDisplayVersions(left: String, right: String): Int? {
+            fun parts(raw: String): List<Int>? {
+                val match = Regex("^\\d+(?:\\.\\d+){1,3}$").matchEntire(raw.trim())
+                    ?: return null
+                return match.value.split('.').map { it.toIntOrNull() ?: return null }
+            }
+            val a = parts(left) ?: return null
+            val b = parts(right) ?: return null
+            val size = maxOf(a.size, b.size)
+            for (index in 0 until size) {
+                val av = a.getOrElse(index) { 0 }
+                val bv = b.getOrElse(index) { 0 }
+                if (av != bv) return av.compareTo(bv)
+            }
+            return 0
+        }
+    }
 }
 
 sealed interface UpdateCheckResult {
@@ -62,6 +81,11 @@ sealed interface UpdateCheckResult {
     data class Available(
         val installed: InstalledVersion,
         val release: UpdateReleaseMetadata
+    ) : UpdateCheckResult
+
+    data class NoNewerEligibleRelease(
+        val installed: InstalledVersion,
+        val latestPublishedVersionName: String?
     ) : UpdateCheckResult
 
     data class Failure(

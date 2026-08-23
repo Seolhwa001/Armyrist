@@ -144,6 +144,10 @@ fun UpdateAppInfoPanel(startUpdateImmediately: Boolean = false) {
                     latestConfirmed = true
                     message = "현재 최신 버전입니다."
                 }
+                is UpdateCheckResult.NoNewerEligibleRelease -> {
+                    latestConfirmed = true
+                    message = "사용 가능한 새로운 Stable 업데이트가 없습니다."
+                }
                 is UpdateCheckResult.Failure -> message = result.message
             }
             checking = false
@@ -198,6 +202,11 @@ fun UpdateAppInfoPanel(startUpdateImmediately: Boolean = false) {
                             available = null
                             latestConfirmed = true
                             message = "현재 최신 버전입니다."
+                        }
+                        is UpdateCheckResult.NoNewerEligibleRelease -> {
+                            available = null
+                            latestConfirmed = true
+                            message = "사용 가능한 새로운 Stable 업데이트가 없습니다."
                         }
                         is UpdateCheckResult.Failure -> message = result.message
                     }

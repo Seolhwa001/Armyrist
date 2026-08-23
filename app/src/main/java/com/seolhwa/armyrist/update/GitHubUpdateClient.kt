@@ -6,6 +6,10 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.StandardCharsets
 
+class LegacyStableWithoutMetadataException(
+    val releaseVersionName: String?
+) : IllegalStateException("Stable release is missing release.json.")
+
 class GitHubUpdateClient(
     private val owner: String = "Seolhwa001",
     private val repository: String = "Armyrist"
@@ -38,7 +42,9 @@ class GitHubUpdateClient(
         }
 
         val metadataAsset = assets.firstOrNull { it.name == METADATA_ASSET }
-            ?: error("Stable release is missing $METADATA_ASSET.")
+            ?: throw LegacyStableWithoutMetadataException(
+                releaseVersionName = stableVersionNameFromRelease(release)
+            )
         val metadataJson = JSONObject(getText(metadataAsset.downloadUrl))
         val metadata = parseMetadata(metadataJson, assets)
 
@@ -46,6 +52,19 @@ class GitHubUpdateClient(
             "Release metadata is not stable."
         }
         metadata
+    }
+
+    internal fun stableVersionNameFromRelease(release: JSONObject): String? {
+        val tag = release.optString("tag_name").trim()
+        val title = release.optString("name").trim()
+
+        fun extract(raw: String): String? =
+            Regex("(?:^|\\\\s|v)(\\\\d+(?:\\\\.\\\\d+){1,3})(?:$|\\\\s|[-_])")
+                .find(raw)
+                ?.groupValues
+                ?.getOrNull(1)
+
+        return extract(tag) ?: extract(title)
     }
 
     internal fun parseMetadata(

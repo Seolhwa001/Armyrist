@@ -35,6 +35,22 @@ class ArmyristUpdateManager(context: Context) {
         }
 
         val release = client.fetchLatestStableMetadata().getOrElse { error ->
+            if (error is LegacyStableWithoutMetadataException) {
+                val published = error.releaseVersionName
+                val comparison = published?.let {
+                    InstalledVersion.compareDisplayVersions(installed.displayName, it)
+                }
+                if (comparison != null && comparison >= 0) {
+                    preferences.markSuccessfulCheck()
+                    preferences.clearKnownAvailable()
+                    UpdateSessionState.latestAvailable = null
+                    return@withContext UpdateCheckResult.NoNewerEligibleRelease(
+                        installed = installed,
+                        latestPublishedVersionName = published
+                    )
+                }
+            }
+
             return@withContext UpdateCheckResult.Failure(
                 message = if (manual) {
                     "업데이트 정보를 확인할 수 없습니다. 잠시 후 다시 시도해주세요."
