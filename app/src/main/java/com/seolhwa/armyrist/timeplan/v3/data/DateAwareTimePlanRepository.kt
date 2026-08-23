@@ -46,6 +46,19 @@ class DateAwareTimePlanRepository(context: Context) {
         return savePlanOrder(displayed.map { it.id })
     }
 
+    /**
+     * Persists the complete user-visible TimePlan order after drag/drop.
+     * Unknown/duplicate IDs are rejected so reorder cannot silently lose plans.
+     */
+    @Synchronized
+    fun setPlanOrder(orderedIds: List<String>): Boolean {
+        val currentIds = plans.map { it.id }.toSet()
+        if (orderedIds.size != currentIds.size) return false
+        if (orderedIds.distinct().size != orderedIds.size) return false
+        if (orderedIds.toSet() != currentIds) return false
+        return savePlanOrder(orderedIds)
+    }
+
     @Synchronized fun getPlan(id: String): DateAwareTimePlan? = plans.firstOrNull { it.id == id }
     @Synchronized fun contains(id: String): Boolean = plans.any { it.id == id }
 
