@@ -5,7 +5,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 
-const val TIME_PLAN_DATE_PORTABLE_SCHEMA_VERSION = 4
+const val TIME_PLAN_DATE_PORTABLE_SCHEMA_VERSION = 5
 
 /**
  * Date-aware TimePlan domain. Duration is always an elapsed amount and never a clock value.
@@ -83,6 +83,8 @@ data class DateAwareTimePlan(
     val finalPoint: DateTimeEvent? = null,
     val end: DateTimeAnchor = DateTimeAnchor(),
     val links: List<DateTimeLink> = emptyList(),
+    val actionGroups: List<TimePlanActionGroup> = emptyList(),
+    val actions: List<TimePlanActionItem> = emptyList(),
     val memo: String? = null,
     val createdAt: String,
     val updatedAt: String,
@@ -95,6 +97,7 @@ data class DateAwareTimePlan(
         require(midwayEvents.all { it.kind == TimeEventKind.MIDWAY })
         require(finalPoint == null || finalPoint.kind == TimeEventKind.FINAL)
         require(midwayEvents.map { it.id }.distinct().size == midwayEvents.size)
+        require(TimePlanExecutionRules.validate(this).isEmpty())
     }
     fun orderedEvents(): List<DateTimeEvent> = midwayEvents.sortedBy { it.order } + listOfNotNull(finalPoint)
 }
@@ -211,6 +214,7 @@ object DateTimePlanRules {
         val actualPairs = plan.links.map { it.fromNodeId to it.toNodeId }.toSet()
         if (plan.links.isNotEmpty() && actualPairs != expectedPairs) problems += "link topology mismatch"
         if (plan.links.any { it.durationMinutes != null && it.durationMinutes < 0 }) problems += "negative duration"
+        problems += TimePlanExecutionRules.validate(plan)
         return problems
     }
 
