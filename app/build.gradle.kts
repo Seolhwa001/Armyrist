@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 88
-        versionName = "0.6.0-timeplan-notification-ui-home-scroll"
+        versionCode = 89
+        versionName = "0.6.1-music-alarm-prepare-ui-home-scroll"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
