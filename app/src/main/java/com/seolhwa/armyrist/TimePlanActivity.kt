@@ -34,6 +34,7 @@ class TimePlanActivity : ComponentActivity() {
                         repository = app.dateAwareTimePlanRepository,
                         legacyRepository = app.timePlanV2Repository,
                         coreRepository = app.coreSuiteRepository,
+                        trashRepository = app.commonTrashRepository,
                         onHome = { finish() },
                         onOpenExecution = { planId, mode, pointIds ->
                             startActivity(

@@ -8,6 +8,7 @@ import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
 import com.seolhwa.armyrist.timeplan.data.TimePlanV2MigrationCoordinator
 import com.seolhwa.armyrist.timeplan.data.TimePlanV2Repository
 import com.seolhwa.armyrist.timeplan.v3.data.DateAwareTimePlanRepository
+import com.seolhwa.armyrist.trash.CommonTrashRepository
 
 class ArmyristApplication : Application() {
     lateinit var repository: CountingRepository
@@ -20,6 +21,9 @@ class ArmyristApplication : Application() {
         private set
 
     lateinit var dateAwareTimePlanRepository: DateAwareTimePlanRepository
+        private set
+
+    lateinit var commonTrashRepository: CommonTrashRepository
         private set
 
     override fun onCreate() {
@@ -36,6 +40,9 @@ class ArmyristApplication : Application() {
             v2Repository = timePlanV2Repository
         )
         dateAwareTimePlanRepository = DateAwareTimePlanRepository(this)
+        commonTrashRepository = CommonTrashRepository(this).also {
+            it.purgeExpired()
+        }
 
         ChecklistNotificationManager.reconcile(
             this,
