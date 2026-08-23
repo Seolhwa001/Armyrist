@@ -570,6 +570,7 @@ private fun TimePlanExecuteScreen(
     var listBottomInRoot by remember { mutableFloatStateOf(0f) }
     var dragTargetState by remember { mutableStateOf<ActionCompletionState?>(null) }
     var dragVisitedIds by remember { mutableStateOf(emptySet<String>()) }
+    val dragPreviewStates = remember { mutableStateMapOf<String, ActionCompletionState>() }
     val dragScrollScope = rememberCoroutineScope()
 
     fun applyRailAt(rootY: Float) {
@@ -579,19 +580,9 @@ private fun TimePlanExecuteScreen(
             rootY >= bounds.first && rootY <= bounds.second
         }?.key ?: return
         if (hitId in dragVisitedIds) return
+
         dragVisitedIds = dragVisitedIds + hitId
-        onCommit(
-            plan.copy(
-                actions = plan.actions.map { action ->
-                    if (action.id in dragVisitedIds) {
-                        action.copy(
-                            completionState = target,
-                            updatedAt = System.currentTimeMillis().toString()
-                        )
-                    } else action
-                }
-            )
-        )
+        dragPreviewStates[hitId] = target
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -749,21 +740,27 @@ private fun TimePlanExecuteScreen(
                     Text(title, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp))
                 }
                 items(actions, key = { it.id }) { action ->
-                    val completed = action.completionState == ActionCompletionState.COMPLETE
+                    val completed =
+                        (dragPreviewStates[action.id] ?: action.completionState) ==
+                            ActionCompletionState.COMPLETE
                     Card(
                         onClick = {
                             if (bulkSelect) {
-                                selectedActionIds = if (action.id in selectedActionIds) selectedActionIds - action.id else selectedActionIds + action.id
-                            } else {
-                                val newState = if (completed) ActionCompletionState.INCOMPLETE else ActionCompletionState.COMPLETE
-                                onCommit(plan.copy(actions = plan.actions.map { if (it.id == action.id) it.copy(completionState = newState, updatedAt = System.currentTimeMillis().toString()) else it }))
+                                selectedActionIds =
+                                    if (action.id in selectedActionIds) {
+                                        selectedActionIds - action.id
+                                    } else {
+                                        selectedActionIds + action.id
+                                    }
                             }
                         },
+                        enabled = bulkSelect,
                         modifier = Modifier
                             .fillMaxWidth()
                             .onGloballyPositioned { coordinates ->
                                 val top = coordinates.positionInRoot().y
-                                actionVerticalBounds[action.id] = top to (top + coordinates.size.height)
+                                actionVerticalBounds[action.id] =
+                                    top to (top + coordinates.size.height)
                             },
                         shape = ArmyristPanelShape,
                         colors = CardDefaults.cardColors(
@@ -817,6 +814,7 @@ private fun TimePlanExecuteScreen(
                                         )
                                     },
                                     onDragStartAtRootY = { rootY ->
+                                        dragPreviewStates.clear()
                                         dragTargetState = if (completed) {
                                             ActionCompletionState.INCOMPLETE
                                         } else {
@@ -837,6 +835,23 @@ private fun TimePlanExecuteScreen(
                                         }
                                     },
                                     onDragEnd = {
+                                        val updates = dragPreviewStates.toMap()
+                                        if (updates.isNotEmpty()) {
+                                            val now = System.currentTimeMillis().toString()
+                                            onCommit(
+                                                plan.copy(
+                                                    actions = plan.actions.map { action ->
+                                                        updates[action.id]?.let { state ->
+                                                            action.copy(
+                                                                completionState = state,
+                                                                updatedAt = now
+                                                            )
+                                                        } ?: action
+                                                    }
+                                                )
+                                            )
+                                        }
+                                        dragPreviewStates.clear()
                                         dragTargetState = null
                                         dragVisitedIds = emptySet()
                                     }

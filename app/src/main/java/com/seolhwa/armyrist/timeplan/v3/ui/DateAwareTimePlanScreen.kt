@@ -448,7 +448,7 @@ private fun DateAwarePlanDetail(
                             containerColor = ArmyristColors.PrimaryControl,
                             contentColor = ArmyristColors.OnDark
                         )
-                    ) { Text("수행 모드", style = MaterialTheme.typography.labelLarge) }
+                    ) { Text("실시사항 설정", style = MaterialTheme.typography.labelLarge) }
                     Box(Modifier.weight(1f)) {
                         OfflineVoiceButton(
                             toolContext = VoiceToolContext.TIME_PLAN,
@@ -561,9 +561,31 @@ private fun DateAwarePlanDetail(
     }
     editEvent?.let { event ->
         DateTimeEventEditDialog(event, onDismiss={editEvent=null}, onDelete={
-            val changedBase=if(event.kind==TimeEventKind.FINAL) plan.copy(finalPoint=null) else plan.copy(midwayEvents=plan.midwayEvents.filterNot{it.id==event.id}.mapIndexed{i,e->e.copy(order=i)})
-            val changed = TimePlanExecutionRules.removePointActions(changedBase, event.id)
-            onCommit(DateTimePlanRules.normalizeTopology(changed)); editEvent=null
+            // Clear transient references before the point disappears from topology.
+            editEvent = null
+            editLink = null
+            conflictDetail = null
+            pendingActionShift = null
+            val removedNodeKey = nodeSelectionKey(event.id)
+            selectedKeyList = selectedKeyList.filterNot { key ->
+                key == removedNodeKey ||
+                    key.startsWith("L:${event.id}->") ||
+                    key.endsWith("->${event.id}")
+            }
+
+            val changedBase =
+                if (event.kind == TimeEventKind.FINAL) {
+                    plan.copy(finalPoint = null)
+                } else {
+                    plan.copy(
+                        midwayEvents = plan.midwayEvents
+                            .filterNot { it.id == event.id }
+                            .mapIndexed { i, e -> e.copy(order = i) }
+                    )
+                }
+            val changed =
+                TimePlanExecutionRules.removePointActions(changedBase, event.id)
+            onCommit(DateTimePlanRules.normalizeTopology(changed))
         }) { changedEvent ->
             // A user-edited event remains explicit. Unlocked later nodes, including END,
             // follow the event's departure delta. A locked END remains fixed and the
@@ -1125,23 +1147,23 @@ private fun DayHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 12.dp, bottom = 8.dp),
+            .padding(top = 14.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
         HorizontalDivider(
-            modifier = Modifier.width(34.dp),
+            modifier = Modifier.width(28.dp),
             color = ArmyristColors.PrimaryControl.copy(alpha = 0.40f)
         )
         Text(
             text = label,
-            modifier = Modifier.padding(horizontal = 10.dp),
-            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.padding(horizontal = 12.dp),
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.ExtraBold,
             color = ArmyristColors.PrimaryControl
         )
         HorizontalDivider(
-            modifier = Modifier.width(34.dp),
+            modifier = Modifier.width(28.dp),
             color = ArmyristColors.PrimaryControl.copy(alpha = 0.40f)
         )
     }
@@ -1245,7 +1267,7 @@ private fun LinkRow(
     onClick: () -> Unit
 ) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 44.dp),
+        Modifier.fillMaxWidth().heightIn(min = 38.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (selectionMode) Checkbox(checked = selected, onCheckedChange = { onToggle() })
@@ -1271,8 +1293,9 @@ private fun LinkRow(
                 ) {
                     Text(
                         "${link?.label?.takeIf { it.isNotBlank() } ?: "경과"} · ${durationText(displayMinutes)}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = ArmyristColors.SecondaryText
                     )
                     if (!selectionMode) Text(" ▼", color = ArmyristColors.SecondaryText)
                     if (link?.durationLocked == true) {
