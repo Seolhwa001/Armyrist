@@ -20,6 +20,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -28,7 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
 
-enum class ArmyristTopBarLeadingIcon { NONE, HOME }
+enum class ArmyristTopBarLeadingIcon { NONE, HOME, BACK }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,7 +70,7 @@ fun ArmyristTopBar(
         },
         navigationIcon = {
             Row {
-                if (leadingIcon == ArmyristTopBarLeadingIcon.HOME) {
+                if (leadingIcon == ArmyristTopBarLeadingIcon.HOME || leadingIcon == ArmyristTopBarLeadingIcon.BACK) {
                     Surface(
                         modifier = Modifier.size(52.dp),
                         shape = RoundedCornerShape(11.dp),
@@ -84,8 +85,8 @@ fun ArmyristTopBar(
                             modifier = Modifier.fillMaxSize()
                         ) {
                             Icon(
-                                Icons.Outlined.Home,
-                                contentDescription = "홈",
+                                if (leadingIcon == ArmyristTopBarLeadingIcon.HOME) Icons.Outlined.Home else Icons.Outlined.ArrowBack,
+                                contentDescription = if (leadingIcon == ArmyristTopBarLeadingIcon.HOME) "홈" else "뒤로",
                                 tint = ArmyristColors.OnDark,
                                 modifier = Modifier.size(27.dp)
                             )
