@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
+import com.seolhwa.armyrist.timeplan.v3.data.DateAwareTimePlanRepository
 
 class ChecklistBootReceiver : BroadcastReceiver() {
     override fun onReceive(
@@ -23,6 +24,10 @@ class ChecklistBootReceiver : BroadcastReceiver() {
             ChecklistNotificationManager.reconcile(
                 context.applicationContext,
                 repository
+            )
+            TimePlanActionNotificationManager.reconcile(
+                context.applicationContext,
+                DateAwareTimePlanRepository(context.applicationContext)
             )
         }
     }
