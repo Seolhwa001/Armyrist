@@ -4,6 +4,7 @@ import java.time.LocalDateTime
 import java.util.UUID
 
 enum class ActionCompletionState { INCOMPLETE, COMPLETE }
+enum class ActionNotificationMode { NONE, SIMPLE, MUSIC }
 
 data class TimePlanActionGroup(
     val id: String = UUID.randomUUID().toString(),
@@ -25,6 +26,7 @@ data class TimePlanActionItem(
     val scheduledDateTime: LocalDateTime,
     val completionState: ActionCompletionState = ActionCompletionState.INCOMPLETE,
     val notificationEnabled: Boolean = false,
+    val notificationMode: ActionNotificationMode = if (notificationEnabled) ActionNotificationMode.SIMPLE else ActionNotificationMode.NONE,
     val groupId: String? = null,
     val note: String? = null,
     val order: Int = 0,
