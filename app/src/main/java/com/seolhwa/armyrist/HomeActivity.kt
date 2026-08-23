@@ -15,6 +15,8 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -84,6 +86,7 @@ private fun HomeScreen(
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -201,7 +204,7 @@ private fun HomeScreen(
             }
         }
 
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(8.dp))
 
         ArmyristSystemLabel(
             "CORE SUITE v1  ·  OFFLINE READY",
