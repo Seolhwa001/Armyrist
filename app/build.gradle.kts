@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 99
-        versionName = "0.6.11-emergency-midway-delete-stability"
+        versionCode = 100
+        versionName = "0.6.12-atomic-point-delete-ui-unification"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
