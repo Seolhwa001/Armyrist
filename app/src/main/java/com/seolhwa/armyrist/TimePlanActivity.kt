@@ -7,13 +7,27 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import com.seolhwa.armyrist.timeplan.v3.ui.DateAwareTimePlanApp
 
 class TimePlanActivity : ComponentActivity() {
+    private var resumeRevision by mutableIntStateOf(0)
+
+    override fun onResume() {
+        super.onResume()
+        val app = application as ArmyristApplication
+        app.dateAwareTimePlanRepository.reloadFromPersistence()
+        resumeRevision++
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val app = application as ArmyristApplication
         setContent {
+            @Suppress("UNUSED_VARIABLE")
+            val observedResumeRevision = resumeRevision
             ArmyristTheme {
                 Surface(Modifier.fillMaxSize(), color = ArmyristColors.AppBackground) {
                     DateAwareTimePlanApp(
