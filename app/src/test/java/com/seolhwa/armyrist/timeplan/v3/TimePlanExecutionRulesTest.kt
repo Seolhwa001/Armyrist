@@ -198,4 +198,38 @@ class TimePlanExecutionRulesTest {
         assertEquals(LocalDateTime.of(2026, 8, 24, 21, 10), action.scheduledDateTime)
     }
 
+
+    @Test fun batchMoveActionsPreservesEachScheduledDateTime() {
+        val firstTime = LocalDateTime.of(2026, 8, 23, 18, 40)
+        val secondTime = LocalDateTime.of(2026, 8, 23, 21, 0)
+        val base = plan().copy(
+            actions = listOf(
+                TimePlanActionItem(
+                    id = "a",
+                    parentPointId = "mid",
+                    content = "A",
+                    scheduledDateTime = firstTime
+                ),
+                TimePlanActionItem(
+                    id = "b",
+                    parentPointId = "mid",
+                    content = "B",
+                    scheduledDateTime = secondTime
+                )
+            )
+        )
+
+        val moved =
+            TimePlanExecutionRules.batchMoveActionsToParentPreservingTime(
+                plan = base,
+                actionIds = setOf("a", "b"),
+                targetParentPointId = DateTimePlanRules.END_ID
+            )
+
+        assertEquals(DateTimePlanRules.END_ID, moved.actions.first { it.id == "a" }.parentPointId)
+        assertEquals(DateTimePlanRules.END_ID, moved.actions.first { it.id == "b" }.parentPointId)
+        assertEquals(firstTime, moved.actions.first { it.id == "a" }.scheduledDateTime)
+        assertEquals(secondTime, moved.actions.first { it.id == "b" }.scheduledDateTime)
+    }
+
 }
