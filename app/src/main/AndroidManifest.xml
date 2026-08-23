@@ -33,6 +33,7 @@
         <activity android:name=".MainActivity" android:exported="false" />
         <activity android:name=".ChecklistActivity" android:exported="false" />
         <activity android:name=".TimePlanActivity" android:exported="false" />
+        <activity android:name=".TimePlanExecutionActivity" android:exported="false" />
         <activity android:name=".UserProfileActivity" android:exported="false" />
         <activity android:name=".ReportTemplateActivity" android:exported="false" />
         <activity android:name=".DataManagementActivity" android:exported="false" />
@@ -126,6 +127,7 @@
             </intent-filter>
         </activity>
         <receiver android:name=".notification.ChecklistAlarmReceiver" android:exported="false" />
+        <receiver android:name=".notification.TimePlanActionAlarmReceiver" android:exported="false" />
         <receiver android:name=".notification.ChecklistBootReceiver" android:enabled="true" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
