@@ -132,14 +132,14 @@ object TimePlanActionNotificationManager {
                     schedule(context, plan, action)
                     active += key
                 } else {
-                    cancel(context, plan.id, action.id)
+                    cancelScheduledOnly(context, plan.id, action.id)
                 }
             }
         }
 
         (previously - active).forEach { stored ->
             val parts = stored.split('|', limit = 2)
-            if (parts.size == 2) cancel(context, parts[0], parts[1])
+            if (parts.size == 2) cancelScheduledOnly(context, parts[0], parts[1])
         }
         prefs.edit().putStringSet(KEY_IDS, active).apply()
     }
@@ -155,7 +155,7 @@ object TimePlanActionNotificationManager {
             .toInstant()
             .toEpochMilli()
         val manager = context.getSystemService(AlarmManager::class.java)
-        cancel(context, plan.id, action.id)
+        cancelScheduledOnly(context, plan.id, action.id)
         val pending = alarmPendingIntent(context, plan.id, action.id)
 
         // Reminder contract: deliver at the scheduled time even while the screen is off
@@ -173,6 +173,29 @@ object TimePlanActionNotificationManager {
                 manager.set(AlarmManager.RTC_WAKEUP, triggerAt, pending)
         }
         return true
+    }
+
+    /**
+     * Cancels only future AlarmManager delivery and the ordinary notification.
+     * It intentionally does NOT stop an already-running MUSIC foreground service.
+     *
+     * This is used by reconcile/schedule so merely opening Armyrist after the
+     * scheduled time cannot silence a music alarm that is currently ringing.
+     */
+    private fun cancelScheduledOnly(context: Context, planId: String, actionId: String) {
+        val manager = context.getSystemService(AlarmManager::class.java)
+        PendingIntent.getBroadcast(
+            context,
+            requestCode(planId, actionId),
+            Intent(context, TimePlanActionAlarmReceiver::class.java)
+                .setAction("com.seolhwa.armyrist.TIMEPLAN_ACTION_ALARM"),
+            PendingIntent.FLAG_NO_CREATE or immutableFlag()
+        )?.let {
+            manager.cancel(it)
+            it.cancel()
+        }
+        context.getSystemService(NotificationManager::class.java)
+            .cancel(requestCode(planId, actionId))
     }
 
     fun cancel(context: Context, planId: String, actionId: String) {
