@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 93
-        versionName = "0.6.5-timeplan-timeline-rail-reflow"
+        versionCode = 94
+        versionName = "0.6.6-timeline-regression-test-rework"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
