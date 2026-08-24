@@ -52,15 +52,62 @@ fun AutoUpdateCheckHost(
     available?.let { release ->
         AlertDialog(
             onDismissRequest = { available = null },
-            title = { Text("새로운 Armyrist ${release.versionName} 버전이 있습니다.") },
+            shape = ArmyristPanelShape,
+            containerColor = ArmyristColors.RaisedSurface,
+            tonalElevation = 0.dp,
+            titleContentColor = ArmyristColors.PrimaryText,
+            textContentColor = ArmyristColors.PrimaryText,
+            title = {
+                Column {
+                    Text(
+                        "새로운 Armyrist ${release.versionName}",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        "업데이트를 사용할 수 있습니다.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ArmyristColors.SecondaryText
+                    )
+                }
+            },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("주요 변경사항", fontWeight = FontWeight.Bold)
-                    release.releaseNotes.take(4).forEach { Text("• $it") }
+                    HorizontalDivider(color = ArmyristColors.SoftBorder)
+                    Text(
+                        "주요 변경사항",
+                        fontWeight = FontWeight.Bold,
+                        color = ArmyristColors.SecondaryText
+                    )
+                    if (release.releaseNotes.isEmpty()) {
+                        Text(
+                            "변경사항이 제공되지 않았습니다.",
+                            color = ArmyristColors.SecondaryText
+                        )
+                    } else {
+                        release.releaseNotes.take(4).forEach {
+                            Text(
+                                "• $it",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = ArmyristColors.SecondaryText
+                            )
+                        }
+                    }
                 }
             },
             dismissButton = {
-                TextButton(onClick = { available = null }) { Text("나중에") }
+                OutlinedButton(
+                    onClick = { available = null },
+                    shape = ArmyristPanelShape,
+                    border = BorderStroke(1.dp, ArmyristColors.SoftBorder),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = ArmyristColors.RaisedSurface,
+                        contentColor = ArmyristColors.PrimaryText
+                    )
+                ) {
+                    Text("나중에")
+                }
             },
             confirmButton = {
                 Button(
@@ -71,11 +118,14 @@ fun AutoUpdateCheckHost(
                                 .putExtra(UserProfileActivity.EXTRA_START_UPDATE, true)
                         )
                     },
+                    shape = ArmyristPanelShape,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = ArmyristColors.PrimaryControl,
                         contentColor = ArmyristColors.OnDark
                     )
-                ) { Text("업데이트") }
+                ) {
+                    Text("업데이트", fontWeight = FontWeight.Bold)
+                }
             }
         )
     }
