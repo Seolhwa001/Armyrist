@@ -3,12 +3,17 @@
 package com.seolhwa.armyrist.timeplan.v3.ui
 
 import android.view.HapticFeedbackConstants
+import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,6 +27,11 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.DragIndicator
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.DriveFileMove
+import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.RestoreFromTrash
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -31,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -45,6 +56,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.seolhwa.armyrist.*
+import com.seolhwa.armyrist.collection.*
 import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
 import com.seolhwa.armyrist.stage2.domain.ToolResult
 import com.seolhwa.armyrist.timeplan.data.TimePlanV2Repository
@@ -56,6 +68,7 @@ import com.seolhwa.armyrist.timeplan.v3.domain.*
 import com.seolhwa.armyrist.voice.*
 import kotlinx.coroutines.launch
 import java.time.*
+import java.io.File
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
@@ -390,12 +403,47 @@ private fun DateAwarePlanList(
     val listState = rememberLazyListState()
     val reorderScope = rememberCoroutineScope()
 
+    val collectionRepository = remember(context) { CommonCollectionRepository(context) }
+    var collectionRevision by remember { mutableIntStateOf(0) }
+    @Suppress("UNUSED_VARIABLE") val observedCollectionRevision = collectionRevision
+    var openedFolderId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedPlanIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    val selectionMode = selectedPlanIds.isNotEmpty()
+    var createFolderDialog by remember { mutableStateOf(false) }
+    var moveFolderDialog by remember { mutableStateOf(false) }
+    var folderMenuTarget by remember { mutableStateOf<ArmyristCollectionFolder?>(null) }
+    var renameFolderTarget by remember { mutableStateOf<ArmyristCollectionFolder?>(null) }
+    var deleteFolderTarget by remember { mutableStateOf<ArmyristCollectionFolder?>(null) }
+    var coverFolderId by remember { mutableStateOf<String?>(null) }
+
+    val coverPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        val folderId = coverFolderId
+        coverFolderId = null
+        if (uri != null && folderId != null) {
+            if (collectionRepository.importCoverImage(folderId, uri)) {
+                collectionRevision++
+            }
+        }
+    }
+
+    val folders = remember(collectionRevision, datePlans.map { it.id }) {
+        collectionRepository.folders(CollectionToolType.TIME_PLAN)
+    }
+    val validPlanIds = datePlans.map { it.id }.toSet()
+    val memberToFolder = folders
+        .flatMap { folder -> folder.memberIds.map { memberId -> memberId to folder.id } }
+        .filter { it.first in validPlanIds }
+        .toMap()
+    val openedFolder = openedFolderId?.let { id -> folders.firstOrNull { it.id == id } }
+
     val orderedPlans = remember { mutableStateListOf<DateAwareTimePlan>() }
     var draggingPlanId by remember { mutableStateOf<String?>(null) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     var reorderDirty by remember { mutableStateOf(false) }
 
-    LaunchedEffect(datePlans.map { it.id }, draggingPlanId) {
+    LaunchedEffect(datePlans.map { Triple(it.id, it.title, it.updatedAt) }, draggingPlanId) {
         if (draggingPlanId == null) {
             val currentIds = orderedPlans.map { it.id }
             val incomingIds = datePlans.map { it.id }
@@ -409,6 +457,22 @@ private fun DateAwarePlanList(
                     latestById[orderedPlans[index].id]?.let { orderedPlans[index] = it }
                 }
             }
+        }
+    }
+
+    fun togglePlanSelection(planId: String) {
+        selectedPlanIds =
+            if (planId in selectedPlanIds) selectedPlanIds.filterNot { it == planId }
+            else selectedPlanIds + planId
+    }
+
+    fun visiblePlansForFolder(): List<DateAwareTimePlan> {
+        val currentFolder = openedFolder
+        return if (currentFolder == null) {
+            orderedPlans.filter { memberToFolder[it.id] == null }
+        } else {
+            val byId = orderedPlans.associateBy { it.id }
+            currentFolder.memberIds.mapNotNull(byId::get)
         }
     }
 
@@ -447,24 +511,64 @@ private fun DateAwarePlanList(
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp
             ) {
-                Button(
-                    onClick = onCreate,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 14.dp, vertical = 10.dp)
-                        .heightIn(min = 54.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = ArmyristColors.PrimaryControl,
-                        contentColor = ArmyristColors.OnDark
-                    )
-                ) {
-                    Text(
-                        "+  새 시간계획 만들기",
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                if (selectionMode) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { selectedPlanIds = emptyList() },
+                            modifier = Modifier.heightIn(min = 52.dp),
+                            shape = ArmyristPanelShape,
+                            border = BorderStroke(1.dp, ArmyristColors.SoftBorder)
+                        ) {
+                            Text("선택 ${selectedPlanIds.size}")
+                        }
+                        Button(
+                            onClick = { createFolderDialog = true },
+                            modifier = Modifier.weight(1f).heightIn(min = 52.dp),
+                            shape = ArmyristPanelShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = ArmyristColors.PrimaryControl,
+                                contentColor = ArmyristColors.OnDark
+                            )
+                        ) {
+                            Icon(Icons.Outlined.Folder, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("폴더로 묶기", fontWeight = FontWeight.Bold)
+                        }
+                        OutlinedButton(
+                            onClick = { moveFolderDialog = true },
+                            modifier = Modifier.heightIn(min = 52.dp),
+                            shape = ArmyristPanelShape,
+                            border = BorderStroke(1.dp, ArmyristColors.SoftBorder)
+                        ) {
+                            Icon(Icons.Outlined.DriveFileMove, contentDescription = "이동")
+                        }
+                    }
+                } else {
+                    Button(
+                        onClick = onCreate,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(horizontal = 14.dp, vertical = 10.dp)
+                            .heightIn(min = 54.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ArmyristColors.PrimaryControl,
+                            contentColor = ArmyristColors.OnDark
+                        )
+                    ) {
+                        Text(
+                            "+  새 시간계획 만들기",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
                 }
             }
         }
@@ -571,8 +675,96 @@ private fun DateAwarePlanList(
                     }
                 }
 
+                if (openedFolder == null) {
+                    items(folders, key = { "folder-${it.id}" }) { folder ->
+                        val memberCount = folder.memberIds.count { it in validPlanIds }
+                        Card(
+                            onClick = {
+                                if (!selectionMode) {
+                                    openedFolderId = folder.id
+                                    selectedPlanIds = emptyList()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, ArmyristColors.SoftBorder),
+                            colors = CardDefaults.cardColors(
+                                containerColor = ArmyristColors.RaisedSurface
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                FolderCoverThumbnail(folder.coverImagePath)
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        folder.name,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = ArmyristColors.PrimaryText
+                                    )
+                                    Spacer(Modifier.height(3.dp))
+                                    Text(
+                                        "${memberCount}개 시간계획",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = ArmyristColors.SecondaryText
+                                    )
+                                }
+                                Icon(
+                                    Icons.Outlined.FolderOpen,
+                                    contentDescription = null,
+                                    tint = ArmyristColors.PrimaryControl
+                                )
+                                IconButton(onClick = { folderMenuTarget = folder }) {
+                                    Icon(
+                                        Icons.Outlined.MoreVert,
+                                        contentDescription = "폴더 메뉴",
+                                        tint = ArmyristColors.SecondaryText
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    item(key = "opened-folder-header") {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = ArmyristPanelShape,
+                            color = ArmyristColors.InfoSurface,
+                            border = BorderStroke(1.dp, ArmyristColors.SoftBorder)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TextButton(
+                                    onClick = {
+                                        openedFolderId = null
+                                        selectedPlanIds = emptyList()
+                                    }
+                                ) { Text("← 전체") }
+                                Text(
+                                    openedFolder.name,
+                                    modifier = Modifier.weight(1f),
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "${openedFolder.memberIds.count { it in validPlanIds }}개",
+                                    color = ArmyristColors.SecondaryText
+                                )
+                                IconButton(onClick = { folderMenuTarget = openedFolder }) {
+                                    Icon(Icons.Outlined.MoreVert, contentDescription = "폴더 메뉴")
+                                }
+                            }
+                        }
+                    }
+                }
+
                 itemsIndexed(
-                    orderedPlans,
+                    visiblePlansForFolder(),
                     key = { _, plan -> "v3-${plan.id}" }
                 ) { _, plan ->
                     val isDragging = draggingPlanId == plan.id
@@ -581,10 +773,9 @@ private fun DateAwarePlanList(
                     val autoScrollThresholdPx = with(density) { 72.dp.toPx() }
                     val maxAutoScrollPx = with(density) { 22.dp.toPx() }
 
+                    val isSelected = plan.id in selectedPlanIds
+
                     Card(
-                        onClick = {
-                            if (draggingPlanId == null) onOpen(plan.id)
-                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .zIndex(if (isDragging) 2f else 0f)
@@ -597,14 +788,19 @@ private fun DateAwarePlanList(
                         shape = RoundedCornerShape(10.dp),
                         border = BorderStroke(
                             1.dp,
-                            if (isDragging) ArmyristColors.PrimaryControl
-                            else ArmyristColors.SoftBorder
+                            when {
+                                isDragging -> ArmyristColors.PrimaryControl
+                                isSelected -> ArmyristColors.PrimaryControl
+                                else -> ArmyristColors.SoftBorder
+                            }
                         ),
                         elevation = CardDefaults.cardElevation(
                             defaultElevation = if (isDragging) 6.dp else 1.dp
                         ),
                         colors = CardDefaults.cardColors(
-                            containerColor = ArmyristColors.RaisedSurface
+                            containerColor =
+                                if (isSelected) ArmyristColors.SecondaryControl
+                                else ArmyristColors.RaisedSurface
                         )
                     ) {
                         Row(
@@ -616,7 +812,8 @@ private fun DateAwarePlanList(
                             Box(
                                 modifier = Modifier
                                     .size(width = 38.dp, height = 48.dp)
-                                    .pointerInput(plan.id, orderedPlans.size) {
+                                    .pointerInput(plan.id, orderedPlans.size, selectionMode) {
+                                        if (selectionMode) return@pointerInput
                                         detectDragGesturesAfterLongPress(
                                             onDragStart = {
                                                 val info = listState.layoutInfo.visibleItemsInfo
@@ -755,7 +952,23 @@ private fun DateAwarePlanList(
                             Column(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .padding(start = 6.dp),
+                                    .padding(start = 6.dp)
+                                    .pointerInput(plan.id, selectionMode) {
+                                        detectTapGestures(
+                                            onTap = {
+                                                if (selectionMode) togglePlanSelection(plan.id)
+                                                else if (draggingPlanId == null) onOpen(plan.id)
+                                            },
+                                            onLongPress = {
+                                                if (draggingPlanId == null) {
+                                                    togglePlanSelection(plan.id)
+                                                    view.performHapticFeedback(
+                                                        HapticFeedbackConstants.LONG_PRESS
+                                                    )
+                                                }
+                                            }
+                                        )
+                                    },
                                 verticalArrangement = Arrangement.Center
                             ) {
                                 Text(
@@ -774,7 +987,7 @@ private fun DateAwarePlanList(
 
                             IconButton(
                                 onClick = { renameTarget = plan },
-                                enabled = !isDragging,
+                                enabled = !isDragging && !selectionMode,
                                 modifier = Modifier.size(44.dp)
                             ) {
                                 Icon(
@@ -794,7 +1007,7 @@ private fun DateAwarePlanList(
 
                             IconButton(
                                 onClick = { deleteTarget = plan },
-                                enabled = !isDragging,
+                                enabled = !isDragging && !selectionMode,
                                 modifier = Modifier.size(44.dp)
                             ) {
                                 Icon(
@@ -853,6 +1066,208 @@ private fun DateAwarePlanList(
 
             }
         }
+    }
+
+    if (createFolderDialog) {
+        SimpleTextDialog(
+            "새 폴더",
+            "",
+            true,
+            { createFolderDialog = false }
+        ) { value ->
+            createFolderDialog = false
+            if (value.isNotBlank()) {
+                val orderedSelection = orderedPlans.map { it.id }.filter { it in selectedPlanIds }
+                if (
+                    collectionRepository.createFolder(
+                        toolType = CollectionToolType.TIME_PLAN,
+                        name = value,
+                        memberIds = orderedSelection
+                    ) != null
+                ) {
+                    selectedPlanIds = emptyList()
+                    openedFolderId = null
+                    collectionRevision++
+                }
+            }
+        }
+    }
+
+    if (moveFolderDialog) {
+        AlertDialog(
+            onDismissRequest = { moveFolderDialog = false },
+            shape = ArmyristPanelShape,
+            containerColor = ArmyristColors.RaisedSurface,
+            tonalElevation = 0.dp,
+            title = { Text("선택 항목 이동", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            if (
+                                collectionRepository.moveMembers(
+                                    CollectionToolType.TIME_PLAN,
+                                    selectedPlanIds,
+                                    null
+                                )
+                            ) {
+                                selectedPlanIds = emptyList()
+                                openedFolderId = null
+                                collectionRevision++
+                            }
+                            moveFolderDialog = false
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = ArmyristPanelShape
+                    ) {
+                        Text("폴더 밖으로 이동")
+                    }
+                    folders.forEach { folder ->
+                        OutlinedButton(
+                            onClick = {
+                                if (
+                                    collectionRepository.moveMembers(
+                                        CollectionToolType.TIME_PLAN,
+                                        selectedPlanIds,
+                                        folder.id
+                                    )
+                                ) {
+                                    selectedPlanIds = emptyList()
+                                    collectionRevision++
+                                }
+                                moveFolderDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = ArmyristPanelShape
+                        ) {
+                            Icon(Icons.Outlined.Folder, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(folder.name)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { moveFolderDialog = false }) { Text("닫기") }
+            }
+        )
+    }
+
+    folderMenuTarget?.let { folder ->
+        AlertDialog(
+            onDismissRequest = { folderMenuTarget = null },
+            shape = ArmyristPanelShape,
+            containerColor = ArmyristColors.RaisedSurface,
+            tonalElevation = 0.dp,
+            title = { Text(folder.name, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            renameFolderTarget = folder
+                            folderMenuTarget = null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = ArmyristPanelShape
+                    ) {
+                        Icon(Icons.Outlined.Edit, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("폴더 이름 변경")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            coverFolderId = folder.id
+                            folderMenuTarget = null
+                            coverPicker.launch("image/*")
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = ArmyristPanelShape
+                    ) {
+                        Icon(Icons.Outlined.Image, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("갤러리에서 대표 이미지 선택")
+                    }
+                    if (folder.coverImagePath != null) {
+                        OutlinedButton(
+                            onClick = {
+                                if (collectionRepository.clearCoverImage(folder.id)) {
+                                    collectionRevision++
+                                }
+                                folderMenuTarget = null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = ArmyristPanelShape
+                        ) {
+                            Text("대표 이미지 제거")
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            deleteFolderTarget = folder
+                            folderMenuTarget = null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = ArmyristPanelShape
+                    ) {
+                        Text("폴더 삭제", color = ArmyristColors.DangerMuted)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { folderMenuTarget = null }) { Text("닫기") }
+            }
+        )
+    }
+
+    renameFolderTarget?.let { folder ->
+        SimpleTextDialog(
+            "폴더 이름 변경",
+            folder.name,
+            true,
+            { renameFolderTarget = null }
+        ) { value ->
+            renameFolderTarget = null
+            if (value.isNotBlank() && collectionRepository.renameFolder(folder.id, value)) {
+                collectionRevision++
+            }
+        }
+    }
+
+    deleteFolderTarget?.let { folder ->
+        AlertDialog(
+            onDismissRequest = { deleteFolderTarget = null },
+            shape = ArmyristPanelShape,
+            containerColor = ArmyristColors.RaisedSurface,
+            tonalElevation = 0.dp,
+            title = { Text("폴더 삭제", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "폴더만 삭제합니다. 안의 시간계획은 삭제되지 않고 전체 목록으로 돌아갑니다."
+                )
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { deleteFolderTarget = null },
+                    shape = ArmyristPanelShape
+                ) { Text("취소") }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (collectionRepository.deleteFolder(folder.id)) {
+                            if (openedFolderId == folder.id) openedFolderId = null
+                            collectionRevision++
+                        }
+                        deleteFolderTarget = null
+                    },
+                    shape = ArmyristPanelShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ArmyristColors.PrimaryControl,
+                        contentColor = ArmyristColors.OnDark
+                    )
+                ) { Text("폴더 삭제") }
+            }
+        )
     }
 
     renameTarget?.let { target ->
@@ -948,6 +1363,44 @@ private fun DateAwarePlanList(
                 ) { Text("휴지통으로 이동") }
             }
         )
+    }
+}
+
+@Composable
+private fun FolderCoverThumbnail(path: String?) {
+    val bitmap = remember(path) {
+        path?.let { value ->
+            runCatching {
+                File(value)
+                    .takeIf { it.isFile }
+                    ?.let { BitmapFactory.decodeFile(it.absolutePath) }
+                    ?.asImageBitmap()
+            }.getOrNull()
+        }
+    }
+
+    Surface(
+        modifier = Modifier.size(52.dp),
+        shape = RoundedCornerShape(10.dp),
+        color = ArmyristColors.InfoSurface,
+        border = BorderStroke(1.dp, ArmyristColors.SoftBorder)
+    ) {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap,
+                contentDescription = "폴더 대표 이미지",
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Outlined.Folder,
+                    contentDescription = null,
+                    tint = ArmyristColors.PrimaryControl,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+        }
     }
 }
 
