@@ -438,6 +438,20 @@ private fun DateAwarePlanList(
         .toMap()
     val openedFolder = openedFolderId?.let { id -> folders.firstOrNull { it.id == id } }
 
+    // TimePlan list navigation contract:
+    // - Back while multi-select is active exits selection first.
+    // - Back while inside a folder returns to the TimePlan root list.
+    // - Only the root list delegates Back to the Activity/Home behavior.
+    BackHandler(enabled = selectionMode || openedFolderId != null) {
+        when {
+            selectionMode -> selectedPlanIds = emptyList()
+            openedFolderId != null -> {
+                openedFolderId = null
+                selectedPlanIds = emptyList()
+            }
+        }
+    }
+
     val orderedPlans = remember { mutableStateListOf<DateAwareTimePlan>() }
     var draggingPlanId by remember { mutableStateOf<String?>(null) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
