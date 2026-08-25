@@ -68,6 +68,8 @@ class CountingReorderV2(
     // Keep the user's actual pointer direction as the source of truth.
     private var lastDetailedPointerY: Float = Float.NaN
     private var detailedDirection: Int = 0
+    private var detailedDragStartedAtMs: Long = 0L
+    private var lastDetailedMoveAtMs: Long = 0L
 
     val isDragging: Boolean
         get() = draggingItemId != null
@@ -119,6 +121,8 @@ class CountingReorderV2(
         lastPlaceholderMoveAtMs = 0L
         lastDetailedPointerY = Float.NaN
         detailedDirection = 0
+        detailedDragStartedAtMs = android.os.SystemClock.uptimeMillis()
+        lastDetailedMoveAtMs = 0L
     }
 
     fun sync(latestItems: List<CountingItem>) {
@@ -204,6 +208,8 @@ class CountingReorderV2(
         lastPlaceholderMoveAtMs = 0L
         lastDetailedPointerY = Float.NaN
         detailedDirection = 0
+        detailedDragStartedAtMs = 0L
+        lastDetailedMoveAtMs = 0L
     }
 
     private fun setPlaceholder(
@@ -239,8 +245,6 @@ class CountingReorderV2(
     ): Boolean {
         if (!isDragging || slots.isEmpty()) return false
 
-        // Determine direction from the real pointer, not from item positions.
-        // A small dead-band prevents sensor/noise-sized reversals.
         if (!lastDetailedPointerY.isNaN()) {
             val delta = pointerY - lastDetailedPointerY
             when {
@@ -250,65 +254,53 @@ class CountingReorderV2(
         }
         lastDetailedPointerY = pointerY
 
+        // Ignore the initial pointer/layout synchronization frames.
+        // This prevents item #1 from visually plunging immediately on pickup.
+        if (detailedDragStartedAtMs > 0L &&
+            nowMs - detailedDragStartedAtMs < 72L
+        ) return false
+
+        // Give each accepted adjacent displacement a short, symmetric settle
+        // interval. The dragged overlay remains pointer-driven; only the
+        // background placeholder transaction is rate-limited.
+        if (lastDetailedMoveAtMs > 0L &&
+            nowMs - lastDetailedMoveAtMs < 46L
+        ) return false
+
         val current = placeholderIndex
         val currentSlot = slots.firstOrNull { it.index == current }
-
-        // On the first stationary frame there may be no direction yet.
-        // Do not infer one from Lazy positions: wait for the user's movement.
         if (detailedDirection == 0) return false
 
         if (detailedDirection < 0) {
-            // UP: inspect exactly one adjacent slot.
-            val previous =
-                slots.firstOrNull { it.index == current - 1 }
-                    ?: return false
-
-            val boundary =
-                if (currentSlot != null) {
-                    (currentSlot.centerY + previous.centerY) / 2f
-                } else {
-                    // Current placeholder may be just outside the visible set.
-                    // Entering the lower half of the previous visible slot is
-                    // enough, but never target anything beyond that one slot.
-                    previous.centerY + previous.height * 0.12f
-                }
-
-            // Hysteresis: require a small, definite crossing. This prevents
-            // "up one -> down two" oscillation when LazyColumn remeasures.
-            val hysteresis =
-                maxOf(6f, previous.height * 0.06f)
+            val previous = slots.firstOrNull { it.index == current - 1 } ?: return false
+            val boundary = if (currentSlot != null) {
+                (currentSlot.centerY + previous.centerY) / 2f
+            } else {
+                previous.centerY + previous.height * 0.12f
+            }
+            val hysteresis = maxOf(8f, previous.height * 0.075f)
 
             if (pointerY < boundary - hysteresis) {
-                return setPlaceholder(
-                    current - 1,
-                    nowMs
-                )
+                val moved = setPlaceholder(current - 1, nowMs)
+                if (moved) lastDetailedMoveAtMs = nowMs
+                return moved
             }
             return false
         }
 
-        // DOWN: likewise inspect exactly one adjacent slot.
-        val next =
-            slots.firstOrNull { it.index == current + 1 }
-                ?: return false
-
-        val boundary =
-            if (currentSlot != null) {
-                (currentSlot.centerY + next.centerY) / 2f
-            } else {
-                next.centerY - next.height * 0.12f
-            }
-
-        val hysteresis =
-            maxOf(6f, next.height * 0.06f)
+        val next = slots.firstOrNull { it.index == current + 1 } ?: return false
+        val boundary = if (currentSlot != null) {
+            (currentSlot.centerY + next.centerY) / 2f
+        } else {
+            next.centerY - next.height * 0.12f
+        }
+        val hysteresis = maxOf(8f, next.height * 0.075f)
 
         if (pointerY > boundary + hysteresis) {
-            return setPlaceholder(
-                current + 1,
-                nowMs
-            )
+            val moved = setPlaceholder(current + 1, nowMs)
+            if (moved) lastDetailedMoveAtMs = nowMs
+            return moved
         }
-
         return false
     }
 
