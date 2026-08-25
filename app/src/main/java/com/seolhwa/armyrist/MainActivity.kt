@@ -624,6 +624,7 @@ private fun CountingScreen(
         }
     }
     var reorderActive by remember { mutableStateOf(false) }
+    var lastCountingReorderAt by remember { mutableLongStateOf(0L) }
 
     LaunchedEffect(sheet.updatedAt, sheet.items.size, reorderActive) {
         if (!reorderActive) {
@@ -697,9 +698,13 @@ private fun CountingScreen(
 
         if (!crossed) return 0f
 
+        val now = android.os.SystemClock.uptimeMillis()
+        if (now - lastCountingReorderAt < 72L) return 0f
+
         val oldOffset = draggedInfo.offset.toFloat()
         val targetOffset = target.offset.toFloat()
         moveVisualItemTo(itemId, targetIndex)
+        lastCountingReorderAt = now
 
         // Compensate the layout jump so the dragged card stays under the finger.
         return oldOffset - targetOffset
@@ -742,15 +747,19 @@ private fun CountingScreen(
         // enter the inner region of the destination cell.
         val enteredTarget =
             kotlin.math.abs(draggedCenterX - targetCenterX) <
-                target.size.width * 0.38f &&
+                target.size.width * 0.52f &&
             kotlin.math.abs(draggedCenterY - targetCenterY) <
-                target.size.height * 0.38f
+                target.size.height * 0.52f
 
         if (!enteredTarget) return 0f to 0f
+
+        val now = android.os.SystemClock.uptimeMillis()
+        if (now - lastCountingReorderAt < 72L) return 0f to 0f
 
         val compensateX = (draggedInfo.offset.x - target.offset.x).toFloat()
         val compensateY = (draggedInfo.offset.y - target.offset.y).toFloat()
         moveVisualItemTo(itemId, targetIndex)
+        lastCountingReorderAt = now
         return compensateX to compensateY
     }
 
@@ -956,7 +965,7 @@ private fun CountingScreen(
                         val compactEdgeThresholdPx =
                             with(LocalDensity.current) { 112.dp.toPx() }
                         val compactAutoScrollStepPx =
-                            with(LocalDensity.current) { 44.dp.toPx() }
+                            with(LocalDensity.current) { 11.dp.toPx() }
                         var compactAutoScrollDirection by remember(item.id) { mutableIntStateOf(0) }
                         LaunchedEffect(compactDragging, compactAutoScrollDirection) {
                             while (compactDragging && compactAutoScrollDirection != 0) {
@@ -1071,6 +1080,7 @@ private fun CountingScreen(
                                                     detectDragGesturesAfterLongPress(
                                                         onDragStart = {
                                                             reorderActive = true
+                                                            lastCountingReorderAt = 0L
                                                             compactDragging = true
                                                             compactDragOffsetX = 0f
                                                             compactDragOffsetY = 0f
@@ -1331,7 +1341,7 @@ private fun CountingScreen(
                     val edgeThresholdPx =
                         with(LocalDensity.current) { 112.dp.toPx() }
                     val autoScrollStepPx =
-                        with(LocalDensity.current) { 40.dp.toPx() }
+                        with(LocalDensity.current) { 11.dp.toPx() }
                     var autoScrollDirection by remember(item.id) { mutableIntStateOf(0) }
                     LaunchedEffect(isDragging, autoScrollDirection) {
                         while (isDragging && autoScrollDirection != 0) {
@@ -1359,49 +1369,7 @@ private fun CountingScreen(
                         ?.let { parseColor(it.color).copy(alpha = 0.26f) }
                         ?: ArmyristColors.SecondaryControl
 
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor =
-                                if (selected) {
-                                    selectedColor
-                                } else {
-                                    baseColor
-                                }
-                        ),
-                        shape = ArmyristPanelShape,
-                        border = BorderStroke(
-                            1.dp,
-                            when {
-                                selected -> ArmyristColors.PrimaryControl
-                                groupColor != null ->
-                                    groupColor.copy(alpha = 0.75f)
-                                else -> ArmyristColors.Divider
-                            }
-                        ),
-                        modifier = (
-                            if (isDragging) {
-                                Modifier.fillMaxWidth()
-                            } else {
-                                Modifier
-                                    .fillMaxWidth()
-                                    .animateItem(
-                                        fadeInSpec = null,
-                                        placementSpec = tween(
-                                            180,
-                                            easing = FastOutSlowInEasing
-                                        ),
-                                        fadeOutSpec = null
-                                    )
-                            }
-                        )
-                            .zIndex(if (isDragging) 1f else 0f)
-                            .graphicsLayer {
-                                translationY =
-                                    if (isDragging) dragOffsetY else 0f
-                                shadowElevation =
-                                    if (isDragging) 4f else 0f
-                            }
-                            .pointerInput(
+                    val detailedDragHandleModifier = Modifier.pointerInput(
                                 item.id,
                                 assignmentMode
                             ) {
@@ -1409,6 +1377,7 @@ private fun CountingScreen(
                                     detectDragGesturesAfterLongPress(
                                         onDragStart = {
                                             reorderActive = true
+                                            lastCountingReorderAt = 0L
                                             isDragging = true
                                             dragOffsetY = 0f
                                             haptic.performHapticFeedback(
@@ -1469,6 +1438,50 @@ private fun CountingScreen(
                                     )
                                 }
                             }
+
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor =
+                                if (selected) {
+                                    selectedColor
+                                } else {
+                                    baseColor
+                                }
+                        ),
+                        shape = ArmyristPanelShape,
+                        border = BorderStroke(
+                            1.dp,
+                            when {
+                                selected -> ArmyristColors.PrimaryControl
+                                groupColor != null ->
+                                    groupColor.copy(alpha = 0.75f)
+                                else -> ArmyristColors.Divider
+                            }
+                        ),
+                        modifier = (
+                            if (isDragging) {
+                                Modifier.fillMaxWidth()
+                            } else {
+                                Modifier
+                                    .fillMaxWidth()
+                                    .animateItem(
+                                        fadeInSpec = null,
+                                        placementSpec = tween(
+                                            180,
+                                            easing = FastOutSlowInEasing
+                                        ),
+                                        fadeOutSpec = null
+                                    )
+                            }
+                        )
+                            .zIndex(if (isDragging) 1f else 0f)
+                            .graphicsLayer {
+                                translationY =
+                                    if (isDragging) dragOffsetY else 0f
+                                shadowElevation =
+                                    if (isDragging) 4f else 0f
+                            }
+
                             .clickable {
                                 if (assignmentMode) {
                                     assignmentSelectedList =
@@ -1507,12 +1520,22 @@ private fun CountingScreen(
                                         Modifier.fillMaxWidth(),
                                         verticalAlignment = Alignment.Top
                                     ) {
-                                        Text(
-                                            "⠿",
-                                            color = ArmyristColors.SecondaryText,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.width(26.dp)
-                                        )
+                                        Box(
+                                            modifier = detailedDragHandleModifier
+                                                .size(40.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                "⠿",
+                                                color =
+                                                    if (isDragging) {
+                                                        ArmyristColors.PrimaryControl
+                                                    } else {
+                                                        ArmyristColors.SecondaryText
+                                                    },
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
                                         Text(
                                             if (selected) "✓" else "${index + 1}.",
                                             fontWeight = FontWeight.Bold,
@@ -1599,6 +1622,24 @@ private fun CountingScreen(
                                     ),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                            if (!assignmentMode) {
+                                Box(
+                                    modifier = detailedDragHandleModifier
+                                        .size(40.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        "⠿",
+                                        color =
+                                            if (isDragging) {
+                                                ArmyristColors.PrimaryControl
+                                            } else {
+                                                ArmyristColors.SecondaryText
+                                            },
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
                             Text(
                                 if (selected) "✓" else "${index + 1}.",
                                 fontWeight = FontWeight.Bold,
