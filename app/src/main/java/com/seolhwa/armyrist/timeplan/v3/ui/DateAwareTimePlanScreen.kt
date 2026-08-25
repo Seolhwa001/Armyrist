@@ -43,6 +43,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -820,13 +822,17 @@ private fun DateAwarePlanList(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .animateItem()
+                            .animateItem(
+                                fadeInSpec = null,
+                                placementSpec = tween(220, easing = FastOutSlowInEasing),
+                                fadeOutSpec = null
+                            )
                             .zIndex(if (isDragging) 2f else 0f)
                             .graphicsLayer {
                                 translationY = if (isDragging) dragOffsetY else 0f
-                                scaleX = if (isDragging) 1.01f else 1f
-                                scaleY = if (isDragging) 1.01f else 1f
-                                shadowElevation = if (isDragging) 10f else 0f
+                                scaleX = 1f
+                                scaleY = 1f
+                                shadowElevation = if (isDragging) 4f else 0f
                             },
                         shape = RoundedCornerShape(10.dp),
                         border = BorderStroke(
@@ -838,7 +844,7 @@ private fun DateAwarePlanList(
                             }
                         ),
                         elevation = CardDefaults.cardElevation(
-                            defaultElevation = if (isDragging) 6.dp else 1.dp
+                            defaultElevation = if (isDragging) 3.dp else 1.dp
                         ),
                         colors = CardDefaults.cardColors(
                             containerColor =
@@ -927,10 +933,10 @@ private fun DateAwarePlanList(
                                                     val crossedTarget =
                                                         if (targetIndex > fromIndex) {
                                                             draggedCenter >
-                                                                target.offset + target.size / 2f
+                                                                target.offset + target.size * 0.62f
                                                         } else {
                                                             draggedCenter <
-                                                                target.offset + target.size / 2f
+                                                                target.offset + target.size * 0.38f
                                                         }
 
                                                     if (
@@ -952,9 +958,6 @@ private fun DateAwarePlanList(
 
                                                         dragOffsetY += (oldOffset - targetOffset)
                                                         reorderDirty = true
-                                                        view.performHapticFeedback(
-                                                            HapticFeedbackConstants.CLOCK_TICK
-                                                        )
                                                     }
                                                 }
 
