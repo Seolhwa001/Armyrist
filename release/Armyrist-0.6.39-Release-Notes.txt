@@ -1,8 +1,0 @@
-Armyrist 0.6.39
-
-주요 변경사항
-• 실셈·체크리스트 Common Trash 통합 과정에서 발생한 Actions 오류를 수정했습니다.
-• 체크리스트 전체 Snapshot의 휴지통 저장·삭제·복구 계약을 보완했습니다.
-• 체크리스트 삭제 확인창에 남아 있던 구형 onDelete 호출을 정리했습니다.
-• 중복 CountingRepository 선언으로 발생한 Kotlin Redeclaration 오류를 제거했습니다.
-• 0.6.38의 공통 UI 방향과 TimePlan/Counting/Checklist 디자인 통일을 유지합니다.
