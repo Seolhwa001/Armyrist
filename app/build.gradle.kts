@@ -23,8 +23,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 135
-        versionName = "0.6.47"
+        versionCode = 136
+        versionName = "0.6.48"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
