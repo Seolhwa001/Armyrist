@@ -674,19 +674,41 @@ private fun CountingScreen(
 
     fun detailedReorderAtPointer(itemId: String, pointerY: Float) {
         if (countingReorder.draggingItemId != itemId) return
-        val slots = listState.layoutInfo.visibleItemsInfo.mapNotNull { info ->
-            val id = info.key as? String ?: return@mapNotNull null
-            val index = countingReorder.projectedIndexOf(id)
-            if (index < 0) return@mapNotNull null
-            CountingReorderSlot(
-                itemId = id,
-                index = index,
-                centerX = 0f,
-                centerY = info.offset + info.size / 2f,
-                width = 1f,
-                height = info.size.toFloat()
-            )
-        }
+
+        // Keep Detailed geometry and slot numbering on the same Lazy layout
+        // frame. Do not pair current offsets with projection indices that may
+        // already have advanced before LazyColumn finishes its next layout.
+        val visibleDetailed =
+            listState.layoutInfo.visibleItemsInfo
+                .mapNotNull { info ->
+                    val id = info.key as? String
+                        ?: return@mapNotNull null
+                    if (countingReorder.projectedIndexOf(id) < 0) {
+                        return@mapNotNull null
+                    }
+                    id to info
+                }
+                .sortedBy { (_, info) -> info.offset }
+
+        val firstVisibleProjectedIndex =
+            visibleDetailed.firstOrNull()
+                ?.first
+                ?.let(countingReorder::projectedIndexOf)
+                ?: return
+
+        val slots =
+            visibleDetailed.mapIndexed { relativeIndex, (id, info) ->
+                CountingReorderSlot(
+                    itemId = id,
+                    index =
+                        firstVisibleProjectedIndex + relativeIndex,
+                    centerX = 0f,
+                    centerY = info.offset + info.size / 2f,
+                    width = 1f,
+                    height = info.size.toFloat()
+                )
+            }
+
         countingReorder.updateDetailed(
             pointerY,
             slots,
