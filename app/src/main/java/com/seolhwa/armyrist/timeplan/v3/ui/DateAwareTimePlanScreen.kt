@@ -457,17 +457,15 @@ private fun DateAwarePlanList(
 
     val orderedPlans = remember { mutableStateListOf<DateAwareTimePlan>() }
     val folderVisualOrder = remember { mutableStateListOf<String>() }
+    val folderVisualList = remember { mutableStateListOf<ArmyristCollectionFolder>() }
+    var draggingFolderId by remember { mutableStateOf<String?>(null) }
+    var folderDragOffsetY by remember { mutableFloatStateOf(0f) }
+    var folderReorderDirty by remember { mutableStateOf(false) }
     var draggingPlanId by remember { mutableStateOf<String?>(null) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     var reorderDirty by remember { mutableStateOf(false) }
     var dragAutoScrollDirection by remember { mutableIntStateOf(0) }
     val dragAutoScrollStepPx = with(LocalDensity.current) { 34.dp.toPx() }
-    LaunchedEffect(draggingPlanId, dragAutoScrollDirection) {
-        while (draggingPlanId != null && dragAutoScrollDirection != 0) {
-            listState.scrollBy(dragAutoScrollStepPx * dragAutoScrollDirection)
-            delay(16)
-        }
-    }
 
     LaunchedEffect(datePlans.map { Triple(it.id, it.title, it.updatedAt) }, draggingPlanId) {
         if (draggingPlanId == null) {
@@ -493,6 +491,13 @@ private fun DateAwarePlanList(
         }
     }
 
+    LaunchedEffect(collectionRevision, draggingFolderId) {
+        if (draggingFolderId == null) {
+            folderVisualList.clear()
+            folderVisualList.addAll(folders)
+        }
+    }
+
     fun togglePlanSelection(planId: String) {
         selectedPlanIds =
             if (planId in selectedPlanIds) selectedPlanIds.filterNot { it == planId }
@@ -510,6 +515,82 @@ private fun DateAwarePlanList(
                 else currentFolder.memberIds
             order.mapNotNull(byId::get)
         }
+    }
+
+    fun reorderPlanAtFinger(planId: String): Boolean {
+        val layout = listState.layoutInfo
+        val cardKey = "v3-$planId"
+        val draggedInfo =
+            layout.visibleItemsInfo.firstOrNull { it.key == cardKey } ?: return false
+
+        val draggedCenter =
+            draggedInfo.offset + draggedInfo.size / 2f + dragOffsetY
+
+        val target = layout.visibleItemsInfo
+            .filter {
+                it.key is String &&
+                    (it.key as String).startsWith("v3-") &&
+                    it.key != cardKey
+            }
+            .minByOrNull {
+                kotlin.math.abs(
+                    (it.offset + it.size / 2f) - draggedCenter
+                )
+            } ?: return false
+
+        val targetId = (target.key as String).removePrefix("v3-")
+        val folderMode = openedFolder != null
+        val fromIndex =
+            if (folderMode) folderVisualOrder.indexOf(planId)
+            else orderedPlans.indexOfFirst { it.id == planId }
+        val targetIndex =
+            if (folderMode) folderVisualOrder.indexOf(targetId)
+            else orderedPlans.indexOfFirst { it.id == targetId }
+
+        if (fromIndex < 0 || targetIndex < 0 || fromIndex == targetIndex) return false
+
+        val crossed =
+            if (targetIndex > fromIndex) {
+                draggedCenter > target.offset + target.size * 0.62f
+            } else {
+                draggedCenter < target.offset + target.size * 0.38f
+            }
+        if (!crossed) return false
+
+        val oldOffset = draggedInfo.offset
+        val targetOffset = target.offset
+
+        if (folderMode) {
+            val movedId = folderVisualOrder.removeAt(fromIndex)
+            folderVisualOrder.add(targetIndex, movedId)
+        } else {
+            val moved = orderedPlans.removeAt(fromIndex)
+            orderedPlans.add(targetIndex, moved)
+        }
+
+        // Cancel the layout jump of the dragged card.
+        dragOffsetY += (oldOffset - targetOffset)
+        reorderDirty = true
+        return true
+    }
+
+    fun finishFolderReorder(commit: Boolean) {
+        if (commit && folderReorderDirty) {
+            if (
+                collectionRepository.replaceFolderOrder(
+                    CollectionToolType.TIME_PLAN,
+                    folderVisualList.map { it.id }
+                )
+            ) {
+                collectionRevision++
+            }
+        } else if (!commit) {
+            folderVisualList.clear()
+            folderVisualList.addAll(folders)
+        }
+        draggingFolderId = null
+        folderDragOffsetY = 0f
+        folderReorderDirty = false
     }
 
     fun finishReorder(commit: Boolean) {
@@ -540,6 +621,16 @@ private fun DateAwarePlanList(
         dragAutoScrollDirection = 0
         dragOffsetY = 0f
         reorderDirty = false
+    }
+
+    LaunchedEffect(draggingPlanId, dragAutoScrollDirection) {
+        while (draggingPlanId != null && dragAutoScrollDirection != 0) {
+            val consumed =
+                listState.scrollBy(dragAutoScrollStepPx * dragAutoScrollDirection)
+            dragOffsetY += consumed
+            draggingPlanId?.let { reorderPlanAtFinger(it) }
+            delay(16)
+        }
     }
 
     val openImport = {
@@ -730,16 +821,38 @@ private fun DateAwarePlanList(
                 }
 
                 if (openedFolder == null) {
-                    items(folders, key = { "folder-${it.id}" }) { folder ->
+                    items(folderVisualList, key = { "folder-${it.id}" }) { folder ->
                         val memberCount = folder.memberIds.count { it in validPlanIds }
+                        val isFolderDragging = draggingFolderId == folder.id
                         Card(
                             onClick = {
-                                if (!selectionMode) {
+                                if (!selectionMode && !isFolderDragging) {
                                     openedFolderId = folder.id
                                     selectedPlanIds = emptyList()
                                 }
                             },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = (
+                                if (isFolderDragging) {
+                                    Modifier.fillMaxWidth()
+                                } else {
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .animateItem(
+                                            fadeInSpec = null,
+                                            placementSpec = tween(
+                                                180,
+                                                easing = FastOutSlowInEasing
+                                            ),
+                                            fadeOutSpec = null
+                                        )
+                                }
+                            )
+                                .zIndex(if (isFolderDragging) 2f else 0f)
+                                .graphicsLayer {
+                                    translationY =
+                                        if (isFolderDragging) folderDragOffsetY else 0f
+                                    shadowElevation = if (isFolderDragging) 4f else 0f
+                                },
                             shape = RoundedCornerShape(12.dp),
                             border = BorderStroke(1.dp, ArmyristColors.SoftBorder),
                             colors = CardDefaults.cardColors(
@@ -748,9 +861,118 @@ private fun DateAwarePlanList(
                             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(width = 34.dp, height = 48.dp)
+                                        .pointerInput(folder.id, folderVisualList.size) {
+                                            detectDragGesturesAfterLongPress(
+                                                onDragStart = {
+                                                    draggingFolderId = folder.id
+                                                    folderDragOffsetY = 0f
+                                                    folderReorderDirty = false
+                                                },
+                                                onDragCancel = {
+                                                    finishFolderReorder(commit = false)
+                                                },
+                                                onDragEnd = {
+                                                    finishFolderReorder(commit = true)
+                                                },
+                                                onDrag = { change, dragAmount ->
+                                                    change.consume()
+                                                    folderDragOffsetY += dragAmount.y
+
+                                                    val layout = listState.layoutInfo
+                                                    val key = "folder-${folder.id}"
+                                                    val draggedInfo =
+                                                        layout.visibleItemsInfo
+                                                            .firstOrNull { it.key == key }
+                                                            ?: return@detectDragGesturesAfterLongPress
+                                                    val center =
+                                                        draggedInfo.offset +
+                                                            draggedInfo.size / 2f +
+                                                            folderDragOffsetY
+
+                                                    val target =
+                                                        layout.visibleItemsInfo
+                                                            .filter {
+                                                                it.key is String &&
+                                                                    (it.key as String)
+                                                                        .startsWith("folder-") &&
+                                                                    it.key != key
+                                                            }
+                                                            .minByOrNull {
+                                                                kotlin.math.abs(
+                                                                    (it.offset + it.size / 2f) -
+                                                                        center
+                                                                )
+                                                            }
+
+                                                    if (target != null) {
+                                                        val targetId =
+                                                            (target.key as String)
+                                                                .removePrefix("folder-")
+                                                        val fromIndex =
+                                                            folderVisualList.indexOfFirst {
+                                                                it.id == folder.id
+                                                            }
+                                                        val targetIndex =
+                                                            folderVisualList.indexOfFirst {
+                                                                it.id == targetId
+                                                            }
+
+                                                        if (
+                                                            fromIndex >= 0 &&
+                                                            targetIndex >= 0 &&
+                                                            fromIndex != targetIndex
+                                                        ) {
+                                                            val crossed =
+                                                                if (targetIndex > fromIndex) {
+                                                                    center >
+                                                                        target.offset +
+                                                                            target.size * 0.62f
+                                                                } else {
+                                                                    center <
+                                                                        target.offset +
+                                                                            target.size * 0.38f
+                                                                }
+
+                                                            if (crossed) {
+                                                                val oldOffset =
+                                                                    draggedInfo.offset
+                                                                val targetOffset =
+                                                                    target.offset
+                                                                val moved =
+                                                                    folderVisualList
+                                                                        .removeAt(fromIndex)
+                                                                folderVisualList.add(
+                                                                    targetIndex,
+                                                                    moved
+                                                                )
+                                                                folderDragOffsetY +=
+                                                                    oldOffset - targetOffset
+                                                                folderReorderDirty = true
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            )
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.DragIndicator,
+                                        contentDescription = "폴더 순서 변경",
+                                        tint =
+                                            if (isFolderDragging) {
+                                                ArmyristColors.PrimaryControl
+                                            } else {
+                                                ArmyristColors.MutedText
+                                            }
+                                    )
+                                }
                                 FolderCoverThumbnail(folder.coverImagePath)
                                 Spacer(Modifier.width(12.dp))
                                 Column(Modifier.weight(1f)) {
@@ -830,13 +1052,22 @@ private fun DateAwarePlanList(
                     val isSelected = plan.id in selectedPlanIds
 
                     Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .animateItem(
-                                fadeInSpec = null,
-                                placementSpec = tween(220, easing = FastOutSlowInEasing),
-                                fadeOutSpec = null
-                            )
+                        modifier = (
+                            if (isDragging) {
+                                Modifier.fillMaxWidth()
+                            } else {
+                                Modifier
+                                    .fillMaxWidth()
+                                    .animateItem(
+                                        fadeInSpec = null,
+                                        placementSpec = tween(
+                                            180,
+                                            easing = FastOutSlowInEasing
+                                        ),
+                                        fadeOutSpec = null
+                                    )
+                            }
+                        )
                             .zIndex(if (isDragging) 2f else 0f)
                             .graphicsLayer {
                                 translationY = if (isDragging) dragOffsetY else 0f
@@ -900,76 +1131,16 @@ private fun DateAwarePlanList(
                                                 change.consume()
                                                 dragOffsetY += dragAmount.y
 
+                                                reorderPlanAtFinger(plan.id)
+
                                                 val layout = listState.layoutInfo
                                                 val draggedInfo = layout.visibleItemsInfo
                                                     .firstOrNull { it.key == cardKey }
                                                     ?: return@detectDragGesturesAfterLongPress
-
                                                 val draggedCenter =
                                                     draggedInfo.offset +
                                                         draggedInfo.size / 2f +
                                                         dragOffsetY
-
-                                                val candidates = layout.visibleItemsInfo.filter {
-                                                    it.key is String &&
-                                                        (it.key as String).startsWith("v3-")
-                                                }
-
-                                                val target = candidates
-                                                    .filter { it.key != cardKey }
-                                                    .minByOrNull {
-                                                        kotlin.math.abs(
-                                                            (it.offset + it.size / 2f) - draggedCenter
-                                                        )
-                                                    }
-
-                                                if (target != null) {
-                                                    val targetId = (target.key as String)
-                                                        .removePrefix("v3-")
-                                                    val folderMode = openedFolder != null
-                                                    val fromIndex =
-                                                        if (folderMode) {
-                                                            folderVisualOrder.indexOf(plan.id)
-                                                        } else {
-                                                            orderedPlans.indexOfFirst { it.id == plan.id }
-                                                        }
-                                                    val targetIndex =
-                                                        if (folderMode) {
-                                                            folderVisualOrder.indexOf(targetId)
-                                                        } else {
-                                                            orderedPlans.indexOfFirst { it.id == targetId }
-                                                        }
-
-                                                    val crossedTarget =
-                                                        if (targetIndex > fromIndex) {
-                                                            draggedCenter >
-                                                                target.offset + target.size * 0.70f
-                                                        } else {
-                                                            draggedCenter <
-                                                                target.offset + target.size * 0.30f
-                                                        }
-
-                                                    if (
-                                                        fromIndex >= 0 &&
-                                                        targetIndex >= 0 &&
-                                                        fromIndex != targetIndex &&
-                                                        crossedTarget
-                                                    ) {
-                                                        val oldOffset = draggedInfo.offset
-                                                        val targetOffset = target.offset
-
-                                                        if (folderMode) {
-                                                            val movedId = folderVisualOrder.removeAt(fromIndex)
-                                                            folderVisualOrder.add(targetIndex, movedId)
-                                                        } else {
-                                                            val moved = orderedPlans.removeAt(fromIndex)
-                                                            orderedPlans.add(targetIndex, moved)
-                                                        }
-
-                                                        dragOffsetY += (oldOffset - targetOffset)
-                                                        reorderDirty = true
-                                                    }
-                                                }
 
                                                 // Edge auto-scroll: slow on entering the zone,
                                                 // progressively faster toward the screen edge.
@@ -1004,9 +1175,6 @@ private fun DateAwarePlanList(
                                                     else -> 0
                                                 }
                                                 if (scrollDelta != 0f) {
-                                                    reorderScope.launch {
-                                                        listState.scrollBy(scrollDelta)
-                                                    }
                                                 }
                                             }
                                         )
