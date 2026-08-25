@@ -48,6 +48,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -626,15 +630,35 @@ private fun CountingScreen(
     val visualItems = countingReorder.items
     val countingDensity = LocalDensity.current
 
-    // Counting-specific detached drag visual.
-    // The Lazy item remains only as an invisible placeholder while this
-    // overlay follows the pointer independently from Lazy placement.
-    var dragOverlayItemId by remember(sheet.id) { mutableStateOf<String?>(null) }
-    var dragOverlayCompact by remember(sheet.id) { mutableStateOf(false) }
+    // -----------------------------------------------------------------
+    // Counting Drag Host
+    //
+    // Gesture ownership lives here at the stable parent layer instead of
+    // inside a Lazy item. A dragged item may move off-screen or change slot
+    // without destroying the pointer-input node that owns the gesture.
+    // -----------------------------------------------------------------
+    val countingHandleBounds = remember(sheet.id) {
+        mutableStateMapOf<String, Rect>()
+    }
+    var countingDragHostOrigin by remember(sheet.id) {
+        mutableStateOf(Offset.Zero)
+    }
+
+    var dragOverlayItemId by remember(sheet.id) {
+        mutableStateOf<String?>(null)
+    }
+    var dragOverlayCompact by remember(sheet.id) {
+        mutableStateOf(false)
+    }
     var dragOverlayX by remember(sheet.id) { mutableFloatStateOf(0f) }
     var dragOverlayY by remember(sheet.id) { mutableFloatStateOf(0f) }
     var dragOverlayWidth by remember(sheet.id) { mutableFloatStateOf(0f) }
     var dragOverlayHeight by remember(sheet.id) { mutableFloatStateOf(0f) }
+
+    var dragPointerX by remember(sheet.id) { mutableFloatStateOf(Float.NaN) }
+    var dragPointerY by remember(sheet.id) { mutableFloatStateOf(Float.NaN) }
+    var dragGrabOffsetX by remember(sheet.id) { mutableFloatStateOf(0f) }
+    var dragGrabOffsetY by remember(sheet.id) { mutableFloatStateOf(0f) }
 
     fun clearCountingOverlay() {
         dragOverlayItemId = null
@@ -642,6 +666,10 @@ private fun CountingScreen(
         dragOverlayY = 0f
         dragOverlayWidth = 0f
         dragOverlayHeight = 0f
+        dragPointerX = Float.NaN
+        dragPointerY = Float.NaN
+        dragGrabOffsetX = 0f
+        dragGrabOffsetY = 0f
     }
 
     fun overlayCenterX(): Float =
@@ -649,6 +677,23 @@ private fun CountingScreen(
 
     fun overlayCenterY(): Float =
         dragOverlayY + dragOverlayHeight / 2f
+
+    fun registerCountingHandle(
+        itemId: String,
+        rootX: Float,
+        rootY: Float,
+        width: Float,
+        height: Float
+    ) {
+        val localX = rootX - countingDragHostOrigin.x
+        val localY = rootY - countingDragHostOrigin.y
+        countingHandleBounds[itemId] = Rect(
+            left = localX,
+            top = localY,
+            right = localX + width,
+            bottom = localY + height
+        )
+    }
 
     LaunchedEffect(sheet.updatedAt, sheet.items.size, countingReorder.isDragging) {
         countingReorder.sync(sheet.items)
@@ -702,6 +747,186 @@ private fun CountingScreen(
     fun finishCountingReorder(commit: Boolean) {
         if (commit) onReorder(countingReorder.commitOrder())
         else countingReorder.cancel(sheet.items)
+    }
+
+    fun beginCountingDrag(
+        itemId: String,
+        start: Offset
+    ) {
+        val compact = viewMode == CountingViewMode.COMPACT
+
+        if (compact) {
+            val info = compactGridState.layoutInfo.visibleItemsInfo
+                .firstOrNull { it.key == itemId }
+                ?: return
+
+            countingReorder.begin(
+                itemId,
+                CountingReorderMode.COMPACT
+            )
+            dragOverlayItemId = itemId
+            dragOverlayCompact = true
+            dragOverlayX = info.offset.x.toFloat()
+            dragOverlayY = info.offset.y.toFloat()
+            dragOverlayWidth = info.size.width.toFloat()
+            dragOverlayHeight = info.size.height.toFloat()
+        } else {
+            val info = listState.layoutInfo.visibleItemsInfo
+                .firstOrNull { it.key == itemId }
+                ?: return
+
+            countingReorder.begin(
+                itemId,
+                CountingReorderMode.DETAILED
+            )
+            val inset = with(countingDensity) { 8.dp.toPx() }
+            dragOverlayItemId = itemId
+            dragOverlayCompact = false
+            dragOverlayX = inset
+            dragOverlayY = info.offset.toFloat()
+            dragOverlayWidth =
+                (
+                    listState.layoutInfo.viewportSize.width -
+                        inset * 2f
+                    ).coerceAtLeast(1f)
+            dragOverlayHeight = info.size.toFloat()
+        }
+
+        dragPointerX = start.x
+        dragPointerY = start.y
+        dragGrabOffsetX = start.x - dragOverlayX
+        dragGrabOffsetY = start.y - dragOverlayY
+    }
+
+    fun updateCountingDrag(delta: Offset) {
+        val itemId = dragOverlayItemId ?: return
+        if (dragPointerX.isNaN() || dragPointerY.isNaN()) return
+
+        dragPointerX += delta.x
+        dragPointerY += delta.y
+
+        val viewportWidth =
+            if (dragOverlayCompact) {
+                compactGridState.layoutInfo.viewportSize.width.toFloat()
+            } else {
+                listState.layoutInfo.viewportSize.width.toFloat()
+            }
+
+        val viewportStart =
+            if (dragOverlayCompact) {
+                compactGridState.layoutInfo.viewportStartOffset.toFloat()
+            } else {
+                listState.layoutInfo.viewportStartOffset.toFloat()
+            }
+
+        val viewportEnd =
+            if (dragOverlayCompact) {
+                compactGridState.layoutInfo.viewportEndOffset.toFloat()
+            } else {
+                listState.layoutInfo.viewportEndOffset.toFloat()
+            }
+
+        val maxX = (viewportWidth - dragOverlayWidth).coerceAtLeast(0f)
+        val maxY = (viewportEnd - dragOverlayHeight).coerceAtLeast(viewportStart)
+
+        // Pointer and overlay share the same host coordinate system.
+        // The grab point on the card therefore never changes during reorder.
+        dragOverlayX =
+            (dragPointerX - dragGrabOffsetX)
+                .coerceIn(0f, maxX)
+        dragOverlayY =
+            (dragPointerY - dragGrabOffsetY)
+                .coerceIn(viewportStart, maxY)
+
+        if (dragOverlayCompact) {
+            compactReorderAtPointer(
+                itemId,
+                overlayCenterX(),
+                overlayCenterY()
+            )
+        } else {
+            detailedReorderAtPointer(
+                itemId,
+                overlayCenterY()
+            )
+        }
+    }
+
+    fun finishParentCountingDrag(commit: Boolean) {
+        if (dragOverlayItemId == null) return
+        finishCountingReorder(commit)
+        clearCountingOverlay()
+    }
+
+    // Auto-scroll is also owned by the stable host. It continues even if the
+    // placeholder moves to a slot that is outside the currently visible Lazy
+    // item set.
+    LaunchedEffect(
+        dragOverlayItemId,
+        dragOverlayCompact
+    ) {
+        val edgePx = with(countingDensity) { 96.dp.toPx() }
+        val minStepPx = with(countingDensity) { 2.5.dp.toPx() }
+        val maxStepPx = with(countingDensity) { 9.0.dp.toPx() }
+
+        while (dragOverlayItemId != null) {
+            val pointerY = dragPointerY
+            if (!pointerY.isNaN()) {
+                val viewportStart =
+                    if (dragOverlayCompact) {
+                        compactGridState.layoutInfo.viewportStartOffset.toFloat()
+                    } else {
+                        listState.layoutInfo.viewportStartOffset.toFloat()
+                    }
+                val viewportEnd =
+                    if (dragOverlayCompact) {
+                        compactGridState.layoutInfo.viewportEndOffset.toFloat()
+                    } else {
+                        listState.layoutInfo.viewportEndOffset.toFloat()
+                    }
+
+                val topEdge = viewportStart + edgePx
+                val bottomEdge = viewportEnd - edgePx
+
+                val direction = when {
+                    pointerY < topEdge -> -1
+                    pointerY > bottomEdge -> 1
+                    else -> 0
+                }
+
+                if (direction != 0) {
+                    val depth =
+                        if (direction < 0) {
+                            (topEdge - pointerY).coerceAtLeast(0f)
+                        } else {
+                            (pointerY - bottomEdge).coerceAtLeast(0f)
+                        }
+                    val ratio = (depth / edgePx).coerceIn(0f, 1f)
+                    val step =
+                        minStepPx + (maxStepPx - minStepPx) * ratio
+
+                    if (dragOverlayCompact) {
+                        compactGridState.scrollBy(step * direction)
+                        dragOverlayItemId?.let {
+                            compactReorderAtPointer(
+                                it,
+                                overlayCenterX(),
+                                overlayCenterY()
+                            )
+                        }
+                    } else {
+                        listState.scrollBy(step * direction)
+                        dragOverlayItemId?.let {
+                            detailedReorderAtPointer(
+                                it,
+                                overlayCenterY()
+                            )
+                        }
+                    }
+                }
+            }
+            delay(16)
+        }
     }
 
     BackHandler {
@@ -849,6 +1074,46 @@ private fun CountingScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
+                    .onGloballyPositioned { coordinates ->
+                        countingDragHostOrigin =
+                            coordinates.positionInRoot()
+                    }
+                    .pointerInput(
+                        sheet.id,
+                        viewMode,
+                        visualItems.size
+                    ) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { start ->
+                                val targetId =
+                                    countingHandleBounds
+                                        .entries
+                                        .firstOrNull {
+                                            it.value.contains(start)
+                                        }
+                                        ?.key
+                                if (targetId != null) {
+                                    beginCountingDrag(targetId, start)
+                                }
+                            },
+                            onDragCancel = {
+                                finishParentCountingDrag(
+                                    commit = false
+                                )
+                            },
+                            onDragEnd = {
+                                finishParentCountingDrag(
+                                    commit = true
+                                )
+                            },
+                            onDrag = { change, dragAmount ->
+                                if (dragOverlayItemId != null) {
+                                    change.consume()
+                                    updateCountingDrag(dragAmount)
+                                }
+                            }
+                        )
+                    }
             ) {
             if (animatedViewMode == CountingViewMode.COMPACT) {
                 LazyVerticalGrid(
@@ -1094,182 +1359,17 @@ private fun CountingScreen(
                                                     minWidth = 40.dp,
                                                     minHeight = 40.dp
                                                 )
-                                                .pointerInput(item.id) {
-                                                    detectDragGesturesAfterLongPress(
-                                                        onDragStart = {
-                                                                                                                                                                                    countingReorder.begin(
-                                                                item.id,
-                                                                CountingReorderMode.COMPACT
-                                                            )
-                                                            compactDragging = true
-                                                            compactDragOffsetX = 0f
-                                                            compactDragOffsetY = 0f
-                                                            compactGridState.layoutInfo.visibleItemsInfo
-                                                                .firstOrNull { it.key == item.id }
-                                                                ?.let {
-                                                                    compactFingerCenterX =
-                                                                        it.offset.x +
-                                                                            it.size.width / 2f
-                                                                    compactFingerCenterY =
-                                                                        it.offset.y +
-                                                                            it.size.height / 2f
-                                                                    compactPointerY =
-                                                                        compactFingerCenterY
-
-                                                                    dragOverlayItemId = item.id
-                                                                    dragOverlayCompact = true
-                                                                    dragOverlayX =
-                                                                        it.offset.x.toFloat()
-                                                                    dragOverlayY =
-                                                                        it.offset.y.toFloat()
-                                                                    dragOverlayWidth =
-                                                                        it.size.width.toFloat()
-                                                                    dragOverlayHeight =
-                                                                        it.size.height.toFloat()
-                                                                }
-                                                            compactHaptic.performHapticFeedback(
-                                                                HapticFeedbackType.LongPress
-                                                            )
-                                                        },
-                                                        onDragCancel = {
-                                                            compactDragging = false
-                                                            compactAutoScrollDirection = 0
-                                                            compactDragOffsetX = 0f
-                                                            compactDragOffsetY = 0f
-                                                            compactFingerCenterX = Float.NaN
-                                                            compactFingerCenterY = Float.NaN
-                                                            compactPointerY = Float.NaN
-                                                            compactAutoScrollDirection = 0
-                                                            finishCountingReorder(commit = false)
-                                            clearCountingOverlay()
-                                                            clearCountingOverlay()
-                                                        },
-                                                        onDragEnd = {
-                                                            compactDragging = false
-                                                            compactAutoScrollDirection = 0
-                                                            compactDragOffsetX = 0f
-                                                            compactDragOffsetY = 0f
-                                                            compactFingerCenterX = Float.NaN
-                                                            compactFingerCenterY = Float.NaN
-                                                            compactPointerY = Float.NaN
-                                                            compactAutoScrollDirection = 0
-                                                            finishCountingReorder(commit = true)
-                                            clearCountingOverlay()
-                                                            clearCountingOverlay()
-                                                        },
-                                                        onDrag = { change, dragAmount ->
-                                                            change.consume()
-                                                            if (compactFingerCenterX.isNaN() || compactFingerCenterY.isNaN()) {
-                                                                compactGridState.layoutInfo.visibleItemsInfo
-                                                                    .firstOrNull { it.key == item.id }
-                                                                    ?.let {
-                                                                        compactFingerCenterX = it.offset.x + it.size.width / 2f + compactDragOffsetX
-                                                                        compactFingerCenterY = it.offset.y + it.size.height / 2f + compactDragOffsetY
-                                                                    }
-                                                            }
-                                                            compactFingerCenterX +=
-                                                                dragAmount.x
-                                                            compactPointerY +=
-                                                                dragAmount.y
-
-                                                            // Detached overlay follows the pointer.
-                                                            // It may park at a screen edge while the
-                                                            // grid continues scrolling underneath.
-                                                            val compactViewport =
-                                                                compactGridState.layoutInfo
-                                                            val maxOverlayX =
-                                                                (
-                                                                    compactViewport.viewportSize.width -
-                                                                        dragOverlayWidth
-                                                                    ).coerceAtLeast(0f)
-                                                            val maxOverlayY =
-                                                                (
-                                                                    compactViewport.viewportEndOffset -
-                                                                        dragOverlayHeight
-                                                                    ).coerceAtLeast(0f)
-                                                            dragOverlayX =
-                                                                (dragOverlayX + dragAmount.x)
-                                                                    .coerceIn(
-                                                                        0f,
-                                                                        maxOverlayX
-                                                                    )
-                                                            dragOverlayY =
-                                                                (dragOverlayY + dragAmount.y)
-                                                                    .coerceIn(
-                                                                        compactViewport.viewportStartOffset
-                                                                            .toFloat(),
-                                                                        maxOverlayY
-                                                                    )
-
-                                                            val compactLayoutNow =
-                                                                compactGridState.layoutInfo
-                                                            compactLayoutNow.visibleItemsInfo
-                                                                .firstOrNull {
-                                                                    it.key == item.id
-                                                                }
-                                                                ?.let {
-                                                                    val halfH =
-                                                                        it.size.height / 2f
-                                                                    compactFingerCenterY =
-                                                                        compactPointerY.coerceIn(
-                                                                            compactLayoutNow.viewportStartOffset +
-                                                                                halfH,
-                                                                            compactLayoutNow.viewportEndOffset -
-                                                                                halfH
-                                                                        )
-                                                                    compactDragOffsetX =
-                                                                        compactFingerCenterX -
-                                                                            (
-                                                                                it.offset.x +
-                                                                                    it.size.width / 2f
-                                                                                )
-                                                                    compactDragOffsetY =
-                                                                        compactFingerCenterY -
-                                                                            (
-                                                                                it.offset.y +
-                                                                                    halfH
-                                                                                )
-                                                                }
-
-                                                            compactReorderAtPointer(
-                                                                item.id,
-                                                                overlayCenterX(),
-                                                                overlayCenterY()
-                                                            )
-
-                                                            val layout =
-                                                                compactGridState.layoutInfo
-                                                            val draggedInfo =
-                                                                layout.visibleItemsInfo
-                                                                    .firstOrNull {
-                                                                        it.key == item.id
-                                                                    }
-
-                                                            if (draggedInfo != null) {
-                                                                val top =
-                                                                    draggedInfo.offset.y +
-                                                                        compactDragOffsetY
-                                                                val bottom =
-                                                                    top + draggedInfo.size.height
-
-                                                                when {
-                                                                    top <
-                                                                        layout.viewportStartOffset +
-                                                                        compactEdgeThresholdPx -> {
-                                                                        compactAutoScrollDirection = -1
-                                                                    }
-
-                                                                    bottom >
-                                                                        layout.viewportEndOffset -
-                                                                        compactEdgeThresholdPx -> {
-                                                                        compactAutoScrollDirection = 1
-                                                                    }
-                                                                    else -> compactAutoScrollDirection = 0
-                                                                }
-                                                            }
-                                                        }
+                                                .onGloballyPositioned {
+                                                    val p = it.positionInRoot()
+                                                    registerCountingHandle(
+                                                        item.id,
+                                                        p.x,
+                                                        p.y,
+                                                        it.size.width.toFloat(),
+                                                        it.size.height.toFloat()
                                                     )
-                                                },
+                                                }
+,
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Text(
@@ -1551,155 +1651,18 @@ private fun CountingScreen(
                         ?.let { parseColor(it.color).copy(alpha = 0.26f) }
                         ?: ArmyristColors.SecondaryControl
 
-                    val detailedDragHandleModifier = Modifier.pointerInput(
+                    val detailedDragHandleModifier =
+                        Modifier.onGloballyPositioned {
+                            val p = it.positionInRoot()
+                            registerCountingHandle(
                                 item.id,
-                                assignmentMode
-                            ) {
-                                if (!assignmentMode) {
-                                    detectDragGesturesAfterLongPress(
-                                        onDragStart = {
-                                                                                                                                    countingReorder.begin(
-                                                item.id,
-                                                CountingReorderMode.DETAILED
-                                            )
-                                            isDragging = true
-                                            dragOffsetY = 0f
-                                            val detailedInfo =
-                                                listState.layoutInfo.visibleItemsInfo
-                                                    .firstOrNull {
-                                                        it.key == item.id
-                                                    }
-                                            dragFingerCenterY =
-                                                detailedInfo
-                                                    ?.let {
-                                                        it.offset +
-                                                            it.size / 2f
-                                                    }
-                                                    ?: Float.NaN
-                                            dragPointerY = dragFingerCenterY
+                                p.x,
+                                p.y,
+                                it.size.width.toFloat(),
+                                it.size.height.toFloat()
+                            )
+                        }
 
-                                            detailedInfo?.let {
-                                                val inset =
-                                                    with(countingDensity) {
-                                                        8.dp.toPx()
-                                                    }
-                                                dragOverlayItemId = item.id
-                                                dragOverlayCompact = false
-                                                dragOverlayX = inset
-                                                dragOverlayY =
-                                                    it.offset.toFloat()
-                                                dragOverlayWidth =
-                                                    (
-                                                        listState.layoutInfo
-                                                            .viewportSize.width -
-                                                            inset * 2f
-                                                        ).coerceAtLeast(1f)
-                                                dragOverlayHeight =
-                                                    it.size.toFloat()
-                                            }
-                                            haptic.performHapticFeedback(
-                                                HapticFeedbackType.LongPress
-                                            )
-                                        },
-                                        onDragCancel = {
-                                            isDragging = false
-                                            autoScrollDirection = 0
-                                            dragOffsetY = 0f
-                                            dragFingerCenterY = Float.NaN
-                                            dragPointerY = Float.NaN
-                                            autoScrollDirection = 0
-                                            finishCountingReorder(commit = false)
-                                        },
-                                        onDragEnd = {
-                                            isDragging = false
-                                            autoScrollDirection = 0
-                                            dragOffsetY = 0f
-                                            dragFingerCenterY = Float.NaN
-                                            dragPointerY = Float.NaN
-                                            autoScrollDirection = 0
-                                            finishCountingReorder(commit = true)
-                                        },
-                                        onDrag = { change, dragAmount ->
-                                            change.consume()
-                                            if (dragFingerCenterY.isNaN()) {
-                                                listState.layoutInfo.visibleItemsInfo
-                                                    .firstOrNull { it.key == item.id }
-                                                    ?.let { dragFingerCenterY = it.offset + it.size / 2f + dragOffsetY }
-                                            }
-                                            dragPointerY += dragAmount.y
-
-                                            val detailViewport =
-                                                listState.layoutInfo
-                                            val maxDetailedY =
-                                                (
-                                                    detailViewport.viewportEndOffset -
-                                                        dragOverlayHeight
-                                                    ).coerceAtLeast(0f)
-                                            dragOverlayY =
-                                                (dragOverlayY + dragAmount.y)
-                                                    .coerceIn(
-                                                        detailViewport.viewportStartOffset
-                                                            .toFloat(),
-                                                        maxDetailedY
-                                                    )
-
-                                            val detailLayoutNow =
-                                                listState.layoutInfo
-                                            detailLayoutNow.visibleItemsInfo
-                                                .firstOrNull { it.key == item.id }
-                                                ?.let {
-                                                    val half = it.size / 2f
-                                                    dragFingerCenterY =
-                                                        dragPointerY.coerceIn(
-                                                            detailLayoutNow.viewportStartOffset +
-                                                                half,
-                                                            detailLayoutNow.viewportEndOffset -
-                                                                half
-                                                        )
-                                                    dragOffsetY =
-                                                        dragFingerCenterY -
-                                                            (it.offset + half)
-                                                }
-
-                                            // The dragged visual stays anchored;
-                                            // only the placeholder/background order changes.
-                                            detailedReorderAtPointer(
-                                                item.id,
-                                                overlayCenterY()
-                                            )
-
-                                            val info =
-                                                listState.layoutInfo
-                                            val dragged =
-                                                info.visibleItemsInfo
-                                                    .firstOrNull {
-                                                        it.key == item.id
-                                                    }
-
-                                            if (dragged != null) {
-                                                val top =
-                                                    dragged.offset +
-                                                        dragOffsetY
-                                                val bottom =
-                                                    top + dragged.size
-                                                when {
-                                                    top <
-                                                        info.viewportStartOffset +
-                                                        edgeThresholdPx -> {
-                                                        autoScrollDirection = -1
-                                                    }
-                                                    bottom >
-                                                        info.viewportEndOffset -
-                                                        edgeThresholdPx -> {
-                                                        autoScrollDirection = 1
-                                                    }
-                                                    else -> autoScrollDirection = 0
-                                                }
-                                            }
-                                        }
-                                    )
-                                }
-                            }
 
                     Card(
                         colors = CardDefaults.cardColors(
