@@ -3,7 +3,6 @@ package com.seolhwa.armyrist.counting.reorder
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.mutableStateListOf
 import com.seolhwa.armyrist.domain.CountingItem
-import kotlin.math.abs
 
 enum class CountingReorderMode { DETAILED, COMPACT }
 
@@ -16,6 +15,14 @@ data class CountingReorderSlot(
     val height: Float
 )
 
+/**
+ * Counting reorder V3.
+ *
+ * Unlike the failed nearest-slot V2, this controller only permits an adjacent
+ * logical move after the pointer has clearly crossed that neighbour's gate.
+ * This prevents a stationary pointer from making the list oscillate and keeps
+ * Detailed and Compact on one shared order.
+ */
 @Stable
 class CountingReorderV2(initialItems: List<CountingItem>) {
     val items = mutableStateListOf<CountingItem>().apply {
@@ -48,6 +55,8 @@ class CountingReorderV2(initialItems: List<CountingItem>) {
         val byId = latest.associateBy { it.id }
         val pending = pendingCommit
 
+        // A repository emission can briefly contain the pre-drop order.
+        // Refresh contents, but never allow that stale order to roll the UI back.
         if (pending != null && ids != pending) {
             for (i in items.indices) {
                 byId[items[i].id]?.let { items[i] = it }
@@ -86,12 +95,13 @@ class CountingReorderV2(initialItems: List<CountingItem>) {
         return order
     }
 
-    fun moveTo(targetIndex: Int, nowMs: Long): Boolean {
+    /** Move exactly one logical slot. Never jump across several cells in one frame. */
+    private fun moveOne(direction: Int, nowMs: Long): Boolean {
         val id = draggingItemId ?: return false
-        if (nowMs - lastMoveAt < 72L) return false
+        if (direction == 0 || nowMs - lastMoveAt < 92L) return false
         val from = items.indexOfFirst { it.id == id }
         if (from < 0) return false
-        val to = targetIndex.coerceIn(0, items.lastIndex)
+        val to = (from + direction.coerceIn(-1, 1)).coerceIn(0, items.lastIndex)
         if (from == to) return false
         val moved = items.removeAt(from)
         items.add(to, moved)
@@ -99,23 +109,58 @@ class CountingReorderV2(initialItems: List<CountingItem>) {
         return true
     }
 
-    fun detailedTarget(pointerY: Float, slots: List<CountingReorderSlot>): Int? {
-        val id = draggingItemId ?: return null
-        return slots.asSequence()
-            .filter { it.itemId != id }
-            .minByOrNull { abs(it.centerY - pointerY) }
-            ?.index
+    /**
+     * Detailed: only the immediately adjacent slot can open. A 14% hysteresis
+     * gate prevents repeated back/forth moves around the centre line.
+     */
+    fun updateDetailed(pointerY: Float, slots: List<CountingReorderSlot>, nowMs: Long): Boolean {
+        val id = draggingItemId ?: return false
+        val current = items.indexOfFirst { it.id == id }
+        if (current < 0) return false
+
+        val next = slots.firstOrNull { it.index == current + 1 }
+        if (next != null) {
+            val gate = next.centerY + next.height * 0.14f
+            if (pointerY > gate) return moveOne(1, nowMs)
+        }
+
+        val previous = slots.firstOrNull { it.index == current - 1 }
+        if (previous != null) {
+            val gate = previous.centerY - previous.height * 0.14f
+            if (pointerY < gate) return moveOne(-1, nowMs)
+        }
+        return false
     }
 
-    fun compactTarget(pointerX: Float, pointerY: Float, slots: List<CountingReorderSlot>): Int? {
-        val id = draggingItemId ?: return null
-        return slots.asSequence()
-            .filter { it.itemId != id }
-            .minByOrNull {
-                val nx = (it.centerX - pointerX) / it.width.coerceAtLeast(1f)
-                val ny = (it.centerY - pointerY) / it.height.coerceAtLeast(1f)
-                nx * nx + ny * ny
+    /**
+     * Compact: row-major logical order, adjacent slots only. The pointer must
+     * enter well inside the neighbouring cell (not merely become nearest).
+     */
+    fun updateCompact(pointerX: Float, pointerY: Float, slots: List<CountingReorderSlot>, nowMs: Long): Boolean {
+        val id = draggingItemId ?: return false
+        val current = items.indexOfFirst { it.id == id }
+        if (current < 0) return false
+
+        fun crossed(slot: CountingReorderSlot, forward: Boolean): Boolean {
+            val dx = pointerX - slot.centerX
+            val dy = pointerY - slot.centerY
+            val insideX = kotlin.math.abs(dx) <= slot.width * 0.42f
+            val insideY = kotlin.math.abs(dy) <= slot.height * 0.42f
+            if (insideX && insideY) return true
+            // For vertical row transitions, Y is the stronger signal.
+            return if (forward) {
+                pointerY > slot.centerY + slot.height * 0.18f
+            } else {
+                pointerY < slot.centerY - slot.height * 0.18f
             }
-            ?.index
+        }
+
+        val next = slots.firstOrNull { it.index == current + 1 }
+        if (next != null && crossed(next, true)) return moveOne(1, nowMs)
+
+        val previous = slots.firstOrNull { it.index == current - 1 }
+        if (previous != null && crossed(previous, false)) return moveOne(-1, nowMs)
+
+        return false
     }
 }
