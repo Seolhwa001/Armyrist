@@ -1,6 +1,8 @@
 package com.seolhwa.armyrist
 
 import kotlinx.coroutines.launch
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.graphics.graphicsLayer
@@ -233,6 +235,9 @@ private fun ArmyristApp(
                         onMove = { itemId, delta ->
                             repo.moveItem(sheet.id, itemId, delta)
                             refresh()
+                        },
+                        onReorder = { orderedIds ->
+                            if (repo.reorderItems(sheet.id, orderedIds)) refresh()
                         },
                         onAssignGroup = { itemIds, groupId ->
                             if (repo.assignItemsToGroup(sheet.id, itemIds, groupId)) refresh()
@@ -574,6 +579,7 @@ private fun CountingScreen(
     onDecrement: (String) -> Unit,
     onQuantity: (String, Int) -> Unit,
     onMove: (String, Int) -> Unit,
+    onReorder: (List<String>) -> Unit,
     onAssignGroup: (Set<String>, String?) -> Unit
 ) {
     val context = LocalContext.current
@@ -609,6 +615,47 @@ private fun CountingScreen(
         with(LocalDensity.current) { 72.dp.toPx() }
     val listState = rememberLazyListState()
     val compactGridState = rememberLazyGridState()
+
+    val visualItems = remember(sheet.id) {
+        mutableStateListOf<CountingItem>().apply {
+            addAll(sheet.items.sortedBy { it.order })
+        }
+    }
+    var reorderActive by remember { mutableStateOf(false) }
+
+    LaunchedEffect(sheet.updatedAt, sheet.items.size, reorderActive) {
+        if (!reorderActive) {
+            val latest = sheet.items.sortedBy { it.order }
+            val latestById = latest.associateBy { it.id }
+            if (visualItems.map { it.id } != latest.map { it.id }) {
+                visualItems.clear()
+                visualItems.addAll(latest)
+            } else {
+                for (index in visualItems.indices) {
+                    latestById[visualItems[index].id]?.let { visualItems[index] = it }
+                }
+            }
+        }
+    }
+
+    fun moveVisualItem(itemId: String, delta: Int) {
+        val from = visualItems.indexOfFirst { it.id == itemId }
+        if (from < 0) return
+        val to = (from + delta).coerceIn(0, visualItems.lastIndex)
+        if (from == to) return
+        val moved = visualItems.removeAt(from)
+        visualItems.add(to, moved)
+    }
+
+    fun finishVisualReorder(commit: Boolean) {
+        if (commit) {
+            onReorder(visualItems.map { it.id })
+        } else {
+            visualItems.clear()
+            visualItems.addAll(sheet.items.sortedBy { it.order })
+        }
+        reorderActive = false
+    }
 
     BackHandler {
         if (assignmentGroupId != null) {
@@ -747,7 +794,12 @@ private fun CountingScreen(
 
             HorizontalDivider()
 
-            if (viewMode == CountingViewMode.COMPACT) {
+            Crossfade(
+                targetState = viewMode,
+                animationSpec = tween(durationMillis = 170),
+                label = "counting-density-transition"
+            ) { animatedViewMode ->
+            if (animatedViewMode == CountingViewMode.COMPACT) {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
                     state = compactGridState,
@@ -770,11 +822,10 @@ private fun CountingScreen(
                     }
 
                     gridItems(
-                        items = sheet.items.sortedBy { it.order },
+                        items = visualItems,
                         key = { it.id }
                     ) { item ->
-                        val sortedItems = sheet.items.sortedBy { it.order }
-                        val displayIndex = sortedItems.indexOfFirst { it.id == item.id } + 1
+                        val displayIndex = visualItems.indexOfFirst { it.id == item.id } + 1
                         val currentGroup = sheet.groups.firstOrNull { it.id == item.groupId }
                         val groupColor = currentGroup?.let { parseColor(it.color) }
                         val assignmentMode = assignmentGroupId != null
@@ -836,6 +887,7 @@ private fun CountingScreen(
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .animateItem()
                                 .heightIn(min = 96.dp)
                                 .zIndex(if (compactDragging) 2f else 0f)
                                 .graphicsLayer {
@@ -878,6 +930,7 @@ private fun CountingScreen(
                                                 .pointerInput(item.id) {
                                                     detectDragGesturesAfterLongPress(
                                                         onDragStart = {
+                                                            reorderActive = true
                                                             compactDragging = true
                                                             compactDragOffsetX = 0f
                                                             compactDragOffsetY = 0f
@@ -889,11 +942,13 @@ private fun CountingScreen(
                                                             compactDragging = false
                                                             compactDragOffsetX = 0f
                                                             compactDragOffsetY = 0f
+                                                            finishVisualReorder(commit = false)
                                                         },
                                                         onDragEnd = {
                                                             compactDragging = false
                                                             compactDragOffsetX = 0f
                                                             compactDragOffsetY = 0f
+                                                            finishVisualReorder(commit = true)
                                                         },
                                                         onDrag = { change, dragAmount ->
                                                             change.consume()
@@ -903,7 +958,7 @@ private fun CountingScreen(
                                                             when {
                                                                 compactDragOffsetX >=
                                                                     compactDragHorizontalThresholdPx -> {
-                                                                    onMove(item.id, 1)
+                                                                    moveVisualItem(item.id, 1)
                                                                     compactDragOffsetX -=
                                                                         compactDragHorizontalThresholdPx
                                                                     compactHaptic.performHapticFeedback(
@@ -913,7 +968,7 @@ private fun CountingScreen(
 
                                                                 compactDragOffsetX <=
                                                                     -compactDragHorizontalThresholdPx -> {
-                                                                    onMove(item.id, -1)
+                                                                    moveVisualItem(item.id, -1)
                                                                     compactDragOffsetX +=
                                                                         compactDragHorizontalThresholdPx
                                                                     compactHaptic.performHapticFeedback(
@@ -925,7 +980,7 @@ private fun CountingScreen(
                                                             when {
                                                                 compactDragOffsetY >=
                                                                     compactDragVerticalThresholdPx -> {
-                                                                    onMove(item.id, 2)
+                                                                    moveVisualItem(item.id, 2)
                                                                     compactDragOffsetY -=
                                                                         compactDragVerticalThresholdPx
                                                                     compactHaptic.performHapticFeedback(
@@ -935,7 +990,7 @@ private fun CountingScreen(
 
                                                                 compactDragOffsetY <=
                                                                     -compactDragVerticalThresholdPx -> {
-                                                                    onMove(item.id, -2)
+                                                                    moveVisualItem(item.id, -2)
                                                                     compactDragOffsetY +=
                                                                         compactDragVerticalThresholdPx
                                                                     compactHaptic.performHapticFeedback(
@@ -1134,7 +1189,7 @@ private fun CountingScreen(
                     top = 6.dp,
                     bottom = 24.dp
                 ),
-                verticalArrangement = Arrangement.spacedBy(if (viewMode == CountingViewMode.COMPACT) 2.dp else 6.dp)
+                verticalArrangement = Arrangement.spacedBy(if (animatedViewMode == CountingViewMode.COMPACT) 2.dp else 6.dp)
             ) {
                 if (sheet.items.isEmpty()) {
                     item {
@@ -1155,7 +1210,7 @@ private fun CountingScreen(
                 }
 
                 itemsIndexed(
-                    sheet.items.sortedBy { it.order },
+                    visualItems,
                     key = { _, item -> item.id }
                 ) { index, item ->
                     val currentGroup = sheet.groups.firstOrNull { it.id == item.groupId }
@@ -1209,6 +1264,7 @@ private fun CountingScreen(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
+                            .animateItem()
                             .zIndex(if (isDragging) 1f else 0f)
                             .graphicsLayer {
                                 translationY =
@@ -1223,6 +1279,7 @@ private fun CountingScreen(
                                 if (!assignmentMode) {
                                     detectDragGesturesAfterLongPress(
                                         onDragStart = {
+                                            reorderActive = true
                                             isDragging = true
                                             dragOffsetY = 0f
                                             haptic.performHapticFeedback(
@@ -1232,10 +1289,12 @@ private fun CountingScreen(
                                         onDragCancel = {
                                             isDragging = false
                                             dragOffsetY = 0f
+                                            finishVisualReorder(commit = false)
                                         },
                                         onDragEnd = {
                                             isDragging = false
                                             dragOffsetY = 0f
+                                            finishVisualReorder(commit = true)
                                         },
                                         onDrag = { change, dragAmount ->
                                             change.consume()
@@ -1245,7 +1304,7 @@ private fun CountingScreen(
                                                 dragOffsetY >=
                                                 dragThresholdPx
                                             ) {
-                                                onMove(item.id, 1)
+                                                moveVisualItem(item.id, 1)
                                                 dragOffsetY -=
                                                     dragThresholdPx
                                                 haptic.performHapticFeedback(
@@ -1255,7 +1314,7 @@ private fun CountingScreen(
                                                 dragOffsetY <=
                                                 -dragThresholdPx
                                             ) {
-                                                onMove(item.id, -1)
+                                                moveVisualItem(item.id, -1)
                                                 dragOffsetY +=
                                                     dragThresholdPx
                                                 haptic.performHapticFeedback(
@@ -1314,7 +1373,7 @@ private fun CountingScreen(
                     ) {
                         BoxWithConstraints(Modifier.fillMaxWidth()) {
                             val stackedDetailed =
-                                viewMode == CountingViewMode.DETAILED && maxWidth < 430.dp
+                                animatedViewMode == CountingViewMode.DETAILED && maxWidth < 430.dp
 
                             Row(
                                 Modifier.fillMaxWidth(),
@@ -1324,7 +1383,7 @@ private fun CountingScreen(
                                 Box(
                                     Modifier
                                         .width(5.dp)
-                                        .heightIn(min = if (viewMode == CountingViewMode.COMPACT) 44.dp else 88.dp)
+                                        .heightIn(min = if (animatedViewMode == CountingViewMode.COMPACT) 44.dp else 88.dp)
                                         .background(groupColor)
                                 )
                             }
@@ -1421,8 +1480,8 @@ private fun CountingScreen(
                                 Modifier
                                     .weight(1f)
                                     .padding(
-                                        horizontal = if (viewMode == CountingViewMode.COMPACT) 8.dp else 12.dp,
-                                        vertical = if (viewMode == CountingViewMode.COMPACT) 2.dp else 14.dp
+                                        horizontal = if (animatedViewMode == CountingViewMode.COMPACT) 8.dp else 12.dp,
+                                        vertical = if (animatedViewMode == CountingViewMode.COMPACT) 2.dp else 14.dp
                                     ),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -1435,15 +1494,15 @@ private fun CountingScreen(
                             Column(Modifier.weight(1f)) {
                                 Text(
                                     item.name,
-                                    style = if (viewMode == CountingViewMode.COMPACT) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium,
+                                    style = if (animatedViewMode == CountingViewMode.COMPACT) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 Text(
-                                    if (viewMode == CountingViewMode.COMPACT) "${item.unit}  $groupName" else "${item.unit} · $groupName",
+                                    if (animatedViewMode == CountingViewMode.COMPACT) "${item.unit}  $groupName" else "${item.unit} · $groupName",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                if (viewMode == CountingViewMode.DETAILED && item.note.isNotBlank()) {
+                                if (animatedViewMode == CountingViewMode.DETAILED && item.note.isNotBlank()) {
                                     Text(
                                         "비고: ${item.note}",
                                         style = MaterialTheme.typography.bodySmall,
@@ -1456,8 +1515,8 @@ private fun CountingScreen(
                                 OutlinedButton(
                                     onClick = { onDecrement(item.id) },
                                     modifier = Modifier.sizeIn(
-                                        minWidth = if (viewMode == CountingViewMode.COMPACT) 40.dp else 56.dp,
-                                        minHeight = if (viewMode == CountingViewMode.COMPACT) 40.dp else 56.dp
+                                        minWidth = if (animatedViewMode == CountingViewMode.COMPACT) 40.dp else 56.dp,
+                                        minHeight = if (animatedViewMode == CountingViewMode.COMPACT) 40.dp else 56.dp
                                     ),
                                     shape = ArmyristPanelShape,
                                     border = BorderStroke(
@@ -1472,8 +1531,8 @@ private fun CountingScreen(
                                 Button(
                                     onClick = { quantityTarget = item },
                                     modifier = Modifier
-                                        .widthIn(min = if (viewMode == CountingViewMode.COMPACT) 46.dp else 78.dp)
-                                        .heightIn(min = if (viewMode == CountingViewMode.COMPACT) 40.dp else 58.dp),
+                                        .widthIn(min = if (animatedViewMode == CountingViewMode.COMPACT) 46.dp else 78.dp)
+                                        .heightIn(min = if (animatedViewMode == CountingViewMode.COMPACT) 40.dp else 58.dp),
                                     shape = ArmyristPanelShape,
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor =
@@ -1488,7 +1547,7 @@ private fun CountingScreen(
                                     Text(
                                         item.quantity.toString(),
                                         style =
-                                            if (viewMode == CountingViewMode.COMPACT) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
+                                            if (animatedViewMode == CountingViewMode.COMPACT) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
@@ -1496,8 +1555,8 @@ private fun CountingScreen(
                                 Button(
                                     onClick = { onIncrement(item.id) },
                                     modifier = Modifier.sizeIn(
-                                        minWidth = if (viewMode == CountingViewMode.COMPACT) 40.dp else 56.dp,
-                                        minHeight = if (viewMode == CountingViewMode.COMPACT) 40.dp else 56.dp
+                                        minWidth = if (animatedViewMode == CountingViewMode.COMPACT) 40.dp else 56.dp,
+                                        minHeight = if (animatedViewMode == CountingViewMode.COMPACT) 40.dp else 56.dp
                                     ),
                                     shape = ArmyristPanelShape,
                                     colors = ButtonDefaults.buttonColors(
@@ -1628,6 +1687,7 @@ private fun CountingScreen(
                         }
                     }
                 }
+            }
             }
             }
         }
