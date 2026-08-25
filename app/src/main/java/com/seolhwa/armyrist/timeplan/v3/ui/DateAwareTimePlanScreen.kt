@@ -69,6 +69,7 @@ import org.json.JSONObject
 import com.seolhwa.armyrist.timeplan.v3.domain.*
 import com.seolhwa.armyrist.voice.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import java.time.*
 import java.io.File
 import java.time.format.DateTimeFormatter
@@ -459,6 +460,14 @@ private fun DateAwarePlanList(
     var draggingPlanId by remember { mutableStateOf<String?>(null) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     var reorderDirty by remember { mutableStateOf(false) }
+    var dragAutoScrollDirection by remember { mutableIntStateOf(0) }
+    val dragAutoScrollStepPx = with(LocalDensity.current) { 34.dp.toPx() }
+    LaunchedEffect(draggingPlanId, dragAutoScrollDirection) {
+        while (draggingPlanId != null && dragAutoScrollDirection != 0) {
+            listState.scrollBy(dragAutoScrollStepPx * dragAutoScrollDirection)
+            delay(16)
+        }
+    }
 
     LaunchedEffect(datePlans.map { Triple(it.id, it.title, it.updatedAt) }, draggingPlanId) {
         if (draggingPlanId == null) {
@@ -528,6 +537,7 @@ private fun DateAwarePlanList(
             }
         }
         draggingPlanId = null
+        dragAutoScrollDirection = 0
         dragOffsetY = 0f
         reorderDirty = false
     }
@@ -814,8 +824,8 @@ private fun DateAwarePlanList(
                     val isDragging = draggingPlanId == plan.id
                     val cardKey = "v3-${plan.id}"
                     val view = LocalView.current
-                    val autoScrollThresholdPx = with(density) { 72.dp.toPx() }
-                    val maxAutoScrollPx = with(density) { 22.dp.toPx() }
+                    val autoScrollThresholdPx = with(density) { 112.dp.toPx() }
+                    val maxAutoScrollPx = with(density) { 46.dp.toPx() }
 
                     val isSelected = plan.id in selectedPlanIds
 
@@ -933,10 +943,10 @@ private fun DateAwarePlanList(
                                                     val crossedTarget =
                                                         if (targetIndex > fromIndex) {
                                                             draggedCenter >
-                                                                target.offset + target.size * 0.62f
+                                                                target.offset + target.size * 0.70f
                                                         } else {
                                                             draggedCenter <
-                                                                target.offset + target.size * 0.38f
+                                                                target.offset + target.size * 0.30f
                                                         }
 
                                                     if (
@@ -988,6 +998,11 @@ private fun DateAwarePlanList(
                                                     else -> 0f
                                                 }
 
+                                                dragAutoScrollDirection = when {
+                                                    scrollDelta < 0f -> -1
+                                                    scrollDelta > 0f -> 1
+                                                    else -> 0
+                                                }
                                                 if (scrollDelta != 0f) {
                                                     reorderScope.launch {
                                                         listState.scrollBy(scrollDelta)
