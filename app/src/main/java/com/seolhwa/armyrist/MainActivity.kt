@@ -2,7 +2,6 @@ package com.seolhwa.armyrist
 
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -624,18 +623,33 @@ private fun CountingScreen(
         }
     }
     var reorderActive by remember { mutableStateOf(false) }
+    var pendingCommittedOrder by remember(sheet.id) { mutableStateOf<List<String>?>(null) }
     var lastCountingReorderAt by remember { mutableLongStateOf(0L) }
 
-    LaunchedEffect(sheet.updatedAt, sheet.items.size, reorderActive) {
+    LaunchedEffect(sheet.updatedAt, sheet.items.size, reorderActive, pendingCommittedOrder) {
         if (!reorderActive) {
             val latest = sheet.items.sortedBy { it.order }
+            val latestIds = latest.map { it.id }
             val latestById = latest.associateBy { it.id }
-            if (visualItems.map { it.id } != latest.map { it.id }) {
-                visualItems.clear()
-                visualItems.addAll(latest)
-            } else {
+            val pending = pendingCommittedOrder
+
+            // A repository refresh can briefly deliver the pre-drag order. Do not
+            // let that stale frame overwrite the order the user just committed.
+            if (pending != null && latestIds != pending) {
                 for (index in visualItems.indices) {
                     latestById[visualItems[index].id]?.let { visualItems[index] = it }
+                }
+            } else {
+                if (visualItems.map { it.id } != latestIds) {
+                    visualItems.clear()
+                    visualItems.addAll(latest)
+                } else {
+                    for (index in visualItems.indices) {
+                        latestById[visualItems[index].id]?.let { visualItems[index] = it }
+                    }
+                }
+                if (pending != null && latestIds == pending) {
+                    pendingCommittedOrder = null
                 }
             }
         }
@@ -765,8 +779,11 @@ private fun CountingScreen(
 
     fun finishVisualReorder(commit: Boolean) {
         if (commit) {
-            onReorder(visualItems.map { it.id })
+            val committed = visualItems.map { it.id }
+            pendingCommittedOrder = committed
+            onReorder(committed)
         } else {
+            pendingCommittedOrder = null
             visualItems.clear()
             visualItems.addAll(sheet.items.sortedBy { it.order })
         }
@@ -910,11 +927,10 @@ private fun CountingScreen(
 
             HorizontalDivider()
 
-            Crossfade(
-                targetState = viewMode,
-                animationSpec = tween(durationMillis = 230, easing = FastOutSlowInEasing),
-                label = "counting-density-transition"
-            ) { animatedViewMode ->
+            // Density mode is a layout switch, not a screen transition. Keeping both
+            // lazy layouts alive during Crossfade caused stale placement frames and
+            // visible flashing after drag/reorder. Render exactly one layout.
+            val animatedViewMode = viewMode
             if (animatedViewMode == CountingViewMode.COMPACT) {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
@@ -974,7 +990,7 @@ private fun CountingScreen(
                         val compactEdgeThresholdPx =
                             with(LocalDensity.current) { 112.dp.toPx() }
                         val compactAutoScrollStepPx =
-                            with(LocalDensity.current) { 7.dp.toPx() }
+                            with(LocalDensity.current) { 8.5.dp.toPx() }
                         var compactAutoScrollDirection by remember(item.id) { mutableIntStateOf(0) }
                         LaunchedEffect(compactDragging) {
                             while (compactDragging) {
@@ -1010,7 +1026,8 @@ private fun CountingScreen(
                                             ).coerceIn(0f, 1f)
                                     val step =
                                         compactAutoScrollStepPx *
-                                            (0.20f + ratio * 0.50f)
+                                            (0.22f + ratio * 0.48f) *
+                                            if (direction < 0) 1.18f else 0.88f
 
                                     compactGridState.scrollBy(
                                         step * direction
@@ -1107,7 +1124,7 @@ private fun CountingScreen(
                                         .animateItem(
                                             fadeInSpec = null,
                                             placementSpec = tween(
-                                                180,
+                                                140,
                                                 easing = FastOutSlowInEasing
                                             ),
                                             fadeOutSpec = null
@@ -1507,7 +1524,7 @@ private fun CountingScreen(
                     val edgeThresholdPx =
                         with(LocalDensity.current) { 112.dp.toPx() }
                     val autoScrollStepPx =
-                        with(LocalDensity.current) { 7.dp.toPx() }
+                        with(LocalDensity.current) { 8.5.dp.toPx() }
                     var autoScrollDirection by remember(item.id) { mutableIntStateOf(0) }
                     LaunchedEffect(isDragging) {
                         while (isDragging) {
@@ -1542,7 +1559,8 @@ private fun CountingScreen(
                                 // edge zone, faster only at the extreme edge.
                                 val step =
                                     autoScrollStepPx *
-                                        (0.20f + ratio * 0.50f)
+                                        (0.22f + ratio * 0.48f) *
+                                        if (direction < 0) 1.18f else 0.88f
 
                                 listState.scrollBy(step * direction)
 
@@ -1739,7 +1757,7 @@ private fun CountingScreen(
                                     .animateItem(
                                         fadeInSpec = null,
                                         placementSpec = tween(
-                                            180,
+                                            140,
                                             easing = FastOutSlowInEasing
                                         ),
                                         fadeOutSpec = null
@@ -2114,7 +2132,6 @@ private fun CountingScreen(
                         }
                     }
                 }
-            }
             }
             }
         }
