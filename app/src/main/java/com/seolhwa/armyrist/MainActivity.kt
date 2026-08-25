@@ -457,7 +457,7 @@ private fun SheetListScreen(
                             onClick = openImport,
                             modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                             shape = ArmyristPanelShape,
-                            border = BorderStroke(1.dp, ArmyristColors.SoftBorder),
+                            border = BorderStroke(1.dp, ArmyristColors.Border),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 containerColor = ArmyristColors.RaisedSurface,
                                 contentColor = ArmyristColors.PrimaryText
@@ -471,7 +471,7 @@ private fun SheetListScreen(
                             onClick = { trashOpen = true },
                             modifier = Modifier.heightIn(min = 48.dp),
                             shape = ArmyristPanelShape,
-                            border = BorderStroke(1.dp, ArmyristColors.SoftBorder),
+                            border = BorderStroke(1.dp, ArmyristColors.Border),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 containerColor = ArmyristColors.RaisedSurface,
                                 contentColor = ArmyristColors.PrimaryText
