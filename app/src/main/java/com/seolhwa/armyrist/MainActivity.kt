@@ -54,6 +54,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.seolhwa.armyrist.data.CountingRepository
+import com.seolhwa.armyrist.counting.reorder.CountingReorderMode
+import com.seolhwa.armyrist.counting.reorder.CountingReorderSlot
+import com.seolhwa.armyrist.counting.reorder.CountingReorderV2
 import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
 import com.seolhwa.armyrist.stage2.domain.ToolResult
 import com.seolhwa.armyrist.domain.*
@@ -617,177 +620,57 @@ private fun CountingScreen(
     val listState = rememberLazyListState()
     val compactGridState = rememberLazyGridState()
 
-    val visualItems = remember(sheet.id) {
-        mutableStateListOf<CountingItem>().apply {
-            addAll(sheet.items.sortedBy { it.order })
+    val countingReorder = remember(sheet.id) {
+        CountingReorderV2(sheet.items)
+    }
+    val visualItems = countingReorder.items
+
+    LaunchedEffect(sheet.updatedAt, sheet.items.size, countingReorder.isDragging) {
+        countingReorder.sync(sheet.items)
+    }
+
+    fun detailedReorderAtPointer(itemId: String, pointerY: Float) {
+        if (countingReorder.draggingItemId != itemId) return
+        val slots = listState.layoutInfo.visibleItemsInfo.mapNotNull { info ->
+            val id = info.key as? String ?: return@mapNotNull null
+            val index = visualItems.indexOfFirst { it.id == id }
+            if (index < 0) return@mapNotNull null
+            CountingReorderSlot(
+                itemId = id,
+                index = index,
+                centerX = 0f,
+                centerY = info.offset + info.size / 2f,
+                width = 1f,
+                height = info.size.toFloat()
+            )
         }
+        val target = countingReorder.detailedTarget(pointerY, slots) ?: return
+        countingReorder.moveTo(target, android.os.SystemClock.uptimeMillis())
     }
-    var reorderActive by remember { mutableStateOf(false) }
-    var pendingCommittedOrder by remember(sheet.id) { mutableStateOf<List<String>?>(null) }
-    var lastCountingReorderAt by remember { mutableLongStateOf(0L) }
 
-    LaunchedEffect(sheet.updatedAt, sheet.items.size, reorderActive, pendingCommittedOrder) {
-        if (!reorderActive) {
-            val latest = sheet.items.sortedBy { it.order }
-            val latestIds = latest.map { it.id }
-            val latestById = latest.associateBy { it.id }
-            val pending = pendingCommittedOrder
-
-            // A repository refresh can briefly deliver the pre-drag order. Do not
-            // let that stale frame overwrite the order the user just committed.
-            if (pending != null && latestIds != pending) {
-                for (index in visualItems.indices) {
-                    latestById[visualItems[index].id]?.let { visualItems[index] = it }
-                }
-            } else {
-                if (visualItems.map { it.id } != latestIds) {
-                    visualItems.clear()
-                    visualItems.addAll(latest)
-                } else {
-                    for (index in visualItems.indices) {
-                        latestById[visualItems[index].id]?.let { visualItems[index] = it }
-                    }
-                }
-                if (pending != null && latestIds == pending) {
-                    pendingCommittedOrder = null
-                }
-            }
+    fun compactReorderAtPointer(itemId: String, pointerX: Float, pointerY: Float) {
+        if (countingReorder.draggingItemId != itemId) return
+        val slots = compactGridState.layoutInfo.visibleItemsInfo.mapNotNull { info ->
+            val id = info.key as? String ?: return@mapNotNull null
+            val index = visualItems.indexOfFirst { it.id == id }
+            if (index < 0) return@mapNotNull null
+            CountingReorderSlot(
+                itemId = id,
+                index = index,
+                centerX = info.offset.x + info.size.width / 2f,
+                centerY = info.offset.y + info.size.height / 2f,
+                width = info.size.width.toFloat(),
+                height = info.size.height.toFloat()
+            )
         }
+        val target =
+            countingReorder.compactTarget(pointerX, pointerY, slots) ?: return
+        countingReorder.moveTo(target, android.os.SystemClock.uptimeMillis())
     }
 
-    fun moveVisualItem(itemId: String, delta: Int) {
-        val from = visualItems.indexOfFirst { it.id == itemId }
-        if (from < 0) return
-        val to = (from + delta).coerceIn(0, visualItems.lastIndex)
-        if (from == to) return
-        val moved = visualItems.removeAt(from)
-        visualItems.add(to, moved)
-    }
-
-    fun moveVisualItemTo(itemId: String, targetIndex: Int) {
-        val from = visualItems.indexOfFirst { it.id == itemId }
-        if (from < 0) return
-        val to = targetIndex.coerceIn(0, visualItems.lastIndex)
-        if (from == to) return
-        val moved = visualItems.removeAt(from)
-        visualItems.add(to, moved)
-    }
-
-    fun detailedReorderCompensation(
-        itemId: String,
-        currentDragOffsetY: Float
-    ): Float {
-        val layout = listState.layoutInfo
-        val draggedInfo = layout.visibleItemsInfo.firstOrNull { it.key == itemId }
-            ?: return 0f
-
-        val draggedCenter =
-            draggedInfo.offset + draggedInfo.size / 2f + currentDragOffsetY
-
-        val target = layout.visibleItemsInfo
-            .filter { info ->
-                info.key is String &&
-                    info.key != itemId &&
-                    visualItems.any { it.id == info.key }
-            }
-            .minByOrNull { info ->
-                kotlin.math.abs(
-                    (info.offset + info.size / 2f) - draggedCenter
-                )
-            }
-            ?: return 0f
-
-        val targetId = target.key as String
-        val fromIndex = visualItems.indexOfFirst { it.id == itemId }
-        val targetIndex = visualItems.indexOfFirst { it.id == targetId }
-        if (fromIndex < 0 || targetIndex < 0 || fromIndex == targetIndex) return 0f
-
-        // Hysteresis: the finger must move well inside the target card.
-        val crossed =
-            if (targetIndex > fromIndex) {
-                draggedCenter > target.offset + target.size * 0.50f
-            } else {
-                draggedCenter < target.offset + target.size * 0.50f
-            }
-
-        if (!crossed) return 0f
-
-        val now = android.os.SystemClock.uptimeMillis()
-        if (now - lastCountingReorderAt < 58L) return 0f
-
-        val oldOffset = draggedInfo.offset.toFloat()
-        val targetOffset = target.offset.toFloat()
-        moveVisualItemTo(itemId, targetIndex)
-        lastCountingReorderAt = now
-
-        // Compensate the layout jump so the dragged card stays under the finger.
-        return oldOffset - targetOffset
-    }
-
-    fun compactReorderCompensation(
-        itemId: String,
-        currentDragOffsetX: Float,
-        currentDragOffsetY: Float
-    ): Pair<Float, Float> {
-        val layout = compactGridState.layoutInfo
-        val draggedInfo = layout.visibleItemsInfo.firstOrNull { it.key == itemId }
-            ?: return 0f to 0f
-
-        val draggedCenterX =
-            draggedInfo.offset.x + draggedInfo.size.width / 2f + currentDragOffsetX
-        val draggedCenterY =
-            draggedInfo.offset.y + draggedInfo.size.height / 2f + currentDragOffsetY
-
-        val target = layout.visibleItemsInfo
-            .filter { it.key != itemId && it.key is String }
-            .minByOrNull { info ->
-                val cx = info.offset.x + info.size.width / 2f
-                val cy = info.offset.y + info.size.height / 2f
-                val dx = cx - draggedCenterX
-                val dy = cy - draggedCenterY
-                dx * dx + dy * dy
-            }
-            ?: return 0f to 0f
-
-        val targetId = target.key as? String ?: return 0f to 0f
-        val fromIndex = visualItems.indexOfFirst { it.id == itemId }
-        val targetIndex = visualItems.indexOfFirst { it.id == targetId }
-        if (fromIndex < 0 || targetIndex < 0 || fromIndex == targetIndex) return 0f to 0f
-
-        val targetCenterX = target.offset.x + target.size.width / 2f
-        val targetCenterY = target.offset.y + target.size.height / 2f
-
-        // Do not reorder just because two cards touch. The dragged center must
-        // enter the inner region of the destination cell.
-        val enteredTarget =
-            kotlin.math.abs(draggedCenterX - targetCenterX) <
-                target.size.width * 0.52f &&
-            kotlin.math.abs(draggedCenterY - targetCenterY) <
-                target.size.height * 0.52f
-
-        if (!enteredTarget) return 0f to 0f
-
-        val now = android.os.SystemClock.uptimeMillis()
-        if (now - lastCountingReorderAt < 58L) return 0f to 0f
-
-        val compensateX = (draggedInfo.offset.x - target.offset.x).toFloat()
-        val compensateY = (draggedInfo.offset.y - target.offset.y).toFloat()
-        moveVisualItemTo(itemId, targetIndex)
-        lastCountingReorderAt = now
-        return compensateX to compensateY
-    }
-
-    fun finishVisualReorder(commit: Boolean) {
-        if (commit) {
-            val committed = visualItems.map { it.id }
-            pendingCommittedOrder = committed
-            onReorder(committed)
-        } else {
-            pendingCommittedOrder = null
-            visualItems.clear()
-            visualItems.addAll(sheet.items.sortedBy { it.order })
-        }
-        reorderActive = false
+    fun finishCountingReorder(commit: Boolean) {
+        if (commit) onReorder(countingReorder.commitOrder())
+        else countingReorder.cancel(sheet.items)
     }
 
     BackHandler {
@@ -990,7 +873,7 @@ private fun CountingScreen(
                         val compactEdgeThresholdPx =
                             with(LocalDensity.current) { 112.dp.toPx() }
                         val compactAutoScrollStepPx =
-                            with(LocalDensity.current) { 8.5.dp.toPx() }
+                            with(LocalDensity.current) { 7.0.dp.toPx() }
                         var compactAutoScrollDirection by remember(item.id) { mutableIntStateOf(0) }
                         LaunchedEffect(compactDragging) {
                             while (compactDragging) {
@@ -1026,8 +909,7 @@ private fun CountingScreen(
                                             ).coerceIn(0f, 1f)
                                     val step =
                                         compactAutoScrollStepPx *
-                                            (0.22f + ratio * 0.48f) *
-                                            if (direction < 0) 1.18f else 0.88f
+                                            (0.30f + ratio * 0.40f)
 
                                     compactGridState.scrollBy(
                                         step * direction
@@ -1070,10 +952,10 @@ private fun CountingScreen(
 
                                     // Keep reordering the background while the
                                     // finger remains stationary at the edge.
-                                    compactReorderCompensation(
+                                    compactReorderAtPointer(
                                         item.id,
-                                        compactDragOffsetX,
-                                        compactDragOffsetY
+                                        compactFingerCenterX,
+                                        compactFingerCenterY
                                     )
                                 }
 
@@ -1173,8 +1055,10 @@ private fun CountingScreen(
                                                 .pointerInput(item.id) {
                                                     detectDragGesturesAfterLongPress(
                                                         onDragStart = {
-                                                            reorderActive = true
-                                                            lastCountingReorderAt = 0L
+                                                                                                                                                                                    countingReorder.begin(
+                                                                item.id,
+                                                                CountingReorderMode.COMPACT
+                                                            )
                                                             compactDragging = true
                                                             compactDragOffsetX = 0f
                                                             compactDragOffsetY = 0f
@@ -1203,7 +1087,7 @@ private fun CountingScreen(
                                                             compactFingerCenterY = Float.NaN
                                                             compactPointerY = Float.NaN
                                                             compactAutoScrollDirection = 0
-                                                            finishVisualReorder(commit = false)
+                                                            finishCountingReorder(commit = false)
                                                         },
                                                         onDragEnd = {
                                                             compactDragging = false
@@ -1214,7 +1098,7 @@ private fun CountingScreen(
                                                             compactFingerCenterY = Float.NaN
                                                             compactPointerY = Float.NaN
                                                             compactAutoScrollDirection = 0
-                                                            finishVisualReorder(commit = true)
+                                                            finishCountingReorder(commit = true)
                                                         },
                                                         onDrag = { change, dragAmount ->
                                                             change.consume()
@@ -1261,7 +1145,7 @@ private fun CountingScreen(
                                                                                 )
                                                                 }
 
-                                                            compactReorderCompensation(item.id, compactDragOffsetX, compactDragOffsetY)
+                                                            compactReorderAtPointer(item.id, compactFingerCenterX, compactFingerCenterY)
                                                             compactDragScope.launch {
                                                                 withFrameNanos { }
                                                                 compactGridState.layoutInfo.visibleItemsInfo
@@ -1524,7 +1408,7 @@ private fun CountingScreen(
                     val edgeThresholdPx =
                         with(LocalDensity.current) { 112.dp.toPx() }
                     val autoScrollStepPx =
-                        with(LocalDensity.current) { 8.5.dp.toPx() }
+                        with(LocalDensity.current) { 7.0.dp.toPx() }
                     var autoScrollDirection by remember(item.id) { mutableIntStateOf(0) }
                     LaunchedEffect(isDragging) {
                         while (isDragging) {
@@ -1559,8 +1443,7 @@ private fun CountingScreen(
                                 // edge zone, faster only at the extreme edge.
                                 val step =
                                     autoScrollStepPx *
-                                        (0.22f + ratio * 0.48f) *
-                                        if (direction < 0) 1.18f else 0.88f
+                                        (0.30f + ratio * 0.40f)
 
                                 listState.scrollBy(step * direction)
 
@@ -1588,9 +1471,9 @@ private fun CountingScreen(
 
                                 // Reorder background items even if the user's
                                 // finger is stationary inside the edge zone.
-                                detailedReorderCompensation(
+                                detailedReorderAtPointer(
                                     item.id,
-                                    dragOffsetY
+                                    dragFingerCenterY
                                 )
                             }
 
@@ -1617,8 +1500,10 @@ private fun CountingScreen(
                                 if (!assignmentMode) {
                                     detectDragGesturesAfterLongPress(
                                         onDragStart = {
-                                            reorderActive = true
-                                            lastCountingReorderAt = 0L
+                                                                                                                                    countingReorder.begin(
+                                                item.id,
+                                                CountingReorderMode.DETAILED
+                                            )
                                             isDragging = true
                                             dragOffsetY = 0f
                                             dragFingerCenterY =
@@ -1641,7 +1526,7 @@ private fun CountingScreen(
                                             dragFingerCenterY = Float.NaN
                                             dragPointerY = Float.NaN
                                             autoScrollDirection = 0
-                                            finishVisualReorder(commit = false)
+                                            finishCountingReorder(commit = false)
                                         },
                                         onDragEnd = {
                                             isDragging = false
@@ -1650,7 +1535,7 @@ private fun CountingScreen(
                                             dragFingerCenterY = Float.NaN
                                             dragPointerY = Float.NaN
                                             autoScrollDirection = 0
-                                            finishVisualReorder(commit = true)
+                                            finishCountingReorder(commit = true)
                                         },
                                         onDrag = { change, dragAmount ->
                                             change.consume()
@@ -1681,9 +1566,9 @@ private fun CountingScreen(
 
                                             // The dragged visual stays anchored;
                                             // only the placeholder/background order changes.
-                                            detailedReorderCompensation(
+                                            detailedReorderAtPointer(
                                                 item.id,
-                                                dragOffsetY
+                                                dragFingerCenterY
                                             )
                                             dragScope.launch {
                                                 withFrameNanos { }
