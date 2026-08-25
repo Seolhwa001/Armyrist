@@ -148,6 +148,34 @@ class CommonCollectionRepository(context: Context) {
     }
 
     @Synchronized
+    fun replaceFolderOrder(
+        toolType: CollectionToolType,
+        orderedFolderIds: List<String>
+    ): Boolean {
+        val current = load()
+        val toolFolders = current.filter { it.toolType == toolType }
+
+        if (orderedFolderIds.distinct().size != orderedFolderIds.size) return false
+        if (orderedFolderIds.toSet() != toolFolders.map { it.id }.toSet()) return false
+
+        val orderById = orderedFolderIds.withIndex().associate { it.value to it.index }
+        val now = System.currentTimeMillis()
+
+        return persist(
+            current.map { folder ->
+                if (folder.toolType == toolType) {
+                    folder.copy(
+                        order = orderById[folder.id] ?: folder.order,
+                        updatedAt = now
+                    )
+                } else {
+                    folder
+                }
+            }
+        )
+    }
+
+    @Synchronized
     fun replaceMemberOrder(folderId: String, orderedMemberIds: List<String>): Boolean {
         val current = load()
         val target = current.firstOrNull { it.id == folderId } ?: return false
