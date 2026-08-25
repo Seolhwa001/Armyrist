@@ -644,8 +644,11 @@ private fun CountingScreen(
                 height = info.size.toFloat()
             )
         }
-        val target = countingReorder.detailedTarget(pointerY, slots) ?: return
-        countingReorder.moveTo(target, android.os.SystemClock.uptimeMillis())
+        countingReorder.updateDetailed(
+            pointerY,
+            slots,
+            android.os.SystemClock.uptimeMillis()
+        )
     }
 
     fun compactReorderAtPointer(itemId: String, pointerX: Float, pointerY: Float) {
@@ -663,9 +666,12 @@ private fun CountingScreen(
                 height = info.size.height.toFloat()
             )
         }
-        val target =
-            countingReorder.compactTarget(pointerX, pointerY, slots) ?: return
-        countingReorder.moveTo(target, android.os.SystemClock.uptimeMillis())
+        countingReorder.updateCompact(
+            pointerX,
+            pointerY,
+            slots,
+            android.os.SystemClock.uptimeMillis()
+        )
     }
 
     fun finishCountingReorder(commit: Boolean) {
@@ -873,7 +879,7 @@ private fun CountingScreen(
                         val compactEdgeThresholdPx =
                             with(LocalDensity.current) { 112.dp.toPx() }
                         val compactAutoScrollStepPx =
-                            with(LocalDensity.current) { 7.0.dp.toPx() }
+                            with(LocalDensity.current) { 5.0.dp.toPx() }
                         var compactAutoScrollDirection by remember(item.id) { mutableIntStateOf(0) }
                         LaunchedEffect(compactDragging) {
                             while (compactDragging) {
@@ -909,7 +915,7 @@ private fun CountingScreen(
                                             ).coerceIn(0f, 1f)
                                     val step =
                                         compactAutoScrollStepPx *
-                                            (0.30f + ratio * 0.40f)
+                                            (0.28f + ratio * 0.42f)
 
                                     compactGridState.scrollBy(
                                         step * direction
@@ -1146,38 +1152,6 @@ private fun CountingScreen(
                                                                 }
 
                                                             compactReorderAtPointer(item.id, compactFingerCenterX, compactFingerCenterY)
-                                                            compactDragScope.launch {
-                                                                withFrameNanos { }
-                                                                compactGridState.layoutInfo.visibleItemsInfo
-                                                                    .firstOrNull { it.key == item.id }
-                                                                    ?.let {
-                                                                        if (!compactFingerCenterX.isNaN() && !compactPointerY.isNaN()) {
-                                                                            val gridNow =
-                                                                                compactGridState.layoutInfo
-                                                                            val halfH =
-                                                                                it.size.height / 2f
-                                                                            compactFingerCenterY =
-                                                                                compactPointerY.coerceIn(
-                                                                                    gridNow.viewportStartOffset +
-                                                                                        halfH,
-                                                                                    gridNow.viewportEndOffset -
-                                                                                        halfH
-                                                                                )
-                                                                            compactDragOffsetX =
-                                                                                compactFingerCenterX -
-                                                                                    (
-                                                                                        it.offset.x +
-                                                                                            it.size.width / 2f
-                                                                                        )
-                                                                            compactDragOffsetY =
-                                                                                compactFingerCenterY -
-                                                                                    (
-                                                                                        it.offset.y +
-                                                                                            halfH
-                                                                                        )
-                                                                        }
-                                                                    }
-                                                            }
 
                                                             val layout =
                                                                 compactGridState.layoutInfo
@@ -1408,7 +1382,7 @@ private fun CountingScreen(
                     val edgeThresholdPx =
                         with(LocalDensity.current) { 112.dp.toPx() }
                     val autoScrollStepPx =
-                        with(LocalDensity.current) { 7.0.dp.toPx() }
+                        with(LocalDensity.current) { 5.0.dp.toPx() }
                     var autoScrollDirection by remember(item.id) { mutableIntStateOf(0) }
                     LaunchedEffect(isDragging) {
                         while (isDragging) {
@@ -1443,7 +1417,7 @@ private fun CountingScreen(
                                 // edge zone, faster only at the extreme edge.
                                 val step =
                                     autoScrollStepPx *
-                                        (0.30f + ratio * 0.40f)
+                                        (0.28f + ratio * 0.42f)
 
                                 listState.scrollBy(step * direction)
 
@@ -1570,16 +1544,6 @@ private fun CountingScreen(
                                                 item.id,
                                                 dragFingerCenterY
                                             )
-                                            dragScope.launch {
-                                                withFrameNanos { }
-                                                listState.layoutInfo.visibleItemsInfo
-                                                    .firstOrNull { it.key == item.id }
-                                                    ?.let {
-                                                        if (!dragFingerCenterY.isNaN()) {
-                                                            dragOffsetY = dragFingerCenterY - (it.offset + it.size / 2f)
-                                                        }
-                                                    }
-                                            }
 
                                             val info =
                                                 listState.layoutInfo
