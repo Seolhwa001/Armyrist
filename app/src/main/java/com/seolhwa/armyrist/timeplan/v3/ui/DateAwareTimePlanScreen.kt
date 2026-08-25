@@ -453,6 +453,7 @@ private fun DateAwarePlanList(
     }
 
     val orderedPlans = remember { mutableStateListOf<DateAwareTimePlan>() }
+    val folderVisualOrder = remember { mutableStateListOf<String>() }
     var draggingPlanId by remember { mutableStateOf<String?>(null) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     var reorderDirty by remember { mutableStateOf(false) }
@@ -474,6 +475,13 @@ private fun DateAwarePlanList(
         }
     }
 
+    LaunchedEffect(openedFolderId, collectionRevision, draggingPlanId) {
+        if (draggingPlanId == null) {
+            folderVisualOrder.clear()
+            folderVisualOrder.addAll(openedFolder?.memberIds.orEmpty())
+        }
+    }
+
     fun togglePlanSelection(planId: String) {
         selectedPlanIds =
             if (planId in selectedPlanIds) selectedPlanIds.filterNot { it == planId }
@@ -486,16 +494,36 @@ private fun DateAwarePlanList(
             orderedPlans.filter { memberToFolder[it.id] == null }
         } else {
             val byId = orderedPlans.associateBy { it.id }
-            currentFolder.memberIds.mapNotNull(byId::get)
+            val order =
+                if (folderVisualOrder.isNotEmpty()) folderVisualOrder
+                else currentFolder.memberIds
+            order.mapNotNull(byId::get)
         }
     }
 
     fun finishReorder(commit: Boolean) {
+        val currentFolder = openedFolder
         if (commit && reorderDirty) {
-            onOrderChanged(orderedPlans.map { it.id })
+            if (currentFolder != null) {
+                if (
+                    collectionRepository.replaceMemberOrder(
+                        currentFolder.id,
+                        folderVisualOrder.toList()
+                    )
+                ) {
+                    collectionRevision++
+                }
+            } else {
+                onOrderChanged(orderedPlans.map { it.id })
+            }
         } else if (!commit) {
-            orderedPlans.clear()
-            orderedPlans.addAll(datePlans)
+            if (currentFolder != null) {
+                folderVisualOrder.clear()
+                folderVisualOrder.addAll(currentFolder.memberIds)
+            } else {
+                orderedPlans.clear()
+                orderedPlans.addAll(datePlans)
+            }
         }
         draggingPlanId = null
         dragOffsetY = 0f
@@ -792,6 +820,7 @@ private fun DateAwarePlanList(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .animateItem()
                             .zIndex(if (isDragging) 2f else 0f)
                             .graphicsLayer {
                                 translationY = if (isDragging) dragOffsetY else 0f
@@ -879,12 +908,21 @@ private fun DateAwarePlanList(
                                                     }
 
                                                 if (target != null) {
-                                                    val fromIndex = orderedPlans
-                                                        .indexOfFirst { it.id == plan.id }
                                                     val targetId = (target.key as String)
                                                         .removePrefix("v3-")
-                                                    val targetIndex = orderedPlans
-                                                        .indexOfFirst { it.id == targetId }
+                                                    val folderMode = openedFolder != null
+                                                    val fromIndex =
+                                                        if (folderMode) {
+                                                            folderVisualOrder.indexOf(plan.id)
+                                                        } else {
+                                                            orderedPlans.indexOfFirst { it.id == plan.id }
+                                                        }
+                                                    val targetIndex =
+                                                        if (folderMode) {
+                                                            folderVisualOrder.indexOf(targetId)
+                                                        } else {
+                                                            orderedPlans.indexOfFirst { it.id == targetId }
+                                                        }
 
                                                     val crossedTarget =
                                                         if (targetIndex > fromIndex) {
@@ -903,10 +941,15 @@ private fun DateAwarePlanList(
                                                     ) {
                                                         val oldOffset = draggedInfo.offset
                                                         val targetOffset = target.offset
-                                                        val moved = orderedPlans.removeAt(fromIndex)
-                                                        orderedPlans.add(targetIndex, moved)
-                                                        // Keep the card visually under the finger
-                                                        // while the LazyColumn recomposes around it.
+
+                                                        if (folderMode) {
+                                                            val movedId = folderVisualOrder.removeAt(fromIndex)
+                                                            folderVisualOrder.add(targetIndex, movedId)
+                                                        } else {
+                                                            val moved = orderedPlans.removeAt(fromIndex)
+                                                            orderedPlans.add(targetIndex, moved)
+                                                        }
+
                                                         dragOffsetY += (oldOffset - targetOffset)
                                                         reorderDirty = true
                                                         view.performHapticFeedback(
