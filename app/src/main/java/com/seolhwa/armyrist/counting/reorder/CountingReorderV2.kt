@@ -16,36 +16,48 @@ data class CountingReorderSlot(
 )
 
 /**
- * Counting reorder V3.
+ * Counting reorder V4 — placeholder transaction model.
  *
- * Unlike the failed nearest-slot V2, this controller only permits an adjacent
- * logical move after the pointer has clearly crossed that neighbour's gate.
- * This prevents a stationary pointer from making the list oscillate and keeps
- * Detailed and Compact on one shared order.
+ * Important invariant:
+ * - During drag, canonicalItems never change order.
+ * - Only previewOrder (the placeholder position) changes.
+ * - commitOrder() is the only operation that publishes a new canonical order.
+ *
+ * This prevents repository/layout churn from becoming the drag state itself.
  */
 @Stable
 class CountingReorderV2(initialItems: List<CountingItem>) {
-    val items = mutableStateListOf<CountingItem>().apply {
+    private val canonicalItems = mutableStateListOf<CountingItem>().apply {
         addAll(initialItems.sortedBy { it.order })
     }
+    private val previewOrder = mutableStateListOf<String>().apply {
+        addAll(canonicalItems.map { it.id })
+    }
+
+    /** UI projection. During drag this reflects placeholder order only. */
+    val items: List<CountingItem>
+        get() {
+            val byId = canonicalItems.associateBy { it.id }
+            return previewOrder.mapNotNull(byId::get)
+        }
 
     var draggingItemId: String? = null
         private set
     var mode: CountingReorderMode? = null
         private set
 
-    private var startOrder: List<String> = items.map { it.id }
+    private var startOrder: List<String> = previewOrder.toList()
     private var pendingCommit: List<String>? = null
-    private var lastMoveAt: Long = 0L
+    private var lastPlaceholderMoveAt = 0L
 
     val isDragging: Boolean get() = draggingItemId != null
 
     fun begin(itemId: String, newMode: CountingReorderMode) {
-        if (items.none { it.id == itemId }) return
+        if (canonicalItems.none { it.id == itemId }) return
         draggingItemId = itemId
         mode = newMode
-        startOrder = items.map { it.id }
-        lastMoveAt = 0L
+        startOrder = previewOrder.toList()
+        lastPlaceholderMoveAt = 0L
     }
 
     fun sync(latestItems: List<CountingItem>) {
@@ -53,144 +65,139 @@ class CountingReorderV2(initialItems: List<CountingItem>) {
         val latest = latestItems.sortedBy { it.order }
         val ids = latest.map { it.id }
         val byId = latest.associateBy { it.id }
-        val pending = pendingCommit
 
-        // A repository emission can briefly contain the pre-drop order.
-        // Refresh contents, but never allow that stale order to roll the UI back.
-        if (pending != null && ids != pending) {
-            for (i in items.indices) {
-                byId[items[i].id]?.let { items[i] = it }
-            }
+        // Refresh item contents without allowing a stale repository order
+        // to overwrite a just-committed preview order.
+        val pending = pendingCommit
+        canonicalItems.clear()
+        if (pending != null && ids != pending && pending.all(byId::containsKey)) {
+            canonicalItems.addAll(pending.mapNotNull(byId::get))
+            previewOrder.clear()
+            previewOrder.addAll(pending)
             return
         }
 
-        if (items.map { it.id } != ids) {
-            items.clear()
-            items.addAll(latest)
-        } else {
-            for (i in items.indices) {
-                byId[items[i].id]?.let { items[i] = it }
-            }
-        }
+        canonicalItems.addAll(latest)
+        previewOrder.clear()
+        previewOrder.addAll(ids)
         if (pending != null && ids == pending) pendingCommit = null
     }
 
     fun cancel(latestItems: List<CountingItem>) {
-        val byId = latestItems.associateBy { it.id }
-        val restored = startOrder.mapNotNull(byId::get)
-        items.clear()
-        if (restored.size == latestItems.size) items.addAll(restored)
-        else items.addAll(latestItems.sortedBy { it.order })
+        val latestById = latestItems.associateBy { it.id }
+        previewOrder.clear()
+        previewOrder.addAll(startOrder.filter(latestById::containsKey))
+        if (previewOrder.size != latestItems.size) {
+            previewOrder.clear()
+            previewOrder.addAll(latestItems.sortedBy { it.order }.map { it.id })
+        }
         draggingItemId = null
         mode = null
-        lastMoveAt = 0L
+        lastPlaceholderMoveAt = 0L
     }
 
     fun commitOrder(): List<String> {
-        val order = items.map { it.id }
+        val order = previewOrder.toList()
         pendingCommit = order
+
+        val byId = canonicalItems.associateBy { it.id }
+        canonicalItems.clear()
+        canonicalItems.addAll(order.mapNotNull(byId::get))
+
         draggingItemId = null
         mode = null
-        lastMoveAt = 0L
+        lastPlaceholderMoveAt = 0L
         return order
     }
 
-    /**
-     * Keep the currently visible order authoritative across a Detailed/Compact
-     * layout switch. The repository may still emit the pre-drop snapshot for a
-     * short time, so treat the current IDs exactly like a pending commit.
-     */
-    fun pinCurrentOrder() {
-        pendingCommit = items.map { it.id }
-    }
-
-    /** Move exactly one logical slot. Never jump across several cells in one frame. */
-    private fun moveOne(direction: Int, nowMs: Long): Boolean {
+    private fun movePlaceholder(direction: Int, nowMs: Long): Boolean {
         val id = draggingItemId ?: return false
-        if (direction == 0 || nowMs - lastMoveAt < 74L) return false
-        val from = items.indexOfFirst { it.id == id }
+        if (direction == 0 || nowMs - lastPlaceholderMoveAt < 86L) return false
+        val from = previewOrder.indexOf(id)
         if (from < 0) return false
-        val to = (from + direction.coerceIn(-1, 1)).coerceIn(0, items.lastIndex)
+        val to = (from + direction.coerceIn(-1, 1)).coerceIn(0, previewOrder.lastIndex)
         if (from == to) return false
-        val moved = items.removeAt(from)
-        items.add(to, moved)
-        lastMoveAt = nowMs
+
+        previewOrder.removeAt(from)
+        previewOrder.add(to, id)
+        lastPlaceholderMoveAt = nowMs
         return true
     }
 
     /**
-     * Detailed: only the immediately adjacent slot can open. A 14% hysteresis
-     * gate prevents repeated back/forth moves around the centre line.
+     * Detailed: the finger crosses the boundary between the dragged slot and
+     * the adjacent slot. We do not wait until the dragged card passes the
+     * neighbour's centre.
      */
-    fun updateDetailed(pointerY: Float, slots: List<CountingReorderSlot>, nowMs: Long): Boolean {
+    fun updateDetailed(
+        pointerY: Float,
+        slots: List<CountingReorderSlot>,
+        nowMs: Long
+    ): Boolean {
         val id = draggingItemId ?: return false
-        val current = items.indexOfFirst { it.id == id }
+        val current = previewOrder.indexOf(id)
         if (current < 0) return false
 
+        val currentSlot = slots.firstOrNull { it.index == current }
         val next = slots.firstOrNull { it.index == current + 1 }
         if (next != null) {
-            // Entering roughly the first 30% of the next card is enough.
-            val gate = next.centerY - next.height * 0.20f
-            if (pointerY > gate) return moveOne(1, nowMs)
+            val boundary = if (currentSlot != null)
+                (currentSlot.centerY + next.centerY) / 2f
+            else
+                next.centerY - next.height * 0.38f
+            if (pointerY > boundary) return movePlaceholder(1, nowMs)
         }
 
         val previous = slots.firstOrNull { it.index == current - 1 }
         if (previous != null) {
-            // Symmetric rule when moving upward.
-            val gate = previous.centerY + previous.height * 0.20f
-            if (pointerY < gate) return moveOne(-1, nowMs)
+            val boundary = if (currentSlot != null)
+                (currentSlot.centerY + previous.centerY) / 2f
+            else
+                previous.centerY + previous.height * 0.38f
+            if (pointerY < boundary) return movePlaceholder(-1, nowMs)
         }
         return false
     }
 
     /**
-     * Compact: row-major logical order, adjacent slots only. The pointer must
-     * enter well inside the neighbouring cell (not merely become nearest).
+     * Compact: row-major adjacent placeholder only.
+     * Same-row transitions use X boundary; row transitions use Y boundary.
      */
-    fun updateCompact(pointerX: Float, pointerY: Float, slots: List<CountingReorderSlot>, nowMs: Long): Boolean {
+    fun updateCompact(
+        pointerX: Float,
+        pointerY: Float,
+        slots: List<CountingReorderSlot>,
+        nowMs: Long
+    ): Boolean {
         val id = draggingItemId ?: return false
-        val current = items.indexOfFirst { it.id == id }
+        val current = previewOrder.indexOf(id)
         if (current < 0) return false
-
-        fun crossed(
-            slot: CountingReorderSlot,
-            fromSlot: CountingReorderSlot?,
-            forward: Boolean
-        ): Boolean {
-            val sameRow =
-                fromSlot != null &&
-                    kotlin.math.abs(fromSlot.centerY - slot.centerY) <
-                        minOf(fromSlot.height, slot.height) * 0.45f
-
-            return if (sameRow) {
-                // Row-major horizontal move. React as soon as the pointer enters
-                // the leading ~30% of the neighbour instead of waiting for overlap.
-                if (forward) {
-                    pointerX > slot.centerX - slot.width * 0.20f
-                } else {
-                    pointerX < slot.centerX + slot.width * 0.20f
-                }
-            } else {
-                // Row transition. Use the same early-entry rule vertically.
-                if (forward) {
-                    pointerY > slot.centerY - slot.height * 0.20f
-                } else {
-                    pointerY < slot.centerY + slot.height * 0.20f
-                }
-            }
-        }
 
         val currentSlot = slots.firstOrNull { it.index == current }
 
-        val next = slots.firstOrNull { it.index == current + 1 }
-        if (next != null && crossed(next, currentSlot, true)) {
-            return moveOne(1, nowMs)
+        fun crossed(target: CountingReorderSlot, forward: Boolean): Boolean {
+            val sameRow = currentSlot != null &&
+                kotlin.math.abs(currentSlot.centerY - target.centerY) <
+                minOf(currentSlot.height, target.height) * 0.45f
+
+            return if (sameRow) {
+                val boundary = if (currentSlot != null)
+                    (currentSlot.centerX + target.centerX) / 2f
+                else target.centerX
+                if (forward) pointerX > boundary else pointerX < boundary
+            } else {
+                val boundary = if (currentSlot != null)
+                    (currentSlot.centerY + target.centerY) / 2f
+                else target.centerY
+                if (forward) pointerY > boundary else pointerY < boundary
+            }
         }
 
+        val next = slots.firstOrNull { it.index == current + 1 }
+        if (next != null && crossed(next, true)) return movePlaceholder(1, nowMs)
+
         val previous = slots.firstOrNull { it.index == current - 1 }
-        if (previous != null && crossed(previous, currentSlot, false)) {
-            return moveOne(-1, nowMs)
-        }
+        if (previous != null && crossed(previous, false)) return movePlaceholder(-1, nowMs)
 
         return false
     }
