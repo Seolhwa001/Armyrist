@@ -708,16 +708,22 @@ private fun CountingScreen(
                             DropdownMenuItem(
                                 text = { Text(if (viewMode == CountingViewMode.DETAILED) "● 상세 보기 (기본)" else "○ 상세 보기 (기본)") },
                                 onClick = {
+                                    countingReorder.pinCurrentOrder()
                                     viewMode = CountingViewMode.DETAILED
-                                    viewPrefs.edit().putString("counting_view_mode", "DETAILED").apply()
+                                    viewPrefs.edit()
+                                        .putString("counting_view_mode", "DETAILED")
+                                        .apply()
                                     viewMenuOpen = false
                                 }
                             )
                             DropdownMenuItem(
                                 text = { Text(if (viewMode == CountingViewMode.COMPACT) "● 컴팩트 보기" else "○ 컴팩트 보기") },
                                 onClick = {
+                                    countingReorder.pinCurrentOrder()
                                     viewMode = CountingViewMode.COMPACT
-                                    viewPrefs.edit().putString("counting_view_mode", "COMPACT").apply()
+                                    viewPrefs.edit()
+                                        .putString("counting_view_mode", "COMPACT")
+                                        .apply()
                                     viewMenuOpen = false
                                 }
                             )
@@ -879,7 +885,7 @@ private fun CountingScreen(
                         val compactEdgeThresholdPx =
                             with(LocalDensity.current) { 112.dp.toPx() }
                         val compactAutoScrollStepPx =
-                            with(LocalDensity.current) { 5.0.dp.toPx() }
+                            with(LocalDensity.current) { 9.0.dp.toPx() }
                         var compactAutoScrollDirection by remember(item.id) { mutableIntStateOf(0) }
                         LaunchedEffect(compactDragging) {
                             while (compactDragging) {
@@ -915,7 +921,7 @@ private fun CountingScreen(
                                             ).coerceIn(0f, 1f)
                                     val step =
                                         compactAutoScrollStepPx *
-                                            (0.28f + ratio * 0.42f)
+                                            (0.36f + ratio * 0.64f)
 
                                     compactGridState.scrollBy(
                                         step * direction
@@ -1417,7 +1423,7 @@ private fun CountingScreen(
                                 // edge zone, faster only at the extreme edge.
                                 val step =
                                     autoScrollStepPx *
-                                        (0.28f + ratio * 0.42f)
+                                        (0.36f + ratio * 0.64f)
 
                                 listState.scrollBy(step * direction)
 
