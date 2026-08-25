@@ -95,10 +95,19 @@ class CountingReorderV2(initialItems: List<CountingItem>) {
         return order
     }
 
+    /**
+     * Keep the currently visible order authoritative across a Detailed/Compact
+     * layout switch. The repository may still emit the pre-drop snapshot for a
+     * short time, so treat the current IDs exactly like a pending commit.
+     */
+    fun pinCurrentOrder() {
+        pendingCommit = items.map { it.id }
+    }
+
     /** Move exactly one logical slot. Never jump across several cells in one frame. */
     private fun moveOne(direction: Int, nowMs: Long): Boolean {
         val id = draggingItemId ?: return false
-        if (direction == 0 || nowMs - lastMoveAt < 92L) return false
+        if (direction == 0 || nowMs - lastMoveAt < 74L) return false
         val from = items.indexOfFirst { it.id == id }
         if (from < 0) return false
         val to = (from + direction.coerceIn(-1, 1)).coerceIn(0, items.lastIndex)
@@ -120,13 +129,15 @@ class CountingReorderV2(initialItems: List<CountingItem>) {
 
         val next = slots.firstOrNull { it.index == current + 1 }
         if (next != null) {
-            val gate = next.centerY + next.height * 0.14f
+            // Entering roughly the first 30% of the next card is enough.
+            val gate = next.centerY - next.height * 0.20f
             if (pointerY > gate) return moveOne(1, nowMs)
         }
 
         val previous = slots.firstOrNull { it.index == current - 1 }
         if (previous != null) {
-            val gate = previous.centerY - previous.height * 0.14f
+            // Symmetric rule when moving upward.
+            val gate = previous.centerY + previous.height * 0.20f
             if (pointerY < gate) return moveOne(-1, nowMs)
         }
         return false
@@ -141,25 +152,45 @@ class CountingReorderV2(initialItems: List<CountingItem>) {
         val current = items.indexOfFirst { it.id == id }
         if (current < 0) return false
 
-        fun crossed(slot: CountingReorderSlot, forward: Boolean): Boolean {
-            val dx = pointerX - slot.centerX
-            val dy = pointerY - slot.centerY
-            val insideX = kotlin.math.abs(dx) <= slot.width * 0.42f
-            val insideY = kotlin.math.abs(dy) <= slot.height * 0.42f
-            if (insideX && insideY) return true
-            // For vertical row transitions, Y is the stronger signal.
-            return if (forward) {
-                pointerY > slot.centerY + slot.height * 0.18f
+        fun crossed(
+            slot: CountingReorderSlot,
+            fromSlot: CountingReorderSlot?,
+            forward: Boolean
+        ): Boolean {
+            val sameRow =
+                fromSlot != null &&
+                    kotlin.math.abs(fromSlot.centerY - slot.centerY) <
+                        minOf(fromSlot.height, slot.height) * 0.45f
+
+            return if (sameRow) {
+                // Row-major horizontal move. React as soon as the pointer enters
+                // the leading ~30% of the neighbour instead of waiting for overlap.
+                if (forward) {
+                    pointerX > slot.centerX - slot.width * 0.20f
+                } else {
+                    pointerX < slot.centerX + slot.width * 0.20f
+                }
             } else {
-                pointerY < slot.centerY - slot.height * 0.18f
+                // Row transition. Use the same early-entry rule vertically.
+                if (forward) {
+                    pointerY > slot.centerY - slot.height * 0.20f
+                } else {
+                    pointerY < slot.centerY + slot.height * 0.20f
+                }
             }
         }
 
+        val currentSlot = slots.firstOrNull { it.index == current }
+
         val next = slots.firstOrNull { it.index == current + 1 }
-        if (next != null && crossed(next, true)) return moveOne(1, nowMs)
+        if (next != null && crossed(next, currentSlot, true)) {
+            return moveOne(1, nowMs)
+        }
 
         val previous = slots.firstOrNull { it.index == current - 1 }
-        if (previous != null && crossed(previous, false)) return moveOne(-1, nowMs)
+        if (previous != null && crossed(previous, currentSlot, false)) {
+            return moveOne(-1, nowMs)
+        }
 
         return false
     }
