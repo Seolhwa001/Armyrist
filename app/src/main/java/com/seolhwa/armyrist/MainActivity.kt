@@ -699,7 +699,7 @@ private fun CountingScreen(
         if (!crossed) return 0f
 
         val now = android.os.SystemClock.uptimeMillis()
-        if (now - lastCountingReorderAt < 72L) return 0f
+        if (now - lastCountingReorderAt < 58L) return 0f
 
         val oldOffset = draggedInfo.offset.toFloat()
         val targetOffset = target.offset.toFloat()
@@ -754,7 +754,7 @@ private fun CountingScreen(
         if (!enteredTarget) return 0f to 0f
 
         val now = android.os.SystemClock.uptimeMillis()
-        if (now - lastCountingReorderAt < 72L) return 0f to 0f
+        if (now - lastCountingReorderAt < 58L) return 0f to 0f
 
         val compensateX = (draggedInfo.offset.x - target.offset.x).toFloat()
         val compensateY = (draggedInfo.offset.y - target.offset.y).toFloat()
@@ -957,8 +957,15 @@ private fun CountingScreen(
                         var compactDragOffsetY by remember(item.id) {
                             mutableFloatStateOf(0f)
                         }
-                        var compactFingerCenterX by remember(item.id) { mutableFloatStateOf(Float.NaN) }
-                        var compactFingerCenterY by remember(item.id) { mutableFloatStateOf(Float.NaN) }
+                        var compactFingerCenterX by remember(item.id) {
+                            mutableFloatStateOf(Float.NaN)
+                        }
+                        var compactFingerCenterY by remember(item.id) {
+                            mutableFloatStateOf(Float.NaN)
+                        }
+                        var compactPointerY by remember(item.id) {
+                            mutableFloatStateOf(Float.NaN)
+                        }
                         var compactDragging by remember(item.id) {
                             mutableStateOf(false)
                         }
@@ -969,22 +976,80 @@ private fun CountingScreen(
                         val compactAutoScrollStepPx =
                             with(LocalDensity.current) { 16.dp.toPx() }
                         var compactAutoScrollDirection by remember(item.id) { mutableIntStateOf(0) }
-                        LaunchedEffect(compactDragging, compactAutoScrollDirection) {
-                            while (compactDragging && compactAutoScrollDirection != 0) {
-                                val consumed = compactGridState.scrollBy(
-                                    compactAutoScrollStepPx * compactAutoScrollDirection
-                                )
-                                // Content moves under the finger during edge-scroll.
-                                // Counter that movement so the dragged card stays anchored.
-                                compactDragOffsetY += consumed
+                        LaunchedEffect(compactDragging) {
+                            while (compactDragging) {
+                                val layout = compactGridState.layoutInfo
+                                val topEdge =
+                                    layout.viewportStartOffset +
+                                        compactEdgeThresholdPx
+                                val bottomEdge =
+                                    layout.viewportEndOffset -
+                                        compactEdgeThresholdPx
 
-                                val compensation = compactReorderCompensation(
-                                    item.id,
-                                    compactDragOffsetX,
-                                    compactDragOffsetY
-                                )
-                                compactDragOffsetX += compensation.first
-                                compactDragOffsetY += compensation.second
+                                val direction = when {
+                                    compactPointerY.isNaN() -> 0
+                                    compactPointerY < topEdge -> -1
+                                    compactPointerY > bottomEdge -> 1
+                                    else -> 0
+                                }
+                                compactAutoScrollDirection = direction
+
+                                if (direction != 0) {
+                                    val edgeDepth =
+                                        if (direction < 0) {
+                                            (topEdge - compactPointerY)
+                                                .coerceAtLeast(0f)
+                                        } else {
+                                            (compactPointerY - bottomEdge)
+                                                .coerceAtLeast(0f)
+                                        }
+                                    val ratio =
+                                        (
+                                            edgeDepth /
+                                                compactEdgeThresholdPx
+                                            ).coerceIn(0f, 1f)
+                                    val step =
+                                        compactAutoScrollStepPx *
+                                            (0.30f + ratio * 0.70f)
+
+                                    compactGridState.scrollBy(
+                                        step * direction
+                                    )
+
+                                    compactGridState.layoutInfo
+                                        .visibleItemsInfo
+                                        .firstOrNull {
+                                            it.key == item.id
+                                        }
+                                        ?.let {
+                                            if (
+                                                !compactFingerCenterX.isNaN() &&
+                                                !compactFingerCenterY.isNaN()
+                                            ) {
+                                                compactDragOffsetX =
+                                                    compactFingerCenterX -
+                                                        (
+                                                            it.offset.x +
+                                                                it.size.width / 2f
+                                                            )
+                                                compactDragOffsetY =
+                                                    compactFingerCenterY -
+                                                        (
+                                                            it.offset.y +
+                                                                it.size.height / 2f
+                                                            )
+                                            }
+                                        }
+
+                                    // Keep reordering the background while the
+                                    // finger remains stationary at the edge.
+                                    compactReorderCompensation(
+                                        item.id,
+                                        compactDragOffsetX,
+                                        compactDragOffsetY
+                                    )
+                                }
+
                                 delay(16)
                             }
                         }
@@ -1089,8 +1154,14 @@ private fun CountingScreen(
                                                             compactGridState.layoutInfo.visibleItemsInfo
                                                                 .firstOrNull { it.key == item.id }
                                                                 ?.let {
-                                                                    compactFingerCenterX = it.offset.x + it.size.width / 2f
-                                                                    compactFingerCenterY = it.offset.y + it.size.height / 2f
+                                                                    compactFingerCenterX =
+                                                                        it.offset.x +
+                                                                            it.size.width / 2f
+                                                                    compactFingerCenterY =
+                                                                        it.offset.y +
+                                                                            it.size.height / 2f
+                                                                    compactPointerY =
+                                                                        compactFingerCenterY
                                                                 }
                                                             compactHaptic.performHapticFeedback(
                                                                 HapticFeedbackType.LongPress
@@ -1103,6 +1174,8 @@ private fun CountingScreen(
                                                             compactDragOffsetY = 0f
                                                             compactFingerCenterX = Float.NaN
                                                             compactFingerCenterY = Float.NaN
+                                                            compactPointerY = Float.NaN
+                                                            compactAutoScrollDirection = 0
                                                             finishVisualReorder(commit = false)
                                                         },
                                                         onDragEnd = {
@@ -1112,6 +1185,8 @@ private fun CountingScreen(
                                                             compactDragOffsetY = 0f
                                                             compactFingerCenterX = Float.NaN
                                                             compactFingerCenterY = Float.NaN
+                                                            compactPointerY = Float.NaN
+                                                            compactAutoScrollDirection = 0
                                                             finishVisualReorder(commit = true)
                                                         },
                                                         onDrag = { change, dragAmount ->
@@ -1124,8 +1199,12 @@ private fun CountingScreen(
                                                                         compactFingerCenterY = it.offset.y + it.size.height / 2f + compactDragOffsetY
                                                                     }
                                                             }
-                                                            compactFingerCenterX += dragAmount.x
-                                                            compactFingerCenterY += dragAmount.y
+                                                            compactFingerCenterX +=
+                                                                dragAmount.x
+                                                            compactFingerCenterY +=
+                                                                dragAmount.y
+                                                            compactPointerY +=
+                                                                dragAmount.y
                                                             compactGridState.layoutInfo.visibleItemsInfo
                                                                 .firstOrNull { it.key == item.id }
                                                                 ?.let {
@@ -1361,7 +1440,12 @@ private fun CountingScreen(
                     var dragOffsetY by remember(item.id) {
                         mutableFloatStateOf(0f)
                     }
-                    var dragFingerCenterY by remember(item.id) { mutableFloatStateOf(Float.NaN) }
+                    var dragFingerCenterY by remember(item.id) {
+                        mutableFloatStateOf(Float.NaN)
+                    }
+                    var dragPointerY by remember(item.id) {
+                        mutableFloatStateOf(Float.NaN)
+                    }
                     var isDragging by remember(item.id) {
                         mutableStateOf(false)
                     }
@@ -1372,17 +1456,66 @@ private fun CountingScreen(
                     val autoScrollStepPx =
                         with(LocalDensity.current) { 11.dp.toPx() }
                     var autoScrollDirection by remember(item.id) { mutableIntStateOf(0) }
-                    LaunchedEffect(isDragging, autoScrollDirection) {
-                        while (isDragging && autoScrollDirection != 0) {
-                            val consumed =
-                                listState.scrollBy(autoScrollStepPx * autoScrollDirection)
+                    LaunchedEffect(isDragging) {
+                        while (isDragging) {
+                            val layout = listState.layoutInfo
+                            val topEdge =
+                                layout.viewportStartOffset + edgeThresholdPx
+                            val bottomEdge =
+                                layout.viewportEndOffset - edgeThresholdPx
 
-                            // Keep the dragged card visually fixed to the finger while
-                            // the list continuously scrolls underneath it.
-                            val current = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == item.id }
-                            if (current != null && !dragFingerCenterY.isNaN()) {
-                                dragOffsetY = dragFingerCenterY - (current.offset + current.size / 2f)
+                            val direction = when {
+                                dragPointerY.isNaN() -> 0
+                                dragPointerY < topEdge -> -1
+                                dragPointerY > bottomEdge -> 1
+                                else -> 0
                             }
+                            autoScrollDirection = direction
+
+                            if (direction != 0) {
+                                val edgeDepth =
+                                    if (direction < 0) {
+                                        (topEdge - dragPointerY)
+                                            .coerceAtLeast(0f)
+                                    } else {
+                                        (dragPointerY - bottomEdge)
+                                            .coerceAtLeast(0f)
+                                    }
+                                val ratio =
+                                    (edgeDepth / edgeThresholdPx)
+                                        .coerceIn(0f, 1f)
+
+                                // Continuous but controlled: slow on entering the
+                                // edge zone, faster only at the extreme edge.
+                                val step =
+                                    autoScrollStepPx *
+                                        (0.30f + ratio * 0.70f)
+
+                                listState.scrollBy(step * direction)
+
+                                // The background scrolls. The selected visual is
+                                // re-anchored to the same finger coordinate.
+                                listState.layoutInfo.visibleItemsInfo
+                                    .firstOrNull { it.key == item.id }
+                                    ?.let {
+                                        if (!dragFingerCenterY.isNaN()) {
+                                            dragOffsetY =
+                                                dragFingerCenterY -
+                                                    (
+                                                        it.offset +
+                                                            it.size / 2f
+                                                        )
+                                        }
+                                    }
+
+                                // Reorder background items even if the user's
+                                // finger is stationary inside the edge zone.
+                                detailedReorderCompensation(
+                                    item.id,
+                                    dragOffsetY
+                                )
+                            }
+
                             delay(16)
                         }
                     }
@@ -1410,9 +1543,15 @@ private fun CountingScreen(
                                             lastCountingReorderAt = 0L
                                             isDragging = true
                                             dragOffsetY = 0f
-                                            dragFingerCenterY = listState.layoutInfo.visibleItemsInfo
-                                                .firstOrNull { it.key == item.id }
-                                                ?.let { it.offset + it.size / 2f } ?: Float.NaN
+                                            dragFingerCenterY =
+                                                listState.layoutInfo.visibleItemsInfo
+                                                    .firstOrNull { it.key == item.id }
+                                                    ?.let {
+                                                        it.offset +
+                                                            it.size / 2f
+                                                    }
+                                                    ?: Float.NaN
+                                            dragPointerY = dragFingerCenterY
                                             haptic.performHapticFeedback(
                                                 HapticFeedbackType.LongPress
                                             )
@@ -1422,6 +1561,8 @@ private fun CountingScreen(
                                             autoScrollDirection = 0
                                             dragOffsetY = 0f
                                             dragFingerCenterY = Float.NaN
+                                            dragPointerY = Float.NaN
+                                            autoScrollDirection = 0
                                             finishVisualReorder(commit = false)
                                         },
                                         onDragEnd = {
@@ -1429,6 +1570,8 @@ private fun CountingScreen(
                                             autoScrollDirection = 0
                                             dragOffsetY = 0f
                                             dragFingerCenterY = Float.NaN
+                                            dragPointerY = Float.NaN
+                                            autoScrollDirection = 0
                                             finishVisualReorder(commit = true)
                                         },
                                         onDrag = { change, dragAmount ->
@@ -1439,11 +1582,25 @@ private fun CountingScreen(
                                                     ?.let { dragFingerCenterY = it.offset + it.size / 2f + dragOffsetY }
                                             }
                                             dragFingerCenterY += dragAmount.y
+                                            dragPointerY += dragAmount.y
+
                                             listState.layoutInfo.visibleItemsInfo
                                                 .firstOrNull { it.key == item.id }
-                                                ?.let { dragOffsetY = dragFingerCenterY - (it.offset + it.size / 2f) }
+                                                ?.let {
+                                                    dragOffsetY =
+                                                        dragFingerCenterY -
+                                                            (
+                                                                it.offset +
+                                                                    it.size / 2f
+                                                                )
+                                                }
 
-                                            detailedReorderCompensation(item.id, dragOffsetY)
+                                            // The dragged visual stays anchored;
+                                            // only the placeholder/background order changes.
+                                            detailedReorderCompensation(
+                                                item.id,
+                                                dragOffsetY
+                                            )
                                             dragScope.launch {
                                                 withFrameNanos { }
                                                 listState.layoutInfo.visibleItemsInfo
