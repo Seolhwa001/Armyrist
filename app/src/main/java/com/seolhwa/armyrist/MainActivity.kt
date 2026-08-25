@@ -624,6 +624,31 @@ private fun CountingScreen(
         CountingReorderV2(sheet.items)
     }
     val visualItems = countingReorder.items
+    val countingDensity = LocalDensity.current
+
+    // Counting-specific detached drag visual.
+    // The Lazy item remains only as an invisible placeholder while this
+    // overlay follows the pointer independently from Lazy placement.
+    var dragOverlayItemId by remember(sheet.id) { mutableStateOf<String?>(null) }
+    var dragOverlayCompact by remember(sheet.id) { mutableStateOf(false) }
+    var dragOverlayX by remember(sheet.id) { mutableFloatStateOf(0f) }
+    var dragOverlayY by remember(sheet.id) { mutableFloatStateOf(0f) }
+    var dragOverlayWidth by remember(sheet.id) { mutableFloatStateOf(0f) }
+    var dragOverlayHeight by remember(sheet.id) { mutableFloatStateOf(0f) }
+
+    fun clearCountingOverlay() {
+        dragOverlayItemId = null
+        dragOverlayX = 0f
+        dragOverlayY = 0f
+        dragOverlayWidth = 0f
+        dragOverlayHeight = 0f
+    }
+
+    fun overlayCenterX(): Float =
+        dragOverlayX + dragOverlayWidth / 2f
+
+    fun overlayCenterY(): Float =
+        dragOverlayY + dragOverlayHeight / 2f
 
     LaunchedEffect(sheet.updatedAt, sheet.items.size, countingReorder.isDragging) {
         countingReorder.sync(sheet.items)
@@ -820,6 +845,11 @@ private fun CountingScreen(
             // lazy layouts alive during Crossfade caused stale placement frames and
             // visible flashing after drag/reorder. Render exactly one layout.
             val animatedViewMode = viewMode
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
             if (animatedViewMode == CountingViewMode.COMPACT) {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
@@ -879,7 +909,7 @@ private fun CountingScreen(
                         val compactEdgeThresholdPx =
                             with(LocalDensity.current) { 112.dp.toPx() }
                         val compactAutoScrollStepPx =
-                            with(LocalDensity.current) { 10.5.dp.toPx() }
+                            with(LocalDensity.current) { 10.0.dp.toPx() }
                         var compactAutoScrollDirection by remember(item.id) { mutableIntStateOf(0) }
                         LaunchedEffect(compactDragging) {
                             while (compactDragging) {
@@ -915,7 +945,7 @@ private fun CountingScreen(
                                             ).coerceIn(0f, 1f)
                                     val step =
                                         compactAutoScrollStepPx *
-                                            (0.32f + ratio * 0.68f)
+                                            (0.30f + ratio * 0.60f)
 
                                     compactGridState.scrollBy(
                                         step * direction
@@ -960,8 +990,8 @@ private fun CountingScreen(
                                     // finger remains stationary at the edge.
                                     compactReorderAtPointer(
                                         item.id,
-                                        compactFingerCenterX,
-                                        compactFingerCenterY
+                                        overlayCenterX(),
+                                        overlayCenterY()
                                     )
                                 }
 
@@ -1020,14 +1050,20 @@ private fun CountingScreen(
                                 }
                             )
                                 .heightIn(min = 96.dp)
-                                .zIndex(if (compactDragging) 2f else 0f)
+                                .zIndex(0f)
                                 .graphicsLayer {
-                                    translationX =
-                                        if (compactDragging) compactDragOffsetX else 0f
-                                    translationY =
-                                        if (compactDragging) compactDragOffsetY else 0f
-                                    shadowElevation =
-                                        if (compactDragging) 4f else 0f
+                                    // Keep this cell's exact layout size as the
+                                    // placeholder, but render its content only
+                                    // through the detached overlay.
+                                    alpha =
+                                        if (dragOverlayItemId == item.id) {
+                                            0f
+                                        } else {
+                                            1f
+                                        }
+                                    translationX = 0f
+                                    translationY = 0f
+                                    shadowElevation = 0f
                                     scaleX = 1f
                                     scaleY = 1f
                                 }
@@ -1079,6 +1115,17 @@ private fun CountingScreen(
                                                                             it.size.height / 2f
                                                                     compactPointerY =
                                                                         compactFingerCenterY
+
+                                                                    dragOverlayItemId = item.id
+                                                                    dragOverlayCompact = true
+                                                                    dragOverlayX =
+                                                                        it.offset.x.toFloat()
+                                                                    dragOverlayY =
+                                                                        it.offset.y.toFloat()
+                                                                    dragOverlayWidth =
+                                                                        it.size.width.toFloat()
+                                                                    dragOverlayHeight =
+                                                                        it.size.height.toFloat()
                                                                 }
                                                             compactHaptic.performHapticFeedback(
                                                                 HapticFeedbackType.LongPress
@@ -1094,6 +1141,8 @@ private fun CountingScreen(
                                                             compactPointerY = Float.NaN
                                                             compactAutoScrollDirection = 0
                                                             finishCountingReorder(commit = false)
+                                            clearCountingOverlay()
+                                                            clearCountingOverlay()
                                                         },
                                                         onDragEnd = {
                                                             compactDragging = false
@@ -1105,6 +1154,8 @@ private fun CountingScreen(
                                                             compactPointerY = Float.NaN
                                                             compactAutoScrollDirection = 0
                                                             finishCountingReorder(commit = true)
+                                            clearCountingOverlay()
+                                                            clearCountingOverlay()
                                                         },
                                                         onDrag = { change, dragAmount ->
                                                             change.consume()
@@ -1120,6 +1171,35 @@ private fun CountingScreen(
                                                                 dragAmount.x
                                                             compactPointerY +=
                                                                 dragAmount.y
+
+                                                            // Detached overlay follows the pointer.
+                                                            // It may park at a screen edge while the
+                                                            // grid continues scrolling underneath.
+                                                            val compactViewport =
+                                                                compactGridState.layoutInfo
+                                                            val maxOverlayX =
+                                                                (
+                                                                    compactViewport.viewportSize.width -
+                                                                        dragOverlayWidth
+                                                                    ).coerceAtLeast(0f)
+                                                            val maxOverlayY =
+                                                                (
+                                                                    compactViewport.viewportEndOffset -
+                                                                        dragOverlayHeight
+                                                                    ).coerceAtLeast(0f)
+                                                            dragOverlayX =
+                                                                (dragOverlayX + dragAmount.x)
+                                                                    .coerceIn(
+                                                                        0f,
+                                                                        maxOverlayX
+                                                                    )
+                                                            dragOverlayY =
+                                                                (dragOverlayY + dragAmount.y)
+                                                                    .coerceIn(
+                                                                        compactViewport.viewportStartOffset
+                                                                            .toFloat(),
+                                                                        maxOverlayY
+                                                                    )
 
                                                             val compactLayoutNow =
                                                                 compactGridState.layoutInfo
@@ -1151,7 +1231,11 @@ private fun CountingScreen(
                                                                                 )
                                                                 }
 
-                                                            compactReorderAtPointer(item.id, compactFingerCenterX, compactFingerCenterY)
+                                                            compactReorderAtPointer(
+                                                                item.id,
+                                                                overlayCenterX(),
+                                                                overlayCenterY()
+                                                            )
 
                                                             val layout =
                                                                 compactGridState.layoutInfo
@@ -1382,7 +1466,7 @@ private fun CountingScreen(
                     val edgeThresholdPx =
                         with(LocalDensity.current) { 112.dp.toPx() }
                     val autoScrollStepPx =
-                        with(LocalDensity.current) { 5.0.dp.toPx() }
+                        with(LocalDensity.current) { 10.0.dp.toPx() }
                     var autoScrollDirection by remember(item.id) { mutableIntStateOf(0) }
                     LaunchedEffect(isDragging) {
                         while (isDragging) {
@@ -1417,7 +1501,7 @@ private fun CountingScreen(
                                 // edge zone, faster only at the extreme edge.
                                 val step =
                                     autoScrollStepPx *
-                                        (0.32f + ratio * 0.68f)
+                                        (0.30f + ratio * 0.60f)
 
                                 listState.scrollBy(step * direction)
 
@@ -1447,7 +1531,7 @@ private fun CountingScreen(
                                 // finger is stationary inside the edge zone.
                                 detailedReorderAtPointer(
                                     item.id,
-                                    dragFingerCenterY
+                                    overlayCenterY()
                                 )
                             }
 
@@ -1480,15 +1564,39 @@ private fun CountingScreen(
                                             )
                                             isDragging = true
                                             dragOffsetY = 0f
-                                            dragFingerCenterY =
+                                            val detailedInfo =
                                                 listState.layoutInfo.visibleItemsInfo
-                                                    .firstOrNull { it.key == item.id }
+                                                    .firstOrNull {
+                                                        it.key == item.id
+                                                    }
+                                            dragFingerCenterY =
+                                                detailedInfo
                                                     ?.let {
                                                         it.offset +
                                                             it.size / 2f
                                                     }
                                                     ?: Float.NaN
                                             dragPointerY = dragFingerCenterY
+
+                                            detailedInfo?.let {
+                                                val inset =
+                                                    with(countingDensity) {
+                                                        8.dp.toPx()
+                                                    }
+                                                dragOverlayItemId = item.id
+                                                dragOverlayCompact = false
+                                                dragOverlayX = inset
+                                                dragOverlayY =
+                                                    it.offset.toFloat()
+                                                dragOverlayWidth =
+                                                    (
+                                                        listState.layoutInfo
+                                                            .viewportSize.width -
+                                                            inset * 2f
+                                                        ).coerceAtLeast(1f)
+                                                dragOverlayHeight =
+                                                    it.size.toFloat()
+                                            }
                                             haptic.performHapticFeedback(
                                                 HapticFeedbackType.LongPress
                                             )
@@ -1520,6 +1628,21 @@ private fun CountingScreen(
                                             }
                                             dragPointerY += dragAmount.y
 
+                                            val detailViewport =
+                                                listState.layoutInfo
+                                            val maxDetailedY =
+                                                (
+                                                    detailViewport.viewportEndOffset -
+                                                        dragOverlayHeight
+                                                    ).coerceAtLeast(0f)
+                                            dragOverlayY =
+                                                (dragOverlayY + dragAmount.y)
+                                                    .coerceIn(
+                                                        detailViewport.viewportStartOffset
+                                                            .toFloat(),
+                                                        maxDetailedY
+                                                    )
+
                                             val detailLayoutNow =
                                                 listState.layoutInfo
                                             detailLayoutNow.visibleItemsInfo
@@ -1542,7 +1665,7 @@ private fun CountingScreen(
                                             // only the placeholder/background order changes.
                                             detailedReorderAtPointer(
                                                 item.id,
-                                                dragFingerCenterY
+                                                overlayCenterY()
                                             )
 
                                             val info =
@@ -1613,12 +1736,16 @@ private fun CountingScreen(
                                     )
                             }
                         )
-                            .zIndex(if (isDragging) 1f else 0f)
+                            .zIndex(0f)
                             .graphicsLayer {
-                                translationY =
-                                    if (isDragging) dragOffsetY else 0f
-                                shadowElevation =
-                                    if (isDragging) 4f else 0f
+                                alpha =
+                                    if (dragOverlayItemId == item.id) {
+                                        0f
+                                    } else {
+                                        1f
+                                    }
+                                translationY = 0f
+                                shadowElevation = 0f
                             }
 
                             .clickable {
@@ -1983,6 +2110,190 @@ private fun CountingScreen(
                 }
             }
             }
+
+            val overlayItem =
+                dragOverlayItemId?.let { id ->
+                    visualItems.firstOrNull { it.id == id }
+                        ?: sheet.items.firstOrNull { it.id == id }
+                }
+
+            if (
+                overlayItem != null &&
+                dragOverlayWidth > 0f &&
+                dragOverlayHeight > 0f
+            ) {
+                val overlayGroup =
+                    sheet.groups.firstOrNull {
+                        it.id == overlayItem.groupId
+                    }
+                val overlayGroupColor =
+                    overlayGroup?.let { parseColor(it.color) }
+                val overlayContainer =
+                    overlayGroupColor
+                        ?.copy(alpha = 0.16f)
+                        ?: ArmyristColors.RaisedSurface
+                val overlayWidthDp =
+                    with(countingDensity) {
+                        dragOverlayWidth.toDp()
+                    }
+                val overlayHeightDp =
+                    with(countingDensity) {
+                        dragOverlayHeight.toDp()
+                    }
+
+                Card(
+                    modifier = Modifier
+                        .width(overlayWidthDp)
+                        .height(overlayHeightDp)
+                        .zIndex(100f)
+                        .graphicsLayer {
+                            translationX = dragOverlayX
+                            translationY = dragOverlayY
+                            shadowElevation = 7f
+                        },
+                    colors = CardDefaults.cardColors(
+                        containerColor = overlayContainer
+                    ),
+                    shape = ArmyristPanelShape,
+                    border = BorderStroke(
+                        1.5.dp,
+                        overlayGroupColor
+                            ?.copy(alpha = 0.72f)
+                            ?: ArmyristColors.PrimaryControl
+                    )
+                ) {
+                    if (dragOverlayCompact) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(
+                                    horizontal = 12.dp,
+                                    vertical = 8.dp
+                                ),
+                            verticalArrangement =
+                                Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment =
+                                    Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "⠿",
+                                    color =
+                                        ArmyristColors.PrimaryControl,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    overlayItem.name,
+                                    modifier = Modifier.weight(1f),
+                                    style =
+                                        MaterialTheme.typography
+                                            .labelLarge,
+                                    fontWeight =
+                                        FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow =
+                                        androidx.compose.ui.text.style
+                                            .TextOverflow.Ellipsis
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement =
+                                    Arrangement.SpaceBetween,
+                                verticalAlignment =
+                                    Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    overlayGroup?.name ?: "미지정",
+                                    style =
+                                        MaterialTheme.typography
+                                            .bodySmall,
+                                    color =
+                                        MaterialTheme.colorScheme
+                                            .onSurfaceVariant
+                                )
+                                Text(
+                                    overlayItem.quantity.toString(),
+                                    style =
+                                        MaterialTheme.typography
+                                            .titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color =
+                                        ArmyristColors.PrimaryControl
+                                )
+                            }
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 14.dp),
+                            verticalAlignment =
+                                Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "⠿",
+                                color = ArmyristColors.PrimaryControl,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Column(
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    overlayItem.name,
+                                    style =
+                                        MaterialTheme.typography
+                                            .titleMedium,
+                                    fontWeight =
+                                        FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow =
+                                        androidx.compose.ui.text.style
+                                            .TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    buildString {
+                                        append(
+                                            overlayGroup?.name
+                                                ?: "미지정"
+                                        )
+                                        if (
+                                            overlayItem.note
+                                                .isNotBlank()
+                                        ) {
+                                            append(" · ")
+                                            append(overlayItem.note)
+                                        }
+                                    },
+                                    style =
+                                        MaterialTheme.typography
+                                            .bodySmall,
+                                    color =
+                                        MaterialTheme.colorScheme
+                                            .onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow =
+                                        androidx.compose.ui.text.style
+                                            .TextOverflow.Ellipsis
+                                )
+                            }
+                            Text(
+                                overlayItem.quantity.toString(),
+                                style =
+                                    MaterialTheme.typography
+                                        .headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color =
+                                    ArmyristColors.PrimaryControl
+                            )
+                        }
+                    }
+                }
+            }
+            } // detached Counting drag layer
         }
     }
 
