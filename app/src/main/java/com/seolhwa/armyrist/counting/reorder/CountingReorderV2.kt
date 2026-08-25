@@ -171,34 +171,38 @@ class CountingReorderV2(initialItems: List<CountingItem>) {
     ): Boolean {
         val id = draggingItemId ?: return false
         val current = previewOrder.indexOf(id)
-        if (current < 0) return false
+        if (current < 0 || slots.isEmpty()) return false
 
-        val currentSlot = slots.firstOrNull { it.index == current }
-
-        fun crossed(target: CountingReorderSlot, forward: Boolean): Boolean {
-            val sameRow = currentSlot != null &&
-                kotlin.math.abs(currentSlot.centerY - target.centerY) <
-                minOf(currentSlot.height, target.height) * 0.45f
-
-            return if (sameRow) {
-                val boundary = if (currentSlot != null)
-                    (currentSlot.centerX + target.centerX) / 2f
-                else target.centerX
-                if (forward) pointerX > boundary else pointerX < boundary
-            } else {
-                val boundary = if (currentSlot != null)
-                    (currentSlot.centerY + target.centerY) / 2f
-                else target.centerY
-                if (forward) pointerY > boundary else pointerY < boundary
+        // Find the cell the overlay has actually entered. Rectangles are
+        // slightly expanded so the background reacts before full overlap.
+        val target = slots
+            .asSequence()
+            .filter { it.itemId != id }
+            .filter {
+                pointerX >= it.centerX - it.width * 0.58f &&
+                    pointerX <= it.centerX + it.width * 0.58f &&
+                    pointerY >= it.centerY - it.height * 0.58f &&
+                    pointerY <= it.centerY + it.height * 0.58f
             }
-        }
+            .minByOrNull {
+                val nx =
+                    (pointerX - it.centerX) /
+                        it.width.coerceAtLeast(1f)
+                val ny =
+                    (pointerY - it.centerY) /
+                        it.height.coerceAtLeast(1f)
+                nx * nx + ny * ny
+            }
+            ?: return false
 
-        val next = slots.firstOrNull { it.index == current + 1 }
-        if (next != null && crossed(next, true)) return movePlaceholder(1, nowMs)
+        val delta = target.index - current
+        if (delta == 0) return false
 
-        val previous = slots.firstOrNull { it.index == current - 1 }
-        if (previous != null && crossed(previous, false)) return movePlaceholder(-1, nowMs)
-
-        return false
+        // Never jump several slots in a single decision. A diagonal or a
+        // distant target simply causes controlled adjacent moves over time.
+        return movePlaceholder(
+            if (delta > 0) 1 else -1,
+            nowMs
+        )
     }
 }
