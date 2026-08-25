@@ -974,7 +974,7 @@ private fun CountingScreen(
                         val compactEdgeThresholdPx =
                             with(LocalDensity.current) { 112.dp.toPx() }
                         val compactAutoScrollStepPx =
-                            with(LocalDensity.current) { 16.dp.toPx() }
+                            with(LocalDensity.current) { 7.dp.toPx() }
                         var compactAutoScrollDirection by remember(item.id) { mutableIntStateOf(0) }
                         LaunchedEffect(compactDragging) {
                             while (compactDragging) {
@@ -1010,22 +1010,32 @@ private fun CountingScreen(
                                             ).coerceIn(0f, 1f)
                                     val step =
                                         compactAutoScrollStepPx *
-                                            (0.30f + ratio * 0.70f)
+                                            (0.20f + ratio * 0.50f)
 
                                     compactGridState.scrollBy(
                                         step * direction
                                     )
 
-                                    compactGridState.layoutInfo
-                                        .visibleItemsInfo
+                                    val gridNow =
+                                        compactGridState.layoutInfo
+                                    gridNow.visibleItemsInfo
                                         .firstOrNull {
                                             it.key == item.id
                                         }
                                         ?.let {
                                             if (
                                                 !compactFingerCenterX.isNaN() &&
-                                                !compactFingerCenterY.isNaN()
+                                                !compactPointerY.isNaN()
                                             ) {
+                                                val halfH =
+                                                    it.size.height / 2f
+                                                compactFingerCenterY =
+                                                    compactPointerY.coerceIn(
+                                                        gridNow.viewportStartOffset +
+                                                            halfH,
+                                                        gridNow.viewportEndOffset -
+                                                            halfH
+                                                    )
                                                 compactDragOffsetX =
                                                     compactFingerCenterX -
                                                         (
@@ -1036,7 +1046,7 @@ private fun CountingScreen(
                                                     compactFingerCenterY -
                                                         (
                                                             it.offset.y +
-                                                                it.size.height / 2f
+                                                                halfH
                                                             )
                                             }
                                         }
@@ -1201,15 +1211,37 @@ private fun CountingScreen(
                                                             }
                                                             compactFingerCenterX +=
                                                                 dragAmount.x
-                                                            compactFingerCenterY +=
-                                                                dragAmount.y
                                                             compactPointerY +=
                                                                 dragAmount.y
-                                                            compactGridState.layoutInfo.visibleItemsInfo
-                                                                .firstOrNull { it.key == item.id }
+
+                                                            val compactLayoutNow =
+                                                                compactGridState.layoutInfo
+                                                            compactLayoutNow.visibleItemsInfo
+                                                                .firstOrNull {
+                                                                    it.key == item.id
+                                                                }
                                                                 ?.let {
-                                                                    compactDragOffsetX = compactFingerCenterX - (it.offset.x + it.size.width / 2f)
-                                                                    compactDragOffsetY = compactFingerCenterY - (it.offset.y + it.size.height / 2f)
+                                                                    val halfH =
+                                                                        it.size.height / 2f
+                                                                    compactFingerCenterY =
+                                                                        compactPointerY.coerceIn(
+                                                                            compactLayoutNow.viewportStartOffset +
+                                                                                halfH,
+                                                                            compactLayoutNow.viewportEndOffset -
+                                                                                halfH
+                                                                        )
+                                                                    compactDragOffsetX =
+                                                                        compactFingerCenterX -
+                                                                            (
+                                                                                it.offset.x +
+                                                                                    it.size.width / 2f
+                                                                                )
+                                                                    compactDragOffsetY =
+                                                                        compactFingerCenterY -
+                                                                            (
+                                                                                it.offset.y +
+                                                                                    halfH
+                                                                                )
                                                                 }
 
                                                             compactReorderCompensation(item.id, compactDragOffsetX, compactDragOffsetY)
@@ -1218,9 +1250,30 @@ private fun CountingScreen(
                                                                 compactGridState.layoutInfo.visibleItemsInfo
                                                                     .firstOrNull { it.key == item.id }
                                                                     ?.let {
-                                                                        if (!compactFingerCenterX.isNaN() && !compactFingerCenterY.isNaN()) {
-                                                                            compactDragOffsetX = compactFingerCenterX - (it.offset.x + it.size.width / 2f)
-                                                                            compactDragOffsetY = compactFingerCenterY - (it.offset.y + it.size.height / 2f)
+                                                                        if (!compactFingerCenterX.isNaN() && !compactPointerY.isNaN()) {
+                                                                            val gridNow =
+                                                                                compactGridState.layoutInfo
+                                                                            val halfH =
+                                                                                it.size.height / 2f
+                                                                            compactFingerCenterY =
+                                                                                compactPointerY.coerceIn(
+                                                                                    gridNow.viewportStartOffset +
+                                                                                        halfH,
+                                                                                    gridNow.viewportEndOffset -
+                                                                                        halfH
+                                                                                )
+                                                                            compactDragOffsetX =
+                                                                                compactFingerCenterX -
+                                                                                    (
+                                                                                        it.offset.x +
+                                                                                            it.size.width / 2f
+                                                                                        )
+                                                                            compactDragOffsetY =
+                                                                                compactFingerCenterY -
+                                                                                    (
+                                                                                        it.offset.y +
+                                                                                            halfH
+                                                                                        )
                                                                         }
                                                                     }
                                                             }
@@ -1454,7 +1507,7 @@ private fun CountingScreen(
                     val edgeThresholdPx =
                         with(LocalDensity.current) { 112.dp.toPx() }
                     val autoScrollStepPx =
-                        with(LocalDensity.current) { 11.dp.toPx() }
+                        with(LocalDensity.current) { 7.dp.toPx() }
                     var autoScrollDirection by remember(item.id) { mutableIntStateOf(0) }
                     LaunchedEffect(isDragging) {
                         while (isDragging) {
@@ -1489,22 +1542,29 @@ private fun CountingScreen(
                                 // edge zone, faster only at the extreme edge.
                                 val step =
                                     autoScrollStepPx *
-                                        (0.30f + ratio * 0.70f)
+                                        (0.20f + ratio * 0.50f)
 
                                 listState.scrollBy(step * direction)
 
                                 // The background scrolls. The selected visual is
                                 // re-anchored to the same finger coordinate.
-                                listState.layoutInfo.visibleItemsInfo
+                                val movedLayout =
+                                    listState.layoutInfo
+                                movedLayout.visibleItemsInfo
                                     .firstOrNull { it.key == item.id }
                                     ?.let {
-                                        if (!dragFingerCenterY.isNaN()) {
+                                        if (!dragPointerY.isNaN()) {
+                                            val half = it.size / 2f
+                                            dragFingerCenterY =
+                                                dragPointerY.coerceIn(
+                                                    movedLayout.viewportStartOffset +
+                                                        half,
+                                                    movedLayout.viewportEndOffset -
+                                                        half
+                                                )
                                             dragOffsetY =
                                                 dragFingerCenterY -
-                                                    (
-                                                        it.offset +
-                                                            it.size / 2f
-                                                        )
+                                                    (it.offset + half)
                                         }
                                     }
 
@@ -1581,18 +1641,24 @@ private fun CountingScreen(
                                                     .firstOrNull { it.key == item.id }
                                                     ?.let { dragFingerCenterY = it.offset + it.size / 2f + dragOffsetY }
                                             }
-                                            dragFingerCenterY += dragAmount.y
                                             dragPointerY += dragAmount.y
 
-                                            listState.layoutInfo.visibleItemsInfo
+                                            val detailLayoutNow =
+                                                listState.layoutInfo
+                                            detailLayoutNow.visibleItemsInfo
                                                 .firstOrNull { it.key == item.id }
                                                 ?.let {
+                                                    val half = it.size / 2f
+                                                    dragFingerCenterY =
+                                                        dragPointerY.coerceIn(
+                                                            detailLayoutNow.viewportStartOffset +
+                                                                half,
+                                                            detailLayoutNow.viewportEndOffset -
+                                                                half
+                                                        )
                                                     dragOffsetY =
                                                         dragFingerCenterY -
-                                                            (
-                                                                it.offset +
-                                                                    it.size / 2f
-                                                                )
+                                                            (it.offset + half)
                                                 }
 
                                             // The dragged visual stays anchored;
