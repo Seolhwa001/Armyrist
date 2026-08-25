@@ -85,6 +85,13 @@ class CountingReorderV2(
             return projectedIds().mapNotNull(byId::get)
         }
 
+    /**
+     * Synchronous live projection lookup for pointer-time geometry.
+     * Do not derive drag indices from a previous Compose frame snapshot.
+     */
+    fun projectedIndexOf(itemId: String): Int =
+        projectedIds().indexOf(itemId)
+
     fun begin(
         itemId: String,
         newMode: CountingReorderMode
@@ -193,7 +200,7 @@ class CountingReorderV2(
         nowMs: Long
     ): Boolean {
         if (!isDragging) return false
-        if (nowMs - lastPlaceholderMoveAtMs < 72L) {
+        if (nowMs - lastPlaceholderMoveAtMs < 88L) {
             return false
         }
 
@@ -276,21 +283,15 @@ class CountingReorderV2(
         val target = slots
             .asSequence()
             .filter {
-                pointerX >= it.centerX - it.width * 0.52f &&
-                    pointerX <= it.centerX + it.width * 0.52f &&
-                    pointerY >= it.centerY - it.height * 0.52f &&
-                    pointerY <= it.centerY + it.height * 0.52f
+                // The overlay centre must genuinely enter a cell.
+                // A small expansion removes dead gaps without letting
+                // a distant cell steal the placeholder.
+                pointerX >= it.centerX - it.width * 0.54f &&
+                    pointerX <= it.centerX + it.width * 0.54f &&
+                    pointerY >= it.centerY - it.height * 0.54f &&
+                    pointerY <= it.centerY + it.height * 0.54f
             }
             .minByOrNull {
-                val nx =
-                    (pointerX - it.centerX) /
-                        it.width.coerceAtLeast(1f)
-                val ny =
-                    (pointerY - it.centerY) /
-                        it.height.coerceAtLeast(1f)
-                nx * nx + ny * ny
-            }
-            ?: slots.minByOrNull {
                 val nx =
                     (pointerX - it.centerX) /
                         it.width.coerceAtLeast(1f)
