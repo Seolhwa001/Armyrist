@@ -49,9 +49,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -637,13 +634,6 @@ private fun CountingScreen(
     // inside a Lazy item. A dragged item may move off-screen or change slot
     // without destroying the pointer-input node that owns the gesture.
     // -----------------------------------------------------------------
-    val countingHandleBounds = remember(sheet.id) {
-        mutableStateMapOf<String, Rect>()
-    }
-    var countingDragHostOrigin by remember(sheet.id) {
-        mutableStateOf(Offset.Zero)
-    }
-
     var dragOverlayItemId by remember(sheet.id) {
         mutableStateOf<String?>(null)
     }
@@ -678,23 +668,6 @@ private fun CountingScreen(
     fun overlayCenterY(): Float =
         dragOverlayY + dragOverlayHeight / 2f
 
-    fun registerCountingHandle(
-        itemId: String,
-        rootX: Float,
-        rootY: Float,
-        width: Float,
-        height: Float
-    ) {
-        val localX = rootX - countingDragHostOrigin.x
-        val localY = rootY - countingDragHostOrigin.y
-        countingHandleBounds[itemId] = Rect(
-            left = localX,
-            top = localY,
-            right = localX + width,
-            bottom = localY + height
-        )
-    }
-
     LaunchedEffect(sheet.updatedAt, sheet.items.size, countingReorder.isDragging) {
         countingReorder.sync(sheet.items)
     }
@@ -703,7 +676,7 @@ private fun CountingScreen(
         if (countingReorder.draggingItemId != itemId) return
         val slots = listState.layoutInfo.visibleItemsInfo.mapNotNull { info ->
             val id = info.key as? String ?: return@mapNotNull null
-            val index = visualItems.indexOfFirst { it.id == id }
+            val index = countingReorder.projectedIndexOf(id)
             if (index < 0) return@mapNotNull null
             CountingReorderSlot(
                 itemId = id,
@@ -725,7 +698,7 @@ private fun CountingScreen(
         if (countingReorder.draggingItemId != itemId) return
         val slots = compactGridState.layoutInfo.visibleItemsInfo.mapNotNull { info ->
             val id = info.key as? String ?: return@mapNotNull null
-            val index = visualItems.indexOfFirst { it.id == id }
+            val index = countingReorder.projectedIndexOf(id)
             if (index < 0) return@mapNotNull null
             CountingReorderSlot(
                 itemId = id,
@@ -747,6 +720,49 @@ private fun CountingScreen(
     fun finishCountingReorder(commit: Boolean) {
         if (commit) onReorder(countingReorder.commitOrder())
         else countingReorder.cancel(sheet.items)
+    }
+
+    fun findCountingDragTarget(start: Offset): String? {
+        val handleWidthPx = with(countingDensity) { 60.dp.toPx() }
+
+        return if (viewMode == CountingViewMode.COMPACT) {
+            compactGridState.layoutInfo.visibleItemsInfo
+                .firstOrNull { info ->
+                    val left = info.offset.x.toFloat()
+                    val top = info.offset.y.toFloat()
+                    val right = left + info.size.width
+                    val bottom = top + info.size.height
+
+                    start.x >= left &&
+                        start.x <= minOf(
+                            right,
+                            left + handleWidthPx
+                        ) &&
+                        start.y >= top &&
+                        start.y <= bottom
+                }
+                ?.key as? String
+        } else {
+            listState.layoutInfo.visibleItemsInfo
+                .firstOrNull { info ->
+                    val key = info.key as? String
+                        ?: return@firstOrNull false
+                    if (countingReorder.projectedIndexOf(key) < 0) {
+                        return@firstOrNull false
+                    }
+
+                    val left = 0f
+                    val top = info.offset.toFloat()
+                    val right = handleWidthPx
+                    val bottom = top + info.size
+
+                    start.x >= left &&
+                        start.x <= right &&
+                        start.y >= top &&
+                        start.y <= bottom
+                }
+                ?.key as? String
+        }
     }
 
     fun beginCountingDrag(
@@ -1074,10 +1090,6 @@ private fun CountingScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .onGloballyPositioned { coordinates ->
-                        countingDragHostOrigin =
-                            coordinates.positionInRoot()
-                    }
                     .pointerInput(
                         sheet.id,
                         viewMode,
@@ -1085,16 +1097,13 @@ private fun CountingScreen(
                     ) {
                         detectDragGesturesAfterLongPress(
                             onDragStart = { start ->
-                                val targetId =
-                                    countingHandleBounds
-                                        .entries
-                                        .firstOrNull {
-                                            it.value.contains(start)
-                                        }
-                                        ?.key
-                                if (targetId != null) {
-                                    beginCountingDrag(targetId, start)
-                                }
+                                findCountingDragTarget(start)
+                                    ?.let { targetId ->
+                                        beginCountingDrag(
+                                            targetId,
+                                            start
+                                        )
+                                    }
                             },
                             onDragCancel = {
                                 finishParentCountingDrag(
@@ -1359,16 +1368,6 @@ private fun CountingScreen(
                                                     minWidth = 40.dp,
                                                     minHeight = 40.dp
                                                 )
-                                                .onGloballyPositioned {
-                                                    val p = it.positionInRoot()
-                                                    registerCountingHandle(
-                                                        item.id,
-                                                        p.x,
-                                                        p.y,
-                                                        it.size.width.toFloat(),
-                                                        it.size.height.toFloat()
-                                                    )
-                                                }
 ,
                                             contentAlignment = Alignment.Center
                                         ) {
@@ -1651,17 +1650,7 @@ private fun CountingScreen(
                         ?.let { parseColor(it.color).copy(alpha = 0.26f) }
                         ?: ArmyristColors.SecondaryControl
 
-                    val detailedDragHandleModifier =
-                        Modifier.onGloballyPositioned {
-                            val p = it.positionInRoot()
-                            registerCountingHandle(
-                                item.id,
-                                p.x,
-                                p.y,
-                                it.size.width.toFloat(),
-                                it.size.height.toFloat()
-                            )
-                        }
+                    val detailedDragHandleModifier = Modifier
 
 
                     Card(
