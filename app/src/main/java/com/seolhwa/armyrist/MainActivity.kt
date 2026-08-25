@@ -3,6 +3,7 @@ package com.seolhwa.armyrist
 import kotlinx.coroutines.launch
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.graphics.graphicsLayer
@@ -608,11 +609,11 @@ private fun CountingScreen(
     var assignmentSelectedList by rememberSaveable { mutableStateOf(emptyList<String>()) }
     val assignmentSelected = assignmentSelectedList.toSet()
 
-    val dragThresholdPx = with(LocalDensity.current) { 44.dp.toPx() }
+    val dragThresholdPx = with(LocalDensity.current) { 60.dp.toPx() }
     val compactDragHorizontalThresholdPx =
-        with(LocalDensity.current) { 56.dp.toPx() }
+        with(LocalDensity.current) { 68.dp.toPx() }
     val compactDragVerticalThresholdPx =
-        with(LocalDensity.current) { 72.dp.toPx() }
+        with(LocalDensity.current) { 88.dp.toPx() }
     val listState = rememberLazyListState()
     val compactGridState = rememberLazyGridState()
 
@@ -796,7 +797,7 @@ private fun CountingScreen(
 
             Crossfade(
                 targetState = viewMode,
-                animationSpec = tween(durationMillis = 170),
+                animationSpec = tween(durationMillis = 230, easing = FastOutSlowInEasing),
                 label = "counting-density-transition"
             ) { animatedViewMode ->
             if (animatedViewMode == CountingViewMode.COMPACT) {
@@ -887,7 +888,11 @@ private fun CountingScreen(
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .animateItem()
+                                .animateItem(
+                                    fadeInSpec = null,
+                                    placementSpec = tween(220, easing = FastOutSlowInEasing),
+                                    fadeOutSpec = null
+                                )
                                 .heightIn(min = 96.dp)
                                 .zIndex(if (compactDragging) 2f else 0f)
                                 .graphicsLayer {
@@ -896,9 +901,9 @@ private fun CountingScreen(
                                     translationY =
                                         if (compactDragging) compactDragOffsetY else 0f
                                     shadowElevation =
-                                        if (compactDragging) 12f else 0f
-                                    scaleX = if (compactDragging) 1.02f else 1f
-                                    scaleY = if (compactDragging) 1.02f else 1f
+                                        if (compactDragging) 4f else 0f
+                                    scaleX = 1f
+                                    scaleY = 1f
                                 }
                                 .clickable {
                                     if (assignmentMode) {
@@ -1264,13 +1269,17 @@ private fun CountingScreen(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .animateItem()
+                            .animateItem(
+                                fadeInSpec = null,
+                                placementSpec = tween(220, easing = FastOutSlowInEasing),
+                                fadeOutSpec = null
+                            )
                             .zIndex(if (isDragging) 1f else 0f)
                             .graphicsLayer {
                                 translationY =
                                     if (isDragging) dragOffsetY else 0f
                                 shadowElevation =
-                                    if (isDragging) 10f else 0f
+                                    if (isDragging) 4f else 0f
                             }
                             .pointerInput(
                                 item.id,
