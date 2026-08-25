@@ -249,6 +249,21 @@ class CountingRepository(context: Context) {
     }
 
     @Synchronized
+    fun reorderItems(sheetId: String, orderedIds: List<String>): Boolean {
+        val sheet = getSheet(sheetId) ?: return false
+        if (orderedIds.distinct().size != orderedIds.size) return false
+        if (orderedIds.toSet() != sheet.items.map { it.id }.toSet()) return false
+
+        val byId = sheet.items.associateBy { it.id }
+        val reordered = orderedIds.mapIndexedNotNull { index, id ->
+            byId[id]?.copy(order = index)
+        }
+        if (reordered.size != sheet.items.size) return false
+
+        return updateSheet(sheetId) { it.copy(items = reordered) } != null
+    }
+
+    @Synchronized
     fun addGroup(
         sheetId: String,
         name: String,
