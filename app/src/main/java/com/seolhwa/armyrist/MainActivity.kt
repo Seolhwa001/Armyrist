@@ -1,6 +1,7 @@
 package com.seolhwa.armyrist
 
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -609,11 +610,11 @@ private fun CountingScreen(
     var assignmentSelectedList by rememberSaveable { mutableStateOf(emptyList<String>()) }
     val assignmentSelected = assignmentSelectedList.toSet()
 
-    val dragThresholdPx = with(LocalDensity.current) { 60.dp.toPx() }
+    val dragThresholdPx = with(LocalDensity.current) { 84.dp.toPx() }
     val compactDragHorizontalThresholdPx =
-        with(LocalDensity.current) { 68.dp.toPx() }
+        with(LocalDensity.current) { 84.dp.toPx() }
     val compactDragVerticalThresholdPx =
-        with(LocalDensity.current) { 88.dp.toPx() }
+        with(LocalDensity.current) { 108.dp.toPx() }
     val listState = rememberLazyListState()
     val compactGridState = rememberLazyGridState()
 
@@ -848,9 +849,18 @@ private fun CountingScreen(
                         val compactHaptic = LocalHapticFeedback.current
                         val compactDragScope = rememberCoroutineScope()
                         val compactEdgeThresholdPx =
-                            with(LocalDensity.current) { 72.dp.toPx() }
+                            with(LocalDensity.current) { 112.dp.toPx() }
                         val compactAutoScrollStepPx =
-                            with(LocalDensity.current) { 20.dp.toPx() }
+                            with(LocalDensity.current) { 44.dp.toPx() }
+                        var compactAutoScrollDirection by remember(item.id) { mutableIntStateOf(0) }
+                        LaunchedEffect(compactDragging, compactAutoScrollDirection) {
+                            while (compactDragging && compactAutoScrollDirection != 0) {
+                                compactGridState.scrollBy(
+                                    compactAutoScrollStepPx * compactAutoScrollDirection
+                                )
+                                delay(16)
+                            }
+                        }
 
                         // Group marker number is presentation-only.
                         // It appears only when multiple groups use the same configured color.
@@ -945,12 +955,14 @@ private fun CountingScreen(
                                                         },
                                                         onDragCancel = {
                                                             compactDragging = false
+                                                            compactAutoScrollDirection = 0
                                                             compactDragOffsetX = 0f
                                                             compactDragOffsetY = 0f
                                                             finishVisualReorder(commit = false)
                                                         },
                                                         onDragEnd = {
                                                             compactDragging = false
+                                                            compactAutoScrollDirection = 0
                                                             compactDragOffsetX = 0f
                                                             compactDragOffsetY = 0f
                                                             finishVisualReorder(commit = true)
@@ -966,9 +978,6 @@ private fun CountingScreen(
                                                                     moveVisualItem(item.id, 1)
                                                                     compactDragOffsetX -=
                                                                         compactDragHorizontalThresholdPx
-                                                                    compactHaptic.performHapticFeedback(
-                                                                        HapticFeedbackType.TextHandleMove
-                                                                    )
                                                                 }
 
                                                                 compactDragOffsetX <=
@@ -976,9 +985,6 @@ private fun CountingScreen(
                                                                     moveVisualItem(item.id, -1)
                                                                     compactDragOffsetX +=
                                                                         compactDragHorizontalThresholdPx
-                                                                    compactHaptic.performHapticFeedback(
-                                                                        HapticFeedbackType.TextHandleMove
-                                                                    )
                                                                 }
                                                             }
 
@@ -988,9 +994,6 @@ private fun CountingScreen(
                                                                     moveVisualItem(item.id, 2)
                                                                     compactDragOffsetY -=
                                                                         compactDragVerticalThresholdPx
-                                                                    compactHaptic.performHapticFeedback(
-                                                                        HapticFeedbackType.TextHandleMove
-                                                                    )
                                                                 }
 
                                                                 compactDragOffsetY <=
@@ -998,9 +1001,6 @@ private fun CountingScreen(
                                                                     moveVisualItem(item.id, -2)
                                                                     compactDragOffsetY +=
                                                                         compactDragVerticalThresholdPx
-                                                                    compactHaptic.performHapticFeedback(
-                                                                        HapticFeedbackType.TextHandleMove
-                                                                    )
                                                                 }
                                                             }
 
@@ -1023,6 +1023,7 @@ private fun CountingScreen(
                                                                     top <
                                                                         layout.viewportStartOffset +
                                                                         compactEdgeThresholdPx -> {
+                                                                        compactAutoScrollDirection = -1
                                                                         compactDragScope.launch {
                                                                             compactGridState.scrollBy(
                                                                                 -compactAutoScrollStepPx
@@ -1033,12 +1034,14 @@ private fun CountingScreen(
                                                                     bottom >
                                                                         layout.viewportEndOffset -
                                                                         compactEdgeThresholdPx -> {
+                                                                        compactAutoScrollDirection = 1
                                                                         compactDragScope.launch {
                                                                             compactGridState.scrollBy(
                                                                                 compactAutoScrollStepPx
                                                                             )
                                                                         }
                                                                     }
+                                                                    else -> compactAutoScrollDirection = 0
                                                                 }
                                                             }
                                                         }
@@ -1232,9 +1235,16 @@ private fun CountingScreen(
                     val haptic = LocalHapticFeedback.current
                     val dragScope = rememberCoroutineScope()
                     val edgeThresholdPx =
-                        with(LocalDensity.current) { 72.dp.toPx() }
+                        with(LocalDensity.current) { 112.dp.toPx() }
                     val autoScrollStepPx =
-                        with(LocalDensity.current) { 18.dp.toPx() }
+                        with(LocalDensity.current) { 40.dp.toPx() }
+                    var autoScrollDirection by remember(item.id) { mutableIntStateOf(0) }
+                    LaunchedEffect(isDragging, autoScrollDirection) {
+                        while (isDragging && autoScrollDirection != 0) {
+                            listState.scrollBy(autoScrollStepPx * autoScrollDirection)
+                            delay(16)
+                        }
+                    }
 
                     val groupColor =
                         currentGroup?.let { parseColor(it.color) }
@@ -1297,11 +1307,13 @@ private fun CountingScreen(
                                         },
                                         onDragCancel = {
                                             isDragging = false
+                                            autoScrollDirection = 0
                                             dragOffsetY = 0f
                                             finishVisualReorder(commit = false)
                                         },
                                         onDragEnd = {
                                             isDragging = false
+                                            autoScrollDirection = 0
                                             dragOffsetY = 0f
                                             finishVisualReorder(commit = true)
                                         },
@@ -1316,9 +1328,6 @@ private fun CountingScreen(
                                                 moveVisualItem(item.id, 1)
                                                 dragOffsetY -=
                                                     dragThresholdPx
-                                                haptic.performHapticFeedback(
-                                                    HapticFeedbackType.TextHandleMove
-                                                )
                                             } else if (
                                                 dragOffsetY <=
                                                 -dragThresholdPx
@@ -1326,9 +1335,6 @@ private fun CountingScreen(
                                                 moveVisualItem(item.id, -1)
                                                 dragOffsetY +=
                                                     dragThresholdPx
-                                                haptic.performHapticFeedback(
-                                                    HapticFeedbackType.TextHandleMove
-                                                )
                                             }
 
                                             val info =
@@ -1349,6 +1355,7 @@ private fun CountingScreen(
                                                     top <
                                                         info.viewportStartOffset +
                                                         edgeThresholdPx -> {
+                                                        autoScrollDirection = -1
                                                         dragScope.launch {
                                                             listState.scrollBy(
                                                                 -autoScrollStepPx
@@ -1358,12 +1365,14 @@ private fun CountingScreen(
                                                     bottom >
                                                         info.viewportEndOffset -
                                                         edgeThresholdPx -> {
+                                                        autoScrollDirection = 1
                                                         dragScope.launch {
                                                             listState.scrollBy(
                                                                 autoScrollStepPx
                                                             )
                                                         }
                                                     }
+                                                    else -> autoScrollDirection = 0
                                                 }
                                             }
                                         }
@@ -1408,6 +1417,12 @@ private fun CountingScreen(
                                         Modifier.fillMaxWidth(),
                                         verticalAlignment = Alignment.Top
                                     ) {
+                                        Text(
+                                            "⠿",
+                                            color = ArmyristColors.SecondaryText,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.width(26.dp)
+                                        )
                                         Text(
                                             if (selected) "✓" else "${index + 1}.",
                                             fontWeight = FontWeight.Bold,
