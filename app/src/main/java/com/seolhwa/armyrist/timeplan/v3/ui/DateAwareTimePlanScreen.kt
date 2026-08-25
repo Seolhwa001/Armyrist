@@ -551,9 +551,9 @@ private fun DateAwarePlanList(
 
         val crossed =
             if (targetIndex > fromIndex) {
-                draggedCenter > target.offset + target.size * 0.62f
+                draggedCenter > target.offset + target.size * 0.48f
             } else {
-                draggedCenter < target.offset + target.size * 0.38f
+                draggedCenter < target.offset + target.size * 0.52f
             }
         if (!crossed) return false
 
@@ -932,11 +932,11 @@ private fun DateAwarePlanList(
                                                                 if (targetIndex > fromIndex) {
                                                                     center >
                                                                         target.offset +
-                                                                            target.size * 0.62f
+                                                                            target.size * 0.48f
                                                                 } else {
                                                                     center <
                                                                         target.offset +
-                                                                            target.size * 0.38f
+                                                                            target.size * 0.52f
                                                                 }
 
                                                             if (crossed) {
