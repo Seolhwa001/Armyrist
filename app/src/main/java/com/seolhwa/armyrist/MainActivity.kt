@@ -718,9 +718,11 @@ private fun CountingScreen(
         // Same crossing contract used by the stable TimePlan list.
         val crossed =
             if (targetIndex > fromIndex) {
-                draggedCenter > target.offset + target.size * 0.48f
+                // Move the background a little earlier than 0.6.64 so the
+                // held card does not need to overlap most of the next row.
+                draggedCenter > target.offset + target.size * 0.42f
             } else {
-                draggedCenter < target.offset + target.size * 0.52f
+                draggedCenter < target.offset + target.size * 0.58f
             }
         if (!crossed) return
 
@@ -921,9 +923,9 @@ private fun CountingScreen(
         dragOverlayItemId,
         dragOverlayCompact
     ) {
-        val edgePx = with(countingDensity) { 96.dp.toPx() }
-        val minStepPx = with(countingDensity) { 2.5.dp.toPx() }
-        val maxStepPx = with(countingDensity) { 9.0.dp.toPx() }
+        val edgePx = with(countingDensity) { 104.dp.toPx() }
+        val minStepPx = with(countingDensity) { 3.2.dp.toPx() }
+        val maxStepPx = with(countingDensity) { 11.0.dp.toPx() }
 
         while (dragOverlayItemId != null) {
             val pointerY = dragPointerY
@@ -958,8 +960,11 @@ private fun CountingScreen(
                             (pointerY - bottomEdge).coerceAtLeast(0f)
                         }
                     val ratio = (depth / edgePx).coerceIn(0f, 1f)
+                    val easedRatio =
+                        (0.18f + ratio * 0.82f).coerceIn(0f, 1f)
                     val step =
-                        minStepPx + (maxStepPx - minStepPx) * ratio
+                        minStepPx +
+                            (maxStepPx - minStepPx) * easedRatio
 
                     if (dragOverlayCompact) {
                         compactGridState.scrollBy(step * direction)
@@ -1642,7 +1647,7 @@ private fun CountingScreen(
                                     .animateItem(
                                         fadeInSpec = null,
                                         placementSpec = tween(
-                                            160,
+                                            145,
                                             easing = FastOutSlowInEasing
                                         ),
                                         fadeOutSpec = null
@@ -1720,7 +1725,7 @@ private fun CountingScreen(
                                             Text(
                                                 "⠿",
                                                 color =
-                                                    if (detailedDragging) {
+                                                    if (isDragging) {
                                                         ArmyristColors.PrimaryControl
                                                     } else {
                                                         ArmyristColors.SecondaryText
@@ -1823,7 +1828,7 @@ private fun CountingScreen(
                                     Text(
                                         "⠿",
                                         color =
-                                            if (detailedDragging) {
+                                            if (isDragging) {
                                                 ArmyristColors.PrimaryControl
                                             } else {
                                                 ArmyristColors.SecondaryText
