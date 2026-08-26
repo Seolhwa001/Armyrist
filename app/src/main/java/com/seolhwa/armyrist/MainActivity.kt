@@ -1590,95 +1590,11 @@ private fun CountingScreen(
                     val assignmentMode = assignmentGroupId != null
                     val selected = item.id in assignmentSelected
 
-                    var dragOffsetY by remember(item.id) {
-                        mutableFloatStateOf(0f)
-                    }
-                    var dragFingerCenterY by remember(item.id) {
-                        mutableFloatStateOf(Float.NaN)
-                    }
-                    var dragPointerY by remember(item.id) {
-                        mutableFloatStateOf(Float.NaN)
-                    }
-                    var isDragging by remember(item.id) {
-                        mutableStateOf(false)
-                    }
-                    val haptic = LocalHapticFeedback.current
-                    val dragScope = rememberCoroutineScope()
-                    val edgeThresholdPx =
-                        with(LocalDensity.current) { 112.dp.toPx() }
-                    val autoScrollStepPx =
-                        with(LocalDensity.current) { 10.0.dp.toPx() }
-                    var autoScrollDirection by remember(item.id) { mutableIntStateOf(0) }
-                    LaunchedEffect(isDragging) {
-                        while (isDragging) {
-                            val layout = listState.layoutInfo
-                            val topEdge =
-                                layout.viewportStartOffset + edgeThresholdPx
-                            val bottomEdge =
-                                layout.viewportEndOffset - edgeThresholdPx
-
-                            val direction = when {
-                                dragPointerY.isNaN() -> 0
-                                dragPointerY < topEdge -> -1
-                                dragPointerY > bottomEdge -> 1
-                                else -> 0
-                            }
-                            autoScrollDirection = direction
-
-                            if (direction != 0) {
-                                val edgeDepth =
-                                    if (direction < 0) {
-                                        (topEdge - dragPointerY)
-                                            .coerceAtLeast(0f)
-                                    } else {
-                                        (dragPointerY - bottomEdge)
-                                            .coerceAtLeast(0f)
-                                    }
-                                val ratio =
-                                    (edgeDepth / edgeThresholdPx)
-                                        .coerceIn(0f, 1f)
-
-                                // Continuous but controlled: slow on entering the
-                                // edge zone, faster only at the extreme edge.
-                                val step =
-                                    autoScrollStepPx *
-                                        (0.30f + ratio * 0.60f)
-
-                                listState.scrollBy(step * direction)
-
-                                // The background scrolls. The selected visual is
-                                // re-anchored to the same finger coordinate.
-                                val movedLayout =
-                                    listState.layoutInfo
-                                movedLayout.visibleItemsInfo
-                                    .firstOrNull { it.key == item.id }
-                                    ?.let {
-                                        if (!dragPointerY.isNaN()) {
-                                            val half = it.size / 2f
-                                            dragFingerCenterY =
-                                                dragPointerY.coerceIn(
-                                                    movedLayout.viewportStartOffset +
-                                                        half,
-                                                    movedLayout.viewportEndOffset -
-                                                        half
-                                                )
-                                            dragOffsetY =
-                                                dragFingerCenterY -
-                                                    (it.offset + half)
-                                        }
-                                    }
-
-                                // Reorder background items even if the user's
-                                // finger is stationary inside the edge zone.
-                                detailedReorderAtPointer(
-                                    item.id,
-                                    overlayCenterY()
-                                )
-                            }
-
-                            delay(16)
-                        }
-                    }
+                    // Detailed drag ownership is global (stable parent host).
+                    // Do not keep an item-local drag/auto-scroll controller here.
+                    val detailedDragging =
+                        !dragOverlayCompact &&
+                            dragOverlayItemId == item.id
 
                     val groupColor =
                         currentGroup?.let { parseColor(it.color) }
@@ -1715,7 +1631,10 @@ private fun CountingScreen(
                             }
                         ),
                         modifier = (
-                            if (isDragging) {
+                            if (detailedDragging) {
+                                // TimePlan rule: the held visual is controlled only
+                                // by translationY. It must never also receive Lazy
+                                // placement animation.
                                 Modifier.fillMaxWidth()
                             } else {
                                 Modifier
@@ -1723,7 +1642,7 @@ private fun CountingScreen(
                                     .animateItem(
                                         fadeInSpec = null,
                                         placementSpec = tween(
-                                            140,
+                                            160,
                                             easing = FastOutSlowInEasing
                                         ),
                                         fadeOutSpec = null
@@ -1740,9 +1659,6 @@ private fun CountingScreen(
                                 // Detailed has exactly one visual actor:
                                 // this real Lazy item. Detached overlay rendering
                                 // is Compact-only.
-                                val detailedDragging =
-                                    !dragOverlayCompact &&
-                                        dragOverlayItemId == item.id
                                 alpha =
                                     if (
                                         dragOverlayCompact &&
