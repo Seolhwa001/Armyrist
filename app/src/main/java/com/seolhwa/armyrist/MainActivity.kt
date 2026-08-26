@@ -744,8 +744,8 @@ private fun CountingScreen(
                     // compensation can produce the characteristic first-item
                     // plunge. Keep the first departure bounded to one card.
                     rawCompensation.coerceIn(
-                        -draggedInfo.size.toFloat(),
-                        draggedInfo.size.toFloat()
+                        -draggedInfo.size,
+                        draggedInfo.size
                     )
                 } else {
                     rawCompensation
@@ -1751,7 +1751,7 @@ private fun CountingScreen(
                                             Text(
                                                 "⠿",
                                                 color =
-                                                    if (isDragging) {
+                                                    if (detailedDragging) {
                                                         ArmyristColors.PrimaryControl
                                                     } else {
                                                         ArmyristColors.SecondaryText
@@ -1854,7 +1854,7 @@ private fun CountingScreen(
                                     Text(
                                         "⠿",
                                         color =
-                                            if (isDragging) {
+                                            if (detailedDragging) {
                                                 ArmyristColors.PrimaryControl
                                             } else {
                                                 ArmyristColors.SecondaryText
