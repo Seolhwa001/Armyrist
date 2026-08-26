@@ -101,6 +101,19 @@ class CountingReorderV2(
     fun projectedIndexOf(itemId: String): Int =
         projectedIds().indexOf(itemId)
 
+    /**
+     * TimePlan-style 1-D adapter entry point.
+     * Moves only the insertion placeholder; repository order is still written
+     * once on Drop by commitOrder().
+     */
+    fun movePlaceholderTo(targetIndex: Int): Boolean {
+        if (!isDragging) return false
+        val target = targetIndex.coerceIn(0, backgroundOrder.size)
+        if (target == placeholderIndex) return false
+        _placeholderIndex.value = target
+        return true
+    }
+
     fun begin(
         itemId: String,
         newMode: CountingReorderMode
