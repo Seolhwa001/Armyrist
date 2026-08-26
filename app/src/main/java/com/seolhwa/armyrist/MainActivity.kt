@@ -1720,7 +1720,7 @@ private fun CountingScreen(
                                             Text(
                                                 "⠿",
                                                 color =
-                                                    if (isDragging) {
+                                                    if (detailedDragging) {
                                                         ArmyristColors.PrimaryControl
                                                     } else {
                                                         ArmyristColors.SecondaryText
@@ -1823,7 +1823,7 @@ private fun CountingScreen(
                                     Text(
                                         "⠿",
                                         color =
-                                            if (isDragging) {
+                                            if (detailedDragging) {
                                                 ArmyristColors.PrimaryControl
                                             } else {
                                                 ArmyristColors.SecondaryText
