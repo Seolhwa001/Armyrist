@@ -645,6 +645,13 @@ private fun CountingScreen(
     var dragOverlayWidth by remember(sheet.id) { mutableFloatStateOf(0f) }
     var dragOverlayHeight by remember(sheet.id) { mutableFloatStateOf(0f) }
 
+    // Detailed mode now follows the proven TimePlan motion model:
+    // the actual Lazy item is translated and its offset is compensated after
+    // every reorder so it remains under the finger.
+    var detailedTimePlanDragOffsetY by remember(sheet.id) {
+        mutableFloatStateOf(0f)
+    }
+
     var dragPointerX by remember(sheet.id) { mutableFloatStateOf(Float.NaN) }
     var dragPointerY by remember(sheet.id) { mutableFloatStateOf(Float.NaN) }
     var dragGrabOffsetX by remember(sheet.id) { mutableFloatStateOf(0f) }
@@ -660,6 +667,7 @@ private fun CountingScreen(
         dragPointerY = Float.NaN
         dragGrabOffsetX = 0f
         dragGrabOffsetY = 0f
+        detailedTimePlanDragOffsetY = 0f
     }
 
     fun overlayCenterX(): Float =
@@ -675,45 +683,56 @@ private fun CountingScreen(
     fun detailedReorderAtPointer(itemId: String, pointerY: Float) {
         if (countingReorder.draggingItemId != itemId) return
 
-        // Keep Detailed geometry and slot numbering on the same Lazy layout
-        // frame. Do not pair current offsets with projection indices that may
-        // already have advanced before LazyColumn finishes its next layout.
-        val visibleDetailed =
-            listState.layoutInfo.visibleItemsInfo
-                .mapNotNull { info ->
-                    val id = info.key as? String
-                        ?: return@mapNotNull null
-                    if (countingReorder.projectedIndexOf(id) < 0) {
-                        return@mapNotNull null
-                    }
-                    id to info
-                }
-                .sortedBy { (_, info) -> info.offset }
-
-        val firstVisibleProjectedIndex =
-            visibleDetailed.firstOrNull()
-                ?.first
-                ?.let(countingReorder::projectedIndexOf)
+        val layout = listState.layoutInfo
+        val draggedInfo =
+            layout.visibleItemsInfo.firstOrNull { it.key == itemId }
                 ?: return
 
-        val slots =
-            visibleDetailed.mapIndexed { relativeIndex, (id, info) ->
-                CountingReorderSlot(
-                    itemId = id,
-                    index =
-                        firstVisibleProjectedIndex + relativeIndex,
-                    centerX = 0f,
-                    centerY = info.offset + info.size / 2f,
-                    width = 1f,
-                    height = info.size.toFloat()
-                )
-            }
+        val draggedCenter =
+            draggedInfo.offset +
+                draggedInfo.size / 2f +
+                detailedTimePlanDragOffsetY
 
-        countingReorder.updateDetailed(
-            pointerY,
-            slots,
-            android.os.SystemClock.uptimeMillis()
-        )
+        val target =
+            layout.visibleItemsInfo
+                .filter {
+                    val key = it.key as? String
+                    key != null &&
+                        key != itemId &&
+                        countingReorder.projectedIndexOf(key) >= 0
+                }
+                .minByOrNull {
+                    kotlin.math.abs(
+                        (it.offset + it.size / 2f) - draggedCenter
+                    )
+                }
+                ?: return
+
+        val targetId = target.key as? String ?: return
+        val fromIndex = countingReorder.projectedIndexOf(itemId)
+        val targetIndex = countingReorder.projectedIndexOf(targetId)
+        if (fromIndex < 0 || targetIndex < 0 || fromIndex == targetIndex) {
+            return
+        }
+
+        // Same crossing contract used by the stable TimePlan list.
+        val crossed =
+            if (targetIndex > fromIndex) {
+                draggedCenter > target.offset + target.size * 0.48f
+            } else {
+                draggedCenter < target.offset + target.size * 0.52f
+            }
+        if (!crossed) return
+
+        val oldOffset = draggedInfo.offset
+        val targetOffset = target.offset
+
+        if (countingReorder.movePlaceholderTo(targetIndex)) {
+            // Critical TimePlan behavior: cancel the Lazy layout jump of the
+            // dragged card. Only background cards visibly vacate the slot.
+            detailedTimePlanDragOffsetY +=
+                (oldOffset - targetOffset)
+        }
     }
 
     fun compactReorderAtPointer(itemId: String, pointerX: Float, pointerY: Float) {
@@ -817,16 +836,13 @@ private fun CountingScreen(
                 itemId,
                 CountingReorderMode.DETAILED
             )
-            val inset = with(countingDensity) { 8.dp.toPx() }
             dragOverlayItemId = itemId
             dragOverlayCompact = false
-            dragOverlayX = inset
+            detailedTimePlanDragOffsetY = 0f
+            dragOverlayX = 0f
             dragOverlayY = info.offset.toFloat()
             dragOverlayWidth =
-                (
-                    listState.layoutInfo.viewportSize.width -
-                        inset * 2f
-                    ).coerceAtLeast(1f)
+                listState.layoutInfo.viewportSize.width.toFloat()
             dragOverlayHeight = info.size.toFloat()
         }
 
@@ -869,23 +885,25 @@ private fun CountingScreen(
 
         // Pointer and overlay share the same host coordinate system.
         // The grab point on the card therefore never changes during reorder.
-        dragOverlayX =
-            (dragPointerX - dragGrabOffsetX)
-                .coerceIn(0f, maxX)
-        dragOverlayY =
-            (dragPointerY - dragGrabOffsetY)
-                .coerceIn(viewportStart, maxY)
-
         if (dragOverlayCompact) {
+            dragOverlayX =
+                (dragPointerX - dragGrabOffsetX)
+                    .coerceIn(0f, maxX)
+            dragOverlayY =
+                (dragPointerY - dragGrabOffsetY)
+                    .coerceIn(viewportStart, maxY)
+
             compactReorderAtPointer(
                 itemId,
                 overlayCenterX(),
                 overlayCenterY()
             )
         } else {
+            // TimePlan model: translate the actual dragged Lazy item.
+            detailedTimePlanDragOffsetY += delta.y
             detailedReorderAtPointer(
                 itemId,
-                overlayCenterY()
+                dragPointerY
             )
         }
     }
@@ -953,11 +971,13 @@ private fun CountingScreen(
                             )
                         }
                     } else {
-                        listState.scrollBy(step * direction)
+                        val consumed =
+                            listState.scrollBy(step * direction)
+                        detailedTimePlanDragOffsetY += consumed
                         dragOverlayItemId?.let {
                             detailedReorderAtPointer(
                                 it,
-                                overlayCenterY()
+                                dragPointerY
                             )
                         }
                     }
@@ -1710,16 +1730,29 @@ private fun CountingScreen(
                                     )
                             }
                         )
-                            .zIndex(0f)
+                            .zIndex(
+                                if (
+                                    !dragOverlayCompact &&
+                                    dragOverlayItemId == item.id
+                                ) 2f else 0f
+                            )
                             .graphicsLayer {
+                                val detailedDragging =
+                                    !dragOverlayCompact &&
+                                        dragOverlayItemId == item.id
                                 alpha =
-                                    if (dragOverlayItemId == item.id) {
-                                        0f
+                                    if (
+                                        dragOverlayCompact &&
+                                        dragOverlayItemId == item.id
+                                    ) 0f else 1f
+                                translationY =
+                                    if (detailedDragging) {
+                                        detailedTimePlanDragOffsetY
                                     } else {
-                                        1f
+                                        0f
                                     }
-                                translationY = 0f
-                                shadowElevation = 0f
+                                shadowElevation =
+                                    if (detailedDragging) 4f else 0f
                             }
 
                             .clickable {
