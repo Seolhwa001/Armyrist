@@ -1737,6 +1737,9 @@ private fun CountingScreen(
                                 ) 2f else 0f
                             )
                             .graphicsLayer {
+                                // Detailed has exactly one visual actor:
+                                // this real Lazy item. Detached overlay rendering
+                                // is Compact-only.
                                 val detailedDragging =
                                     !dragOverlayCompact &&
                                         dragOverlayItemId == item.id
@@ -2125,6 +2128,7 @@ private fun CountingScreen(
                 }
 
             if (
+                dragOverlayCompact &&
                 overlayItem != null &&
                 dragOverlayWidth > 0f &&
                 dragOverlayHeight > 0f
