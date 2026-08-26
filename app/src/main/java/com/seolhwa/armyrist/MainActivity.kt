@@ -685,7 +685,7 @@ private fun CountingScreen(
         countingReorder.sync(sheet.items)
     }
 
-    fun detailedReorderAtPointer(itemId: String, pointerY: Float) {
+    fun detailedReorderAtPointer(itemId: String) {
         if (countingReorder.draggingItemId != itemId) return
         if (detailedEdgeScrollSettling) return
 
@@ -699,50 +699,62 @@ private fun CountingScreen(
                 draggedInfo.size / 2f +
                 detailedTimePlanDragOffsetY
 
-        val target =
-            layout.visibleItemsInfo
-                .filter {
-                    val key = it.key as? String
-                    key != null &&
-                        key != itemId &&
-                        countingReorder.projectedIndexOf(key) >= 0
-                }
-                .minByOrNull {
-                    kotlin.math.abs(
-                        (it.offset + it.size / 2f) - draggedCenter
-                    )
-                }
-                ?: return
-
-        val targetId = target.key as? String ?: return
         val fromIndex = countingReorder.projectedIndexOf(itemId)
-        val targetIndex = countingReorder.projectedIndexOf(targetId)
-        if (fromIndex < 0 || targetIndex < 0 || fromIndex == targetIndex) {
-            return
-        }
+        if (fromIndex < 0) return
 
-        // Same crossing contract used by the stable TimePlan list.
-        val crossed =
-            if (targetIndex > fromIndex) {
-                // Move the background a little earlier than 0.6.64 so the
-                // held card does not need to overlap most of the next row.
-                draggedCenter > target.offset + target.size * 0.42f
-            } else {
-                draggedCenter < target.offset + target.size * 0.58f
+        // TimePlan cadence adapted to Counting:
+        // inspect only the immediately adjacent logical slot in the direction
+        // the held card has actually crossed. Never jump to a distant visible
+        // target during one pointer event.
+        val adjacentCandidates =
+            layout.visibleItemsInfo.mapNotNull { info ->
+                val id = info.key as? String ?: return@mapNotNull null
+                if (id == itemId) return@mapNotNull null
+                val index = countingReorder.projectedIndexOf(id)
+                if (index < 0) return@mapNotNull null
+                Triple(id, index, info)
             }
-        if (!crossed) return
+
+        val next =
+            adjacentCandidates.firstOrNull { (_, index, _) ->
+                index == fromIndex + 1
+            }
+        val previous =
+            adjacentCandidates.firstOrNull { (_, index, _) ->
+                index == fromIndex - 1
+            }
+
+        val moveDown =
+            next?.let { (_, _, info) ->
+                draggedCenter >
+                    info.offset + info.size * 0.42f
+            } == true
+
+        val moveUp =
+            previous?.let { (_, _, info) ->
+                draggedCenter <
+                    info.offset + info.size * 0.58f
+            } == true
+
+        val target =
+            when {
+                moveDown -> next
+                moveUp -> previous
+                else -> null
+            } ?: return
+
+        val targetIndex = target.second
+        val targetInfo = target.third
 
         val oldOffset = draggedInfo.offset
-        val targetOffset = target.offset
+        val targetOffset = targetInfo.offset
 
         if (countingReorder.movePlaceholderTo(targetIndex)) {
-            // Cancel the Lazy layout jump of the dragged card.
+            // Because only one adjacent slot is ever accepted, this
+            // compensation cannot explode during a fast swipe.
             val rawCompensation = oldOffset - targetOffset
             val compensation =
                 if (fromIndex == 0 && targetIndex > fromIndex) {
-                    // Slot 0 has no previous row above it. A full target-offset
-                    // compensation can produce the characteristic first-item
-                    // plunge. Keep the first departure bounded to one card.
                     rawCompensation.coerceIn(
                         -draggedInfo.size,
                         draggedInfo.size
@@ -921,10 +933,7 @@ private fun CountingScreen(
         } else {
             // TimePlan model: translate the actual dragged Lazy item.
             detailedTimePlanDragOffsetY += delta.y
-            detailedReorderAtPointer(
-                itemId,
-                dragPointerY
-            )
+            detailedReorderAtPointer(itemId)
         }
     }
 
@@ -941,9 +950,9 @@ private fun CountingScreen(
         dragOverlayItemId,
         dragOverlayCompact
     ) {
-        val edgePx = with(countingDensity) { 104.dp.toPx() }
-        val minStepPx = with(countingDensity) { 3.2.dp.toPx() }
-        val maxStepPx = with(countingDensity) { 11.0.dp.toPx() }
+        val edgePx = with(countingDensity) { 112.dp.toPx() }
+        val minStepPx = with(countingDensity) { 8.0.dp.toPx() }
+        val maxStepPx = with(countingDensity) { 34.0.dp.toPx() }
 
         while (dragOverlayItemId != null) {
             val pointerY = dragPointerY
@@ -970,12 +979,17 @@ private fun CountingScreen(
                     else -> 0
                 }
 
-                if (direction != 0) {
+                if (
+                    direction != 0 ||
+                    !dragOverlayCompact
+                ) {
                     val depth =
                         if (direction < 0) {
                             (topEdge - pointerY).coerceAtLeast(0f)
-                        } else {
+                        } else if (direction > 0) {
                             (pointerY - bottomEdge).coerceAtLeast(0f)
+                        } else {
+                            0f
                         }
                     val ratio = (depth / edgePx).coerceIn(0f, 1f)
                     val easedRatio =
@@ -994,22 +1008,65 @@ private fun CountingScreen(
                             )
                         }
                     } else {
-                        detailedEdgeScrollSettling = true
-                        val consumed =
-                            listState.scrollBy(step * direction)
-                        detailedTimePlanDragOffsetY += consumed
+                        val draggedId = dragOverlayItemId
+                        val draggedInfo =
+                            draggedId?.let { id ->
+                                listState.layoutInfo.visibleItemsInfo
+                                    .firstOrNull { it.key == id }
+                            }
 
-                        // Give LazyColumn one frame to publish the new offsets.
-                        // Reorder is intentionally deferred until after scroll
-                        // geometry has settled, preventing edge ping-pong.
-                        withFrameNanos { }
-                        detailedEdgeScrollSettling = false
+                        val heldCenterY =
+                            draggedInfo?.let {
+                                it.offset +
+                                    it.size / 2f +
+                                    detailedTimePlanDragOffsetY
+                            }
 
-                        dragOverlayItemId?.let {
-                            detailedReorderAtPointer(
-                                it,
-                                dragPointerY
-                            )
+                        // Detailed edge activation is based on the held card,
+                        // matching the TimePlan model. Finger position is not
+                        // allowed to start scrolling before the card reaches
+                        // the edge zone.
+                        val detailedDirection =
+                            if (heldCenterY == null) {
+                                0
+                            } else {
+                                when {
+                                    heldCenterY < topEdge -> -1
+                                    heldCenterY > bottomEdge -> 1
+                                    else -> 0
+                                }
+                            }
+
+                        if (detailedDirection != 0) {
+                            val detailedDepth =
+                                if (detailedDirection < 0) {
+                                    (topEdge - heldCenterY!!)
+                                        .coerceAtLeast(0f)
+                                } else {
+                                    (heldCenterY!! - bottomEdge)
+                                        .coerceAtLeast(0f)
+                                }
+                            val detailedRatio =
+                                (detailedDepth / edgePx)
+                                    .coerceIn(0f, 1f)
+                            val detailedStep =
+                                minStepPx +
+                                    (maxStepPx - minStepPx) *
+                                        detailedRatio
+
+                            detailedEdgeScrollSettling = true
+                            val consumed =
+                                listState.scrollBy(
+                                    detailedStep * detailedDirection
+                                )
+                            // TimePlan behavior: preserve the visual position
+                            // of the held card while the background scrolls.
+                            detailedTimePlanDragOffsetY += consumed
+                            detailedEdgeScrollSettling = false
+
+                            draggedId?.let {
+                                detailedReorderAtPointer(it)
+                            }
                         }
                     }
                 }
