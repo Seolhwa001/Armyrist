@@ -651,6 +651,10 @@ private fun CountingScreen(
     var detailedTimePlanDragOffsetY by remember(sheet.id) {
         mutableFloatStateOf(0f)
     }
+    // Edge auto-scroll and reorder must not fight in the same layout tick.
+    var detailedEdgeScrollSettling by remember(sheet.id) {
+        mutableStateOf(false)
+    }
 
     var dragPointerX by remember(sheet.id) { mutableFloatStateOf(Float.NaN) }
     var dragPointerY by remember(sheet.id) { mutableFloatStateOf(Float.NaN) }
@@ -668,6 +672,7 @@ private fun CountingScreen(
         dragGrabOffsetX = 0f
         dragGrabOffsetY = 0f
         detailedTimePlanDragOffsetY = 0f
+        detailedEdgeScrollSettling = false
     }
 
     fun overlayCenterX(): Float =
@@ -682,6 +687,7 @@ private fun CountingScreen(
 
     fun detailedReorderAtPointer(itemId: String, pointerY: Float) {
         if (countingReorder.draggingItemId != itemId) return
+        if (detailedEdgeScrollSettling) return
 
         val layout = listState.layoutInfo
         val draggedInfo =
@@ -730,10 +736,21 @@ private fun CountingScreen(
         val targetOffset = target.offset
 
         if (countingReorder.movePlaceholderTo(targetIndex)) {
-            // Critical TimePlan behavior: cancel the Lazy layout jump of the
-            // dragged card. Only background cards visibly vacate the slot.
-            detailedTimePlanDragOffsetY +=
-                (oldOffset - targetOffset)
+            // Cancel the Lazy layout jump of the dragged card.
+            val rawCompensation = oldOffset - targetOffset
+            val compensation =
+                if (fromIndex == 0 && targetIndex > fromIndex) {
+                    // Slot 0 has no previous row above it. A full target-offset
+                    // compensation can produce the characteristic first-item
+                    // plunge. Keep the first departure bounded to one card.
+                    rawCompensation.coerceIn(
+                        -draggedInfo.size.toFloat(),
+                        draggedInfo.size.toFloat()
+                    )
+                } else {
+                    rawCompensation
+                }
+            detailedTimePlanDragOffsetY += compensation
         }
     }
 
@@ -841,6 +858,7 @@ private fun CountingScreen(
             dragOverlayItemId = itemId
             dragOverlayCompact = false
             detailedTimePlanDragOffsetY = 0f
+            detailedEdgeScrollSettling = false
             dragOverlayX = 0f
             dragOverlayY = info.offset.toFloat()
             dragOverlayWidth =
@@ -976,9 +994,17 @@ private fun CountingScreen(
                             )
                         }
                     } else {
+                        detailedEdgeScrollSettling = true
                         val consumed =
                             listState.scrollBy(step * direction)
                         detailedTimePlanDragOffsetY += consumed
+
+                        // Give LazyColumn one frame to publish the new offsets.
+                        // Reorder is intentionally deferred until after scroll
+                        // geometry has settled, preventing edge ping-pong.
+                        withFrameNanos { }
+                        detailedEdgeScrollSettling = false
+
                         dragOverlayItemId?.let {
                             detailedReorderAtPointer(
                                 it,
@@ -1725,7 +1751,7 @@ private fun CountingScreen(
                                             Text(
                                                 "⠿",
                                                 color =
-                                                    if (detailedDragging) {
+                                                    if (isDragging) {
                                                         ArmyristColors.PrimaryControl
                                                     } else {
                                                         ArmyristColors.SecondaryText
@@ -1828,7 +1854,7 @@ private fun CountingScreen(
                                     Text(
                                         "⠿",
                                         color =
-                                            if (detailedDragging) {
+                                            if (isDragging) {
                                                 ArmyristColors.PrimaryControl
                                             } else {
                                                 ArmyristColors.SecondaryText
