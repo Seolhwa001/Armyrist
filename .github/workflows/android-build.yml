@@ -2,7 +2,7 @@ name: Android Build
 
 on:
   push:
-    branches: [ "main", "release/0.6.73" ]
+    branches: [ "main", "release/0.6.74" ]
   workflow_dispatch:
 
 permissions:
@@ -18,16 +18,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Apply reviewed 0.6.73 interface changes
-        if: hashFiles('Killomris-0.6.73-source-changes.json') != ''
+      - name: Apply reviewed handicap tool changes
+        if: hashFiles('Killomris-0.6.74-source-changes.json') != ''
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PYTHON'
           import hashlib, json, base64
           from pathlib import Path
-          patch = Path('Killomris-0.6.73-source-changes.json')
-          assert hashlib.sha256(patch.read_bytes()).hexdigest() == '607719ddda7f6822a484f82930903dbbb951df62f3de788ef9072c761ead5745'
+          patch = Path('Killomris-0.6.74-source-changes.json')
+          assert hashlib.sha256(patch.read_bytes()).hexdigest() == 'ba738bf8743683900b73d33a31acf5a0a3bc89ae11aa10c07219cd4b81c7d7b7'
           for entry in json.loads(patch.read_text()):
               name = entry['path']
               target = Path(name)
@@ -44,8 +44,8 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'Refresh Killomris home, live banner and visual identity [skip ci]'
-          git push origin HEAD:refs/heads/release/0.6.73
+          git commit -m 'Add configurable handicap situation tool [skip ci]'
+          git push origin HEAD:refs/heads/release/0.6.74
 
       - name: Set up Java 17
         uses: actions/setup-java@v5
@@ -106,7 +106,7 @@ jobs:
           from pathlib import Path
           files = list(Path('app/build/test-results/testReleaseUnitTest').glob('TEST-*.xml'))
           stats = {key: sum(int(E.parse(f).getroot().get(key, 0)) for f in files) for key in ['tests', 'failures', 'errors', 'skipped']}
-          assert stats['tests'] >= 212 and stats['failures'] == stats['errors'] == stats['skipped'] == 0, stats
+          assert stats['tests'] >= 238 and stats['failures'] == stats['errors'] == stats['skipped'] == 0, stats
           Path(os.environ['RUNNER_TEMP'], 'Killomris-test-results.json').write_text(json.dumps(stats))
           print(stats)
           PYTHON
@@ -241,13 +241,13 @@ jobs:
           if-no-files-found: error
 
       - name: Prepare draft release for review
-        if: github.ref == 'refs/heads/release/0.6.73'
+        if: github.ref == 'refs/heads/release/0.6.74'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="v0.6.73"
+          TAG="v0.6.74"
           DIST="$RUNNER_TEMP/armyrist-distribution"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release tag already exists; refusing to replace it."
@@ -256,10 +256,10 @@ jobs:
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$(git rev-parse HEAD)" \
-            --title "낄롬리스 0.6.73" \
+            --title "낄롬리스 0.6.74" \
             --notes-file "$DIST/RELEASE_NOTES.txt" \
             --draft \
-            "$DIST/Armyrist-0.6.73.apk" "$DIST/release.json"
+            "$DIST/Armyrist-0.6.74.apk" "$DIST/release.json"
 
       - name: Remove temporary signing material
         if: always()
