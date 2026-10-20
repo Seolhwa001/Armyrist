@@ -20,6 +20,7 @@ class TimePlanMusicAlarmService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        runningService = this
         TimePlanActionNotificationManager.createChannel(this)
     }
 
@@ -137,11 +138,17 @@ class TimePlanMusicAlarmService : Service() {
         player = null
         activePlanId = null
         activeActionId = null
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        if (android.os.Build.VERSION.SDK_INT >= 24) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
         stopSelf()
     }
 
     override fun onDestroy() {
+        if (runningService === this) runningService = null
         player?.release()
         player = null
         super.onDestroy()
@@ -150,6 +157,17 @@ class TimePlanMusicAlarmService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
+        @Volatile private var runningService: TimePlanMusicAlarmService? = null
+
+        internal fun stopIfActive(planId: String, actionId: String) {
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                val service = runningService
+                if (service != null && service.activePlanId == planId && service.activeActionId == actionId) {
+                    service.stopAlarm()
+                }
+            }
+        }
+
         const val ACTION_START =
             "com.seolhwa.armyrist.TIMEPLAN_MUSIC_ALARM_START"
         const val ACTION_STOP =

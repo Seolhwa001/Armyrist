@@ -26,6 +26,13 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import com.seolhwa.armyrist.ui.IdReorderDraft
+import com.seolhwa.armyrist.ui.DragMotion
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
@@ -411,9 +418,10 @@ private fun ChecklistApp(
                     onReconcileNotifications()
                     refresh()
                 },
-                onMove = { itemId, delta ->
-                    repo.moveChecklistItem(selected.id, itemId, delta)
-                    refresh()
+                onReorder = { ids ->
+                    val saved = repo.reorderChecklistItems(selected.id, ids)
+                    if (saved) refresh()
+                    saved
                 }
             )
         }
@@ -702,7 +710,7 @@ private fun ChecklistDetailScreen(
     onBulkNotificationSound: (String?) -> Unit,
     onMemo: (String) -> Unit,
     onReset: () -> Unit,
-    onMove: (String, Int) -> Unit
+    onReorder: (List<String>) -> Boolean
 ) {
     val context = LocalContext.current
     var titleEdit by rememberSaveable { mutableStateOf(false) }
@@ -726,7 +734,68 @@ private fun ChecklistDetailScreen(
     val selectedIds = selectedIdList.toSet()
 
     val haptic = LocalHapticFeedback.current
-    val threshold = with(LocalDensity.current) { 46.dp.toPx() }
+    val listState = rememberLazyListState()
+    val canonicalItems = remember(checklist.items) { checklist.items.sortedBy { it.order } }
+    val canonicalIds = remember(canonicalItems) { canonicalItems.map { it.id } }
+    val itemsById = remember(canonicalItems) { canonicalItems.associateBy { it.id } }
+    val groupsById = remember(checklist.groups) { checklist.groups.associateBy { it.id } }
+    val reorderDraft = remember(checklist.id) { IdReorderDraft(canonicalIds) }
+    val visualItems = remember(reorderDraft.order, itemsById) { reorderDraft.order.mapNotNull(itemsById::get) }
+    var dragOffsetY by remember(checklist.id) { mutableFloatStateOf(0f) }
+    val edgeSize = with(LocalDensity.current) { 64.dp.toPx() }
+    val edgeStep = with(LocalDensity.current) { 14.dp.toPx() }
+
+    LaunchedEffect(canonicalIds, reorderDraft.draggingId) { reorderDraft.sync(canonicalIds) }
+
+    fun reorderAtPointer() {
+        val id = reorderDraft.draggingId ?: return
+        val layout = listState.layoutInfo
+        val held = layout.visibleItemsInfo.firstOrNull { it.key == id } ?: return
+        val from = reorderDraft.order.indexOf(id)
+        if (from < 0 || held.index != from) return // Wait for the preceding layout move.
+        val center = held.offset + held.size / 2f + dragOffsetY
+        val direction = if (center > held.offset + held.size / 2f) 1 else -1
+        val targetIndex = from + direction
+        val targetId = reorderDraft.order.getOrNull(targetIndex) ?: return
+        val target = layout.visibleItemsInfo.firstOrNull { it.key == targetId } ?: return
+        val crossed = if (direction > 0) center > target.offset + target.size / 2f
+            else center < target.offset + target.size / 2f
+        if (crossed && reorderDraft.moveTo(targetIndex)) {
+            dragOffsetY += DragMotion.compensation(held.offset, held.size, target.offset, target.size, direction > 0)
+        }
+    }
+
+    fun finishDrag(commit: Boolean) {
+        val ids = reorderDraft.finish(commit)
+        if (ids != null && !onReorder(ids)) {
+            reorderDraft.sync(canonicalIds)
+            Toast.makeText(context, "순서를 저장하지 못했습니다. 다시 시도해주세요.", Toast.LENGTH_LONG).show()
+        }
+        dragOffsetY = 0f
+    }
+
+    LaunchedEffect(reorderDraft.draggingId) {
+        var previous = 0L
+        while (reorderDraft.draggingId != null) {
+            val frame = withFrameNanos { it }
+            val scale = DragMotion.frameScale(previous, frame)
+            previous = frame
+            val layout = listState.layoutInfo
+            val held = layout.visibleItemsInfo.firstOrNull { it.key == reorderDraft.draggingId }
+            if (held != null) {
+                val center = held.offset + held.size / 2f + dragOffsetY
+                val top = layout.viewportStartOffset + edgeSize
+                val bottom = layout.viewportEndOffset - edgeSize
+                val speed = when {
+                    center < top -> -edgeStep * ((top - center) / edgeSize).coerceIn(0f, 1f)
+                    center > bottom -> edgeStep * ((center - bottom) / edgeSize).coerceIn(0f, 1f)
+                    else -> 0f
+                }
+                if (speed != 0f) dragOffsetY += listState.scrollBy(speed * scale)
+                reorderAtPointer()
+            }
+        }
+    }
 
     BackHandler {
         when {
@@ -932,6 +1001,7 @@ private fun ChecklistDetailScreen(
             HorizontalDivider()
 
             LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(8.dp, 6.dp, 8.dp, 24.dp),
                 verticalArrangement = Arrangement.spacedBy(
@@ -939,15 +1009,14 @@ private fun ChecklistDetailScreen(
                 )
             ) {
                 itemsIndexed(
-                    checklist.items.sortedBy { it.order },
-                    key = { _, item -> item.id }
+                    visualItems,
+                    key = { _, item -> item.id },
+                    contentType = { _, _ -> "checklist-item" }
                 ) { index, item ->
-                    val group = checklist.groups.firstOrNull { it.id == item.groupId }
+                    val group = groupsById[item.groupId]
                     val selected = item.id in selectedIds
 
-                    var dragDistance by remember(item.id) { mutableFloatStateOf(0f) }
-                    var visualOffset by remember(item.id) { mutableFloatStateOf(0f) }
-                    var dragging by remember(item.id) { mutableStateOf(false) }
+                    val dragging = reorderDraft.draggingId == item.id
 
                     val cardColor = when {
                         selected -> assignmentGroup?.let {
@@ -968,39 +1037,25 @@ private fun ChecklistDetailScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .zIndex(if (dragging) 1f else 0f)
-                            .offset { IntOffset(0, visualOffset.roundToInt()) }
+                            .animateItem(fadeInSpec = null, fadeOutSpec = null,
+                                placementSpec = if (dragging) null else spring(stiffness = Spring.StiffnessMediumLow, dampingRatio = Spring.DampingRatioNoBouncy))
+                            .graphicsLayer { translationY = if (dragging) dragOffsetY else 0f }
                             .pointerInput(item.id, assignmentMode) {
                                 if (!assignmentMode) {
                                     detectDragGesturesAfterLongPress(
                                         onDragStart = {
-                                            dragDistance = 0f
-                                            visualOffset = 0f
-                                            dragging = true
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            if (reorderDraft.begin(item.id)) {
+                                                dragOffsetY = 0f
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            }
                                         },
-                                        onDragCancel = {
-                                            dragDistance = 0f
-                                            visualOffset = 0f
-                                            dragging = false
-                                        },
-                                        onDragEnd = {
-                                            dragDistance = 0f
-                                            visualOffset = 0f
-                                            dragging = false
-                                        },
+                                        onDragCancel = { finishDrag(commit = false) },
+                                        onDragEnd = { finishDrag(commit = true) },
                                         onDrag = { change, amount ->
-                                            change.consume()
-                                            dragDistance += amount.y
-                                            visualOffset += amount.y
-
-                                            if (dragDistance >= threshold) {
-                                                onMove(item.id, 1)
-                                                dragDistance -= threshold
-                                                visualOffset -= threshold
-                                            } else if (dragDistance <= -threshold) {
-                                                onMove(item.id, -1)
-                                                dragDistance += threshold
-                                                visualOffset += threshold
+                                            if (reorderDraft.draggingId == item.id) {
+                                                change.consume()
+                                                dragOffsetY += amount.y
+                                                reorderAtPointer()
                                             }
                                         }
                                     )

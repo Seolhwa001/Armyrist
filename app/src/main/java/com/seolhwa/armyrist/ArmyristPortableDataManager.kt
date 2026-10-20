@@ -82,7 +82,7 @@ object ArmyristPortableDataManager {
         "armyrist_stage3_restore_journal"
     private const val JOURNAL_KEY = "pending_restore"
 
-    private const val KDF_ITERATIONS = 600_000
+    private const val KDF_ITERATIONS = PortableCryptoLimits.CURRENT_ITERATIONS
     private const val KEY_BITS = 256
     private const val GCM_TAG_BITS = 128
     private const val MAX_PORTABLE_FILE_BYTES =
@@ -144,8 +144,10 @@ object ArmyristPortableDataManager {
     }
 
     fun currentSummary(context: Context): BackupSummary {
-        val counting = readCountingRoot(context)
-        val core = readCoreRoot(context)
+        // A damaged source must not prevent opening the recovery screen.
+        // These fallbacks are summary-only and are never persisted or exported.
+        val counting = runCatching { readCountingRoot(context) }.getOrElse { JSONObject() }
+        val core = runCatching { readCoreRoot(context) }.getOrElse { JSONObject() }
 
         return BackupSummary(
             countingSheets =
@@ -637,7 +639,7 @@ object ArmyristPortableDataManager {
 
         val iterations =
             encryption.getInt("kdfIterations")
-        require(iterations > 0)
+        require(iterations in 1..PortableCryptoLimits.MAX_ITERATIONS)
 
         val salt = Base64.decode(
             encryption.getString("salt"),
@@ -648,8 +650,7 @@ object ArmyristPortableDataManager {
             Base64.NO_WRAP
         )
 
-        require(salt.size >= 16)
-        require(iv.isNotEmpty())
+        PortableCryptoLimits.validate(iterations, salt.size, iv.size)
 
         val key = deriveKey(password, salt, iterations)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -876,12 +877,15 @@ object ArmyristPortableDataManager {
             Context.MODE_PRIVATE
         ).getString(COUNTING_KEY, null)
 
-        return if (raw.isNullOrBlank()) {
+        return if (raw == null) {
             JSONObject()
                 .put("version", 2)
                 .put("sheets", JSONArray())
         } else {
-            JSONObject(raw)
+            JSONObject(raw).also {
+                it.getJSONArray("sheets")
+                validateCountingSnapshot(it)
+            }
         }
     }
 
@@ -891,7 +895,7 @@ object ArmyristPortableDataManager {
             Context.MODE_PRIVATE
         ).getString(CORE_KEY, null)
 
-        return if (raw.isNullOrBlank()) {
+        return if (raw == null) {
             JSONObject()
                 .put("version", 1)
                 .put("checklists", JSONArray())

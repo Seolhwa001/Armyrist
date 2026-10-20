@@ -21,6 +21,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.seolhwa.armyrist.notification.ChecklistNotificationManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 
 internal enum class PortableLaunchRoute {
@@ -283,6 +286,9 @@ class PortableTransferActivity : ComponentActivity() {
                 var encrypt by remember { mutableStateOf(false) }
                 var password by remember { mutableStateOf("") }
                 var confirm by remember { mutableStateOf("") }
+                var exporting by remember { mutableStateOf(false) }
+                val scope = rememberCoroutineScope()
+                if (exporting) PortableWorkDialog()
 
                 Scaffold(
                     topBar = {
@@ -343,7 +349,7 @@ class PortableTransferActivity : ComponentActivity() {
                                 )
                             }
                             Spacer(Modifier.height(14.dp))
-                            fun createPortableBytes(): ByteArray? {
+                            suspend fun createPortableBytes(): ByteArray? {
                                 if (
                                     encrypt &&
                                     (
@@ -359,20 +365,15 @@ class PortableTransferActivity : ComponentActivity() {
                                     return null
                                 }
 
-                                return when (
-                                    val result =
-                                        ArmyristPortableDataManager
-                                            .createIndividualExport(
-                                                this@PortableTransferActivity,
-                                                type,
-                                                rootId,
-                                                if (encrypt) {
-                                                    password.toCharArray()
-                                                } else {
-                                                    null
-                                                }
-                                            )
-                                ) {
+                                val chars = if (encrypt) password.toCharArray() else null
+                                val result = withContext(Dispatchers.Default) {
+                                    try {
+                                        ArmyristPortableDataManager.createIndividualExport(
+                                            this@PortableTransferActivity, type, rootId, chars
+                                        )
+                                    } finally { chars?.fill('\u0000') }
+                                }
+                                return when (result) {
                                     is PortableResult.Success ->
                                         result.value
 
@@ -395,14 +396,18 @@ class PortableTransferActivity : ComponentActivity() {
                                 ArmyristActionButton(
                                     text = "파일 저장",
                                     onClick = {
-                                        val bytes =
-                                            createPortableBytes()
-                                                ?: return@ArmyristActionButton
-                                        pendingBytes = bytes
-                                        createFile.launch(
-                                            "${safeTypeName(type)}-" +
-                                                "${System.currentTimeMillis()}.armyrist"
-                                        )
+                                        if (!exporting) {
+                                            exporting = true
+                                            scope.launch {
+                                                try {
+                                                    val bytes = createPortableBytes()
+                                                    if (bytes != null) {
+                                                        pendingBytes = bytes
+                                                        createFile.launch("${safeTypeName(type)}-${System.currentTimeMillis()}.armyrist")
+                                                    }
+                                                } finally { exporting = false }
+                                            }
+                                        }
                                     },
                                     modifier = Modifier.weight(1f)
                                 )
@@ -410,15 +415,17 @@ class PortableTransferActivity : ComponentActivity() {
                                 ArmyristActionButton(
                                     text = "공유",
                                     onClick = {
-                                        val bytes =
-                                            createPortableBytes()
-                                                ?: return@ArmyristActionButton
-                                        shareArmyristFile(
-                                            bytes = bytes,
-                                            filename =
-                                                "${safeTypeName(type)}-" +
-                                                    "${System.currentTimeMillis()}.armyrist"
-                                        )
+                                        if (!exporting) {
+                                            exporting = true
+                                            scope.launch {
+                                                try {
+                                                    val bytes = createPortableBytes()
+                                                    if (bytes != null) shareArmyristFile(
+                                                        bytes, "${safeTypeName(type)}-${System.currentTimeMillis()}.armyrist"
+                                                    )
+                                                } finally { exporting = false }
+                                            }
+                                        }
                                     },
                                     modifier = Modifier.weight(1f),
                                     primary = true
@@ -455,15 +462,27 @@ class PortableTransferActivity : ComponentActivity() {
                 var legacyDatePickerOpen by remember { mutableStateOf(false) }
                 val encrypted = inspection.value.encrypted
 
+                val scope = rememberCoroutineScope()
+                var validating by remember { mutableStateOf(false) }
+                if (validating) PortableWorkDialog()
+
                 fun validateNow() {
-                    when (val result = ArmyristPortableDataManager.validateIndividualImport(
-                        bytes,
-                        if (encrypted) password.toCharArray() else null
-                    )) {
-                        is PortableResult.Success -> validated = result.value
-                        is PortableResult.Error -> Toast.makeText(
-                            this@PortableTransferActivity, result.message, Toast.LENGTH_LONG
-                        ).show()
+                    if (validating) return
+                    validating = true
+                    val chars = if (encrypted) password.toCharArray() else null
+                    scope.launch {
+                        try {
+                            val result = withContext(Dispatchers.Default) {
+                                try { ArmyristPortableDataManager.validateIndividualImport(bytes, chars) }
+                                finally { chars?.fill('\u0000') }
+                            }
+                            when (result) {
+                                is PortableResult.Success -> validated = result.value
+                                is PortableResult.Error -> Toast.makeText(
+                                    this@PortableTransferActivity, result.message, Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        } finally { validating = false }
                     }
                 }
 

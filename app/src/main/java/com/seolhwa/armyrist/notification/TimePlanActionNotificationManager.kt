@@ -79,13 +79,8 @@ object TimePlanActionNotificationManager {
     }
 
     fun stopMusicAlarm(context: Context, planId: String, actionId: String) {
-        context.startService(
-            Intent(context, TimePlanMusicAlarmService::class.java).apply {
-                action = TimePlanMusicAlarmService.ACTION_STOP
-                putExtra(EXTRA_PLAN_ID, planId)
-                putExtra(EXTRA_ACTION_ID, actionId)
-            }
-        )
+        // Never start an idle/background service merely to request a stop.
+        TimePlanMusicAlarmService.stopIfActive(planId, actionId)
     }
 
     fun stopMusicPendingIntent(
@@ -123,28 +118,41 @@ object TimePlanActionNotificationManager {
     }
 
     fun reconcile(context: Context, repository: DateAwareTimePlanRepository) {
+        if (!repository.storageReadable) return
         createChannel(context)
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val previously = prefs.getStringSet(KEY_IDS, emptySet()).orEmpty().toSet()
-        val active = mutableSetOf<String>()
+        val tracked = mutableSetOf<String>()
+        val now = java.time.LocalDateTime.now()
+        val permission = notificationPermissionGranted(context)
 
         repository.getPlans().forEach { plan ->
             plan.actions.forEach { action ->
-                val key = key(plan.id, action.id)
-                if (isEligible(context, plan, action)) {
-                    schedule(context, plan, action)
-                    active += key
-                } else {
-                    cancelScheduledOnly(context, plan.id, action.id)
+                val storedKey = key(plan.id, action.id)
+                when (TimePlanAlarmPolicy.disposition(plan, action, now, permission)) {
+                    AlarmDisposition.SCHEDULE -> {
+                        schedule(context, plan, action)
+                        tracked += storedKey
+                    }
+                    AlarmDisposition.PRESERVE_DELIVERED -> {
+                        // Keep tracking fired actions, so deletion/completion on a
+                        // subsequent reconcile can still clear their notification.
+                        cancelScheduledOnly(context, plan.id, action.id)
+                        if (action.notificationMode != com.seolhwa.armyrist.timeplan.v3.domain.ActionNotificationMode.MUSIC) {
+                            stopMusicAlarm(context, plan.id, action.id)
+                        }
+                        tracked += storedKey
+                    }
+                    AlarmDisposition.CLEAR -> cancel(context, plan.id, action.id)
                 }
             }
         }
 
-        (previously - active).forEach { stored ->
+        (previously - tracked).forEach { stored ->
             val parts = stored.split('|', limit = 2)
-            if (parts.size == 2) cancelScheduledOnly(context, parts[0], parts[1])
+            if (parts.size == 2) cancel(context, parts[0], parts[1])
         }
-        prefs.edit().putStringSet(KEY_IDS, active).apply()
+        prefs.edit().putStringSet(KEY_IDS, tracked).apply()
     }
 
     fun schedule(context: Context, plan: DateAwareTimePlan, action: TimePlanActionItem): Boolean {
@@ -158,7 +166,7 @@ object TimePlanActionNotificationManager {
             .toInstant()
             .toEpochMilli()
         val manager = context.getSystemService(AlarmManager::class.java)
-        cancelScheduledOnly(context, plan.id, action.id)
+        cancel(context, plan.id, action.id)
         val pending = alarmPendingIntent(context, plan.id, action.id)
 
         // Reminder contract: deliver at the scheduled time even while the screen is off
@@ -179,7 +187,7 @@ object TimePlanActionNotificationManager {
     }
 
     /**
-     * Cancels only future AlarmManager delivery and the ordinary notification.
+     * Cancels only future AlarmManager delivery; delivered notifications are retained.
      * It intentionally does NOT stop an already-running MUSIC foreground service.
      *
      * This is used by reconcile/schedule so merely opening Armyrist after the
@@ -197,25 +205,13 @@ object TimePlanActionNotificationManager {
             manager.cancel(it)
             it.cancel()
         }
-        context.getSystemService(NotificationManager::class.java)
-            .cancel(requestCode(planId, actionId))
     }
 
     fun cancel(context: Context, planId: String, actionId: String) {
-        val manager = context.getSystemService(AlarmManager::class.java)
-        PendingIntent.getBroadcast(
-            context,
-            requestCode(planId, actionId),
-            Intent(context, TimePlanActionAlarmReceiver::class.java)
-                .setAction("com.seolhwa.armyrist.TIMEPLAN_ACTION_ALARM"),
-            PendingIntent.FLAG_NO_CREATE or immutableFlag()
-        )?.let {
-            manager.cancel(it)
-            it.cancel()
-        }
+        cancelScheduledOnly(context, planId, actionId)
         context.getSystemService(NotificationManager::class.java)
             .cancel(requestCode(planId, actionId))
-        runCatching { stopMusicAlarm(context, planId, actionId) }
+        stopMusicAlarm(context, planId, actionId)
     }
 
     fun openActionPendingIntent(context: Context, planId: String, actionId: String): PendingIntent =

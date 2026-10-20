@@ -48,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -55,6 +56,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.seolhwa.armyrist.data.CountingRepository
+import com.seolhwa.armyrist.ui.DragMotion
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import com.seolhwa.armyrist.counting.reorder.CountingDragGeometry
 import com.seolhwa.armyrist.counting.reorder.CountingReorderMode
 import com.seolhwa.armyrist.counting.reorder.CountingReorderSlot
 import com.seolhwa.armyrist.counting.reorder.CountingReorderV2
@@ -117,9 +122,12 @@ private fun ArmyristApp(
             trashRepo = trashRepo,
             onHome = onHome,
             onCreate = {
-                selectedSheetId = repo.createSheet().id
-                refresh()
-                screenName = Screen.COUNTING.name
+                val created = repo.createSheet()
+                if (created != null) {
+                    selectedSheetId = created.id
+                    refresh()
+                    screenName = Screen.COUNTING.name
+                }
             },
             onOpen = {
                 selectedSheetId = it
@@ -242,7 +250,9 @@ private fun ArmyristApp(
                             refresh()
                         },
                         onReorder = { orderedIds ->
-                            if (repo.reorderItems(sheet.id, orderedIds)) refresh()
+                            val saved = repo.reorderItems(sheet.id, orderedIds)
+                            if (saved) refresh()
+                            saved
                         },
                         onAssignGroup = { itemIds, groupId ->
                             if (repo.assignItemsToGroup(sheet.id, itemIds, groupId)) refresh()
@@ -584,7 +594,7 @@ private fun CountingScreen(
     onDecrement: (String) -> Unit,
     onQuantity: (String, Int) -> Unit,
     onMove: (String, Int) -> Unit,
-    onReorder: (List<String>) -> Unit,
+    onReorder: (List<String>) -> Boolean,
     onAssignGroup: (Set<String>, String?) -> Unit
 ) {
     val context = LocalContext.current
@@ -613,11 +623,6 @@ private fun CountingScreen(
     var assignmentSelectedList by rememberSaveable { mutableStateOf(emptyList<String>()) }
     val assignmentSelected = assignmentSelectedList.toSet()
 
-    val dragThresholdPx = with(LocalDensity.current) { 84.dp.toPx() }
-    val compactDragHorizontalThresholdPx =
-        with(LocalDensity.current) { 84.dp.toPx() }
-    val compactDragVerticalThresholdPx =
-        with(LocalDensity.current) { 108.dp.toPx() }
     val listState = rememberLazyListState()
     val compactGridState = rememberLazyGridState()
 
@@ -625,6 +630,11 @@ private fun CountingScreen(
         CountingReorderV2(sheet.items)
     }
     val visualItems = countingReorder.items
+    val groupsById = remember(sheet.groups) { sheet.groups.associateBy { it.id } }
+    val groupMarkers = remember(sheet.groups) {
+        sheet.groups.sortedBy { it.order }.groupBy { it.color.lowercase() }.values
+            .filter { it.size > 1 }.flatMap { group -> group.mapIndexed { i, value -> value.id to i + 1 } }.toMap()
+    }
     val countingDensity = LocalDensity.current
 
     // -----------------------------------------------------------------
@@ -645,16 +655,9 @@ private fun CountingScreen(
     var dragOverlayWidth by remember(sheet.id) { mutableFloatStateOf(0f) }
     var dragOverlayHeight by remember(sheet.id) { mutableFloatStateOf(0f) }
 
-    // Detailed mode now follows the proven TimePlan motion model:
-    // the actual Lazy item is translated and its offset is compensated after
-    // every reorder so it remains under the finger.
-    var detailedTimePlanDragOffsetY by remember(sheet.id) {
-        mutableFloatStateOf(0f)
-    }
-    // Edge auto-scroll and reorder must not fight in the same layout tick.
-    var detailedEdgeScrollSettling by remember(sheet.id) {
-        mutableStateOf(false)
-    }
+    // The held visual lives outside LazyColumn. Reordering or scroll anchoring
+    // can move the placeholder, but cannot change the original grab point.
+    var detailedDragDirection by remember(sheet.id) { mutableIntStateOf(0) }
 
     var dragPointerX by remember(sheet.id) { mutableFloatStateOf(Float.NaN) }
     var dragPointerY by remember(sheet.id) { mutableFloatStateOf(Float.NaN) }
@@ -671,8 +674,7 @@ private fun CountingScreen(
         dragPointerY = Float.NaN
         dragGrabOffsetX = 0f
         dragGrabOffsetY = 0f
-        detailedTimePlanDragOffsetY = 0f
-        detailedEdgeScrollSettling = false
+        detailedDragDirection = 0
     }
 
     fun overlayCenterX(): Float =
@@ -685,90 +687,45 @@ private fun CountingScreen(
         countingReorder.sync(sheet.items)
     }
 
-    fun detailedReorderAtPointer(itemId: String) {
+    fun detailedReorderAtPointer(itemId: String, direction: Int = detailedDragDirection) {
         if (countingReorder.draggingItemId != itemId) return
-        if (detailedEdgeScrollSettling) return
-
-        val layout = listState.layoutInfo
-        val draggedInfo =
-            layout.visibleItemsInfo.firstOrNull { it.key == itemId }
-                ?: return
-
-        val draggedCenter =
-            draggedInfo.offset +
-                draggedInfo.size / 2f +
-                detailedTimePlanDragOffsetY
-
         val fromIndex = countingReorder.projectedIndexOf(itemId)
         if (fromIndex < 0) return
+        val layout = listState.layoutInfo
+        val heldInfo = layout.visibleItemsInfo.firstOrNull { it.key == itemId }
+        if (heldInfo != null && heldInfo.index != fromIndex) return
+        // A projection change must be acknowledged by layout before another
+        // swap. Never compare the new order with positions from the old order.
+        val slots = layout.visibleItemsInfo.mapNotNull { info ->
+            val id = info.key as? String ?: return@mapNotNull null
+            val index = countingReorder.projectedIndexOf(id)
+            if (index < 0 || info.index != index) return@mapNotNull null
+            CountingReorderSlot(
+                id, index, 0f,
+                CountingDragGeometry.hostY(info.offset, layout.beforeContentPadding) + info.size / 2f,
+                0f, info.size.toFloat()
+            )
+        }
+        val targetIndex = CountingDragGeometry.adjacentTarget(
+            fromIndex, overlayCenterY(), dragOverlayHeight, direction, slots
+        ) ?: return
 
-        // TimePlan cadence adapted to Counting:
-        // inspect only the immediately adjacent logical slot in the direction
-        // the held card has actually crossed. Never jump to a distant visible
-        // target during one pointer event.
-        val adjacentCandidates =
-            layout.visibleItemsInfo.mapNotNull { info ->
-                val id = info.key as? String ?: return@mapNotNull null
-                if (id == itemId) return@mapNotNull null
-                val index = countingReorder.projectedIndexOf(id)
-                if (index < 0) return@mapNotNull null
-                Triple(id, index, info)
-            }
-
-        val next =
-            adjacentCandidates.firstOrNull { (_, index, _) ->
-                index == fromIndex + 1
-            }
-        val previous =
-            adjacentCandidates.firstOrNull { (_, index, _) ->
-                index == fromIndex - 1
-            }
-
-        val moveDown =
-            next?.let { (_, _, info) ->
-                draggedCenter >
-                    info.offset + info.size * 0.42f
-            } == true
-
-        val moveUp =
-            previous?.let { (_, _, info) ->
-                draggedCenter <
-                    info.offset + info.size * 0.58f
-            } == true
-
-        val target =
-            when {
-                moveDown -> next
-                moveUp -> previous
-                else -> null
-            } ?: return
-
-        val targetIndex = target.second
-        val targetInfo = target.third
-
-        val oldOffset = draggedInfo.offset
-        val targetOffset = targetInfo.offset
-
+        // LazyColumn normally follows its first visible key when order changes.
+        // If that key is the dragged first row, following it scrolls the list
+        // unexpectedly. Keep the viewport's numerical position for this layout.
+        val firstIndex = listState.firstVisibleItemIndex
+        val firstOffset = listState.firstVisibleItemScrollOffset
         if (countingReorder.movePlaceholderTo(targetIndex)) {
-            // Because only one adjacent slot is ever accepted, this
-            // compensation cannot explode during a fast swipe.
-            val rawCompensation = oldOffset - targetOffset
-            val compensation =
-                if (fromIndex == 0 && targetIndex > fromIndex) {
-                    rawCompensation.coerceIn(
-                        -draggedInfo.size,
-                        draggedInfo.size
-                    )
-                } else {
-                    rawCompensation
-                }
-            detailedTimePlanDragOffsetY += compensation
+            listState.requestScrollToItem(firstIndex, firstOffset)
         }
     }
 
     fun compactReorderAtPointer(itemId: String, pointerX: Float, pointerY: Float) {
         if (countingReorder.draggingItemId != itemId) return
-        val slots = compactGridState.layoutInfo.visibleItemsInfo.mapNotNull { info ->
+        val visible = compactGridState.layoutInfo.visibleItemsInfo
+        val held = visible.firstOrNull { it.key == itemId } ?: return
+        if (held.index != countingReorder.projectedIndexOf(itemId)) return
+        val slots = visible.mapNotNull { info ->
             val id = info.key as? String ?: return@mapNotNull null
             val index = countingReorder.projectedIndexOf(id)
             if (index < 0) return@mapNotNull null
@@ -776,7 +733,7 @@ private fun CountingScreen(
                 itemId = id,
                 index = index,
                 centerX = info.offset.x + info.size.width / 2f,
-                centerY = info.offset.y + info.size.height / 2f,
+                centerY = CountingDragGeometry.hostY(info.offset.y, compactGridState.layoutInfo.beforeContentPadding) + info.size.height / 2f,
                 width = info.size.width.toFloat(),
                 height = info.size.height.toFloat()
             )
@@ -790,8 +747,14 @@ private fun CountingScreen(
     }
 
     fun finishCountingReorder(commit: Boolean) {
-        if (commit) onReorder(countingReorder.commitOrder())
-        else countingReorder.cancel(sheet.items)
+        if (commit) {
+            val order = countingReorder.commitOrder()
+            val previous = sheet.items.sortedBy { it.order }.map { it.id }
+            if (order != previous && !onReorder(order)) {
+                countingReorder.cancel(sheet.items)
+                android.widget.Toast.makeText(context, "순서를 저장하지 못했습니다. 다시 시도해주세요.", android.widget.Toast.LENGTH_LONG).show()
+            }
+        } else countingReorder.cancel(sheet.items)
     }
 
     fun findCountingDragTarget(start: Offset): String? {
@@ -801,7 +764,7 @@ private fun CountingScreen(
             compactGridState.layoutInfo.visibleItemsInfo
                 .firstOrNull { info ->
                     val left = info.offset.x.toFloat()
-                    val top = info.offset.y.toFloat()
+                    val top = CountingDragGeometry.hostY(info.offset.y, compactGridState.layoutInfo.beforeContentPadding)
                     val right = left + info.size.width
                     val bottom = top + info.size.height
 
@@ -824,7 +787,7 @@ private fun CountingScreen(
                     }
 
                     val left = 0f
-                    val top = info.offset.toFloat()
+                    val top = CountingDragGeometry.hostY(info.offset, listState.layoutInfo.beforeContentPadding)
                     val right = handleWidthPx
                     val bottom = top + info.size
 
@@ -855,7 +818,7 @@ private fun CountingScreen(
             dragOverlayItemId = itemId
             dragOverlayCompact = true
             dragOverlayX = info.offset.x.toFloat()
-            dragOverlayY = info.offset.y.toFloat()
+            dragOverlayY = CountingDragGeometry.hostY(info.offset.y, compactGridState.layoutInfo.beforeContentPadding)
             dragOverlayWidth = info.size.width.toFloat()
             dragOverlayHeight = info.size.height.toFloat()
         } else {
@@ -869,12 +832,11 @@ private fun CountingScreen(
             )
             dragOverlayItemId = itemId
             dragOverlayCompact = false
-            detailedTimePlanDragOffsetY = 0f
-            detailedEdgeScrollSettling = false
-            dragOverlayX = 0f
-            dragOverlayY = info.offset.toFloat()
-            dragOverlayWidth =
-                listState.layoutInfo.viewportSize.width.toFloat()
+            detailedDragDirection = 0
+            val horizontalPadding = with(countingDensity) { 8.dp.toPx() }
+            dragOverlayX = horizontalPadding
+            dragOverlayY = CountingDragGeometry.hostY(info.offset, listState.layoutInfo.beforeContentPadding)
+            dragOverlayWidth = listState.layoutInfo.viewportSize.width - horizontalPadding * 2f
             dragOverlayHeight = info.size.toFloat()
         }
 
@@ -884,55 +846,19 @@ private fun CountingScreen(
         dragGrabOffsetY = start.y - dragOverlayY
     }
 
-    fun updateCountingDrag(delta: Offset) {
+    fun updateCountingDrag(position: Offset, delta: Offset) {
         val itemId = dragOverlayItemId ?: return
         if (dragPointerX.isNaN() || dragPointerY.isNaN()) return
-
-        dragPointerX += delta.x
-        dragPointerY += delta.y
-
-        val viewportWidth =
-            if (dragOverlayCompact) {
-                compactGridState.layoutInfo.viewportSize.width.toFloat()
-            } else {
-                listState.layoutInfo.viewportSize.width.toFloat()
-            }
-
-        val viewportStart =
-            if (dragOverlayCompact) {
-                compactGridState.layoutInfo.viewportStartOffset.toFloat()
-            } else {
-                listState.layoutInfo.viewportStartOffset.toFloat()
-            }
-
-        val viewportEnd =
-            if (dragOverlayCompact) {
-                compactGridState.layoutInfo.viewportEndOffset.toFloat()
-            } else {
-                listState.layoutInfo.viewportEndOffset.toFloat()
-            }
-
-        val maxX = (viewportWidth - dragOverlayWidth).coerceAtLeast(0f)
-        val maxY = (viewportEnd - dragOverlayHeight).coerceAtLeast(viewportStart)
-
-        // Pointer and overlay share the same host coordinate system.
-        // The grab point on the card therefore never changes during reorder.
+        dragPointerX = position.x
+        dragPointerY = position.y
+        // Absolute host coordinates are the sole visual source of truth.
+        // Do not clamp, accumulate swap corrections, or add consumed scroll.
+        dragOverlayY = CountingDragGeometry.overlayTop(dragPointerY, dragGrabOffsetY)
         if (dragOverlayCompact) {
-            dragOverlayX =
-                (dragPointerX - dragGrabOffsetX)
-                    .coerceIn(0f, maxX)
-            dragOverlayY =
-                (dragPointerY - dragGrabOffsetY)
-                    .coerceIn(viewportStart, maxY)
-
-            compactReorderAtPointer(
-                itemId,
-                overlayCenterX(),
-                overlayCenterY()
-            )
+            dragOverlayX = dragPointerX - dragGrabOffsetX
+            compactReorderAtPointer(itemId, overlayCenterX(), overlayCenterY())
         } else {
-            // TimePlan model: translate the actual dragged Lazy item.
-            detailedTimePlanDragOffsetY += delta.y
+            if (delta.y != 0f) detailedDragDirection = if (delta.y > 0f) 1 else -1
             detailedReorderAtPointer(itemId)
         }
     }
@@ -943,135 +869,34 @@ private fun CountingScreen(
         clearCountingOverlay()
     }
 
-    // Auto-scroll is also owned by the stable host. It continues even if the
-    // placeholder moves to a slot that is outside the currently visible Lazy
-    // item set.
-    LaunchedEffect(
-        dragOverlayItemId,
-        dragOverlayCompact
-    ) {
-        val edgePx = with(countingDensity) { 112.dp.toPx() }
-        val minStepPx = with(countingDensity) { 8.0.dp.toPx() }
-        val maxStepPx = with(countingDensity) { 34.0.dp.toPx() }
-
+    // A proportional edge band leaves a neutral centre even when the summary
+    // above the list leaves only a few rows of usable viewport height.
+    LaunchedEffect(dragOverlayItemId, dragOverlayCompact) {
+        val requestedEdgePx = with(countingDensity) { 112.dp.toPx() }
+        val maxStepPx = with(countingDensity) { 12.dp.toPx() }
+        var previousFrame = 0L
         while (dragOverlayItemId != null) {
-            val pointerY = dragPointerY
-            if (!pointerY.isNaN()) {
-                val viewportStart =
-                    if (dragOverlayCompact) {
-                        compactGridState.layoutInfo.viewportStartOffset.toFloat()
-                    } else {
-                        listState.layoutInfo.viewportStartOffset.toFloat()
-                    }
-                val viewportEnd =
-                    if (dragOverlayCompact) {
-                        compactGridState.layoutInfo.viewportEndOffset.toFloat()
-                    } else {
-                        listState.layoutInfo.viewportEndOffset.toFloat()
-                    }
-
-                val topEdge = viewportStart + edgePx
-                val bottomEdge = viewportEnd - edgePx
-
-                val direction = when {
-                    pointerY < topEdge -> -1
-                    pointerY > bottomEdge -> 1
-                    else -> 0
-                }
-
-                if (
-                    direction != 0 ||
-                    !dragOverlayCompact
-                ) {
-                    val depth =
-                        if (direction < 0) {
-                            (topEdge - pointerY).coerceAtLeast(0f)
-                        } else if (direction > 0) {
-                            (pointerY - bottomEdge).coerceAtLeast(0f)
-                        } else {
-                            0f
-                        }
-                    val ratio = (depth / edgePx).coerceIn(0f, 1f)
-                    val easedRatio =
-                        (0.18f + ratio * 0.82f).coerceIn(0f, 1f)
-                    val step =
-                        minStepPx +
-                            (maxStepPx - minStepPx) * easedRatio
-
-                    if (dragOverlayCompact) {
-                        compactGridState.scrollBy(step * direction)
-                        dragOverlayItemId?.let {
-                            compactReorderAtPointer(
-                                it,
-                                overlayCenterX(),
-                                overlayCenterY()
-                            )
-                        }
-                    } else {
-                        val draggedId = dragOverlayItemId
-                        val draggedInfo =
-                            draggedId?.let { id ->
-                                listState.layoutInfo.visibleItemsInfo
-                                    .firstOrNull { it.key == id }
-                            }
-
-                        val heldCenterY =
-                            draggedInfo?.let {
-                                it.offset +
-                                    it.size / 2f +
-                                    detailedTimePlanDragOffsetY
-                            }
-
-                        // Detailed edge activation is based on the held card,
-                        // matching the TimePlan model. Finger position is not
-                        // allowed to start scrolling before the card reaches
-                        // the edge zone.
-                        val detailedDirection =
-                            if (heldCenterY == null) {
-                                0
-                            } else {
-                                when {
-                                    heldCenterY < topEdge -> -1
-                                    heldCenterY > bottomEdge -> 1
-                                    else -> 0
-                                }
-                            }
-
-                        if (detailedDirection != 0) {
-                            val detailedDepth =
-                                if (detailedDirection < 0) {
-                                    (topEdge - heldCenterY!!)
-                                        .coerceAtLeast(0f)
-                                } else {
-                                    (heldCenterY!! - bottomEdge)
-                                        .coerceAtLeast(0f)
-                                }
-                            val detailedRatio =
-                                (detailedDepth / edgePx)
-                                    .coerceIn(0f, 1f)
-                            val detailedStep =
-                                minStepPx +
-                                    (maxStepPx - minStepPx) *
-                                        detailedRatio
-
-                            detailedEdgeScrollSettling = true
-                            val consumed =
-                                listState.scrollBy(
-                                    detailedStep * detailedDirection
-                                )
-                            // TimePlan behavior: preserve the visual position
-                            // of the held card while the background scrolls.
-                            detailedTimePlanDragOffsetY += consumed
-                            detailedEdgeScrollSettling = false
-
-                            draggedId?.let {
-                                detailedReorderAtPointer(it)
-                            }
-                        }
-                    }
-                }
+            val frame = withFrameNanos { it }
+            val scale = DragMotion.frameScale(previousFrame, frame)
+            previousFrame = frame
+            val itemId = dragOverlayItemId ?: break
+            val height = if (dragOverlayCompact) {
+                compactGridState.layoutInfo.viewportSize.height
+            } else listState.layoutInfo.viewportSize.height
+            val fraction = CountingDragGeometry.edgeScrollFraction(
+                dragPointerY, height.toFloat(), requestedEdgePx
+            )
+            val consumed = if (fraction == 0f) 0f else if (dragOverlayCompact) {
+                compactGridState.scrollBy(maxStepPx * fraction * scale)
+            } else {
+                listState.scrollBy(maxStepPx * fraction * scale)
             }
-            delay(16)
+            if (dragOverlayCompact) {
+                compactReorderAtPointer(itemId, overlayCenterX(), overlayCenterY())
+            } else {
+                val direction = if (consumed > 0f) 1 else if (consumed < 0f) -1 else detailedDragDirection
+                detailedReorderAtPointer(itemId, direction)
+            }
         }
     }
 
@@ -1216,10 +1041,11 @@ private fun CountingScreen(
             // lazy layouts alive during Crossfade caused stale placement frames and
             // visible flashing after drag/reorder. Render exactly one layout.
             val animatedViewMode = viewMode
-            Box(
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
+                    .clipToBounds()
                     .pointerInput(
                         sheet.id,
                         viewMode,
@@ -1248,441 +1074,19 @@ private fun CountingScreen(
                             onDrag = { change, dragAmount ->
                                 if (dragOverlayItemId != null) {
                                     change.consume()
-                                    updateCountingDrag(dragAmount)
+                                    updateCountingDrag(change.position, dragAmount)
                                 }
                             }
                         )
                     }
             ) {
-            if (animatedViewMode == CountingViewMode.COMPACT) {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    state = compactGridState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 24.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    if (sheet.items.isEmpty()) {
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            Column(
-                                Modifier.fillMaxWidth().padding(vertical = 28.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text("항목이 없습니다", style = MaterialTheme.typography.titleMedium)
-                                Spacer(Modifier.height(6.dp))
-                                Text("아래 새 항목 추가 버튼으로 시작하세요.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-
-                    gridItems(
-                        items = visualItems,
-                        key = { it.id }
-                    ) { item ->
-                        val displayIndex = visualItems.indexOfFirst { it.id == item.id } + 1
-                        val currentGroup = sheet.groups.firstOrNull { it.id == item.groupId }
-                        val groupColor = currentGroup?.let { parseColor(it.color) }
-                        val assignmentMode = assignmentGroupId != null
-                        val selected = item.id in assignmentSelected
-                        val selectedColor = sheet.groups
-                            .firstOrNull { it.id == assignmentGroupId }
-                            ?.let { parseColor(it.color).copy(alpha = 0.26f) }
-                            ?: ArmyristColors.SecondaryControl
-
-                        var compactDragOffsetX by remember(item.id) {
-                            mutableFloatStateOf(0f)
-                        }
-                        var compactDragOffsetY by remember(item.id) {
-                            mutableFloatStateOf(0f)
-                        }
-                        var compactFingerCenterX by remember(item.id) {
-                            mutableFloatStateOf(Float.NaN)
-                        }
-                        var compactFingerCenterY by remember(item.id) {
-                            mutableFloatStateOf(Float.NaN)
-                        }
-                        var compactPointerY by remember(item.id) {
-                            mutableFloatStateOf(Float.NaN)
-                        }
-                        var compactDragging by remember(item.id) {
-                            mutableStateOf(false)
-                        }
-                        val compactHaptic = LocalHapticFeedback.current
-                        val compactDragScope = rememberCoroutineScope()
-                        val compactEdgeThresholdPx =
-                            with(LocalDensity.current) { 112.dp.toPx() }
-                        val compactAutoScrollStepPx =
-                            with(LocalDensity.current) { 10.0.dp.toPx() }
-                        var compactAutoScrollDirection by remember(item.id) { mutableIntStateOf(0) }
-                        LaunchedEffect(compactDragging) {
-                            while (compactDragging) {
-                                val layout = compactGridState.layoutInfo
-                                val topEdge =
-                                    layout.viewportStartOffset +
-                                        compactEdgeThresholdPx
-                                val bottomEdge =
-                                    layout.viewportEndOffset -
-                                        compactEdgeThresholdPx
-
-                                val direction = when {
-                                    compactPointerY.isNaN() -> 0
-                                    compactPointerY < topEdge -> -1
-                                    compactPointerY > bottomEdge -> 1
-                                    else -> 0
-                                }
-                                compactAutoScrollDirection = direction
-
-                                if (direction != 0) {
-                                    val edgeDepth =
-                                        if (direction < 0) {
-                                            (topEdge - compactPointerY)
-                                                .coerceAtLeast(0f)
-                                        } else {
-                                            (compactPointerY - bottomEdge)
-                                                .coerceAtLeast(0f)
-                                        }
-                                    val ratio =
-                                        (
-                                            edgeDepth /
-                                                compactEdgeThresholdPx
-                                            ).coerceIn(0f, 1f)
-                                    val step =
-                                        compactAutoScrollStepPx *
-                                            (0.30f + ratio * 0.60f)
-
-                                    compactGridState.scrollBy(
-                                        step * direction
-                                    )
-
-                                    val gridNow =
-                                        compactGridState.layoutInfo
-                                    gridNow.visibleItemsInfo
-                                        .firstOrNull {
-                                            it.key == item.id
-                                        }
-                                        ?.let {
-                                            if (
-                                                !compactFingerCenterX.isNaN() &&
-                                                !compactPointerY.isNaN()
-                                            ) {
-                                                val halfH =
-                                                    it.size.height / 2f
-                                                compactFingerCenterY =
-                                                    compactPointerY.coerceIn(
-                                                        gridNow.viewportStartOffset +
-                                                            halfH,
-                                                        gridNow.viewportEndOffset -
-                                                            halfH
-                                                    )
-                                                compactDragOffsetX =
-                                                    compactFingerCenterX -
-                                                        (
-                                                            it.offset.x +
-                                                                it.size.width / 2f
-                                                            )
-                                                compactDragOffsetY =
-                                                    compactFingerCenterY -
-                                                        (
-                                                            it.offset.y +
-                                                                halfH
-                                                            )
-                                            }
-                                        }
-
-                                    // Keep reordering the background while the
-                                    // finger remains stationary at the edge.
-                                    compactReorderAtPointer(
-                                        item.id,
-                                        overlayCenterX(),
-                                        overlayCenterY()
-                                    )
-                                }
-
-                                delay(16)
-                            }
-                        }
-
-                        // Group marker number is presentation-only.
-                        // It appears only when multiple groups use the same configured color.
-                        val sameColorGroups = currentGroup?.let { group ->
-                            sheet.groups
-                                .sortedBy { it.order }
-                                .filter { it.color.equals(group.color, ignoreCase = true) }
-                        }.orEmpty()
-                        val markerNumber = currentGroup?.let { group ->
-                            if (sameColorGroups.size > 1) {
-                                sameColorGroups.indexOfFirst { it.id == group.id }
-                                    .takeIf { it >= 0 }
-                                    ?.plus(1)
-                            } else {
-                                null
-                            }
-                        }
-
-                        val compactBackground = when {
-                            selected -> selectedColor
-                            groupColor != null -> groupColor.copy(alpha = 0.12f)
-                            else -> ArmyristColors.RaisedSurface
-                        }
-
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = compactBackground),
-                            shape = ArmyristPanelShape,
-                            border = BorderStroke(
-                                1.dp,
-                                when {
-                                    selected -> ArmyristColors.PrimaryControl
-                                    groupColor != null -> groupColor.copy(alpha = 0.62f)
-                                    else -> ArmyristColors.Divider
-                                }
-                            ),
-                            modifier = (
-                                if (compactDragging) {
-                                    Modifier.fillMaxWidth()
-                                } else {
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .animateItem(
-                                            fadeInSpec = null,
-                                            placementSpec = tween(
-                                                140,
-                                                easing = FastOutSlowInEasing
-                                            ),
-                                            fadeOutSpec = null
-                                        )
-                                }
-                            )
-                                .heightIn(min = 96.dp)
-                                .zIndex(0f)
-                                .graphicsLayer {
-                                    // Keep this cell's exact layout size as the
-                                    // placeholder, but render its content only
-                                    // through the detached overlay.
-                                    alpha =
-                                        if (dragOverlayItemId == item.id) {
-                                            0f
-                                        } else {
-                                            1f
-                                        }
-                                    translationX = 0f
-                                    translationY = 0f
-                                    shadowElevation = 0f
-                                    scaleX = 1f
-                                    scaleY = 1f
-                                }
-                                .clickable {
-                                    if (assignmentMode) {
-                                        assignmentSelectedList =
-                                            (if (selected) assignmentSelected - item.id
-                                            else assignmentSelected + item.id).toList()
-                                    } else {
-                                        itemEditor = item
-                                    }
-                                }
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    if (!assignmentMode) {
-                                        Box(
-                                            modifier = Modifier
-                                                .sizeIn(
-                                                    minWidth = 40.dp,
-                                                    minHeight = 40.dp
-                                                )
-,
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                "⠿",
-                                                style = MaterialTheme.typography.titleMedium,
-                                                color = ArmyristColors.SecondaryText,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                        Spacer(Modifier.width(2.dp))
-                                    }
-
-                                    Text(
-                                        "$displayIndex.",
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(
-                                        item.name,
-                                        modifier = Modifier.weight(1f),
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1,
-                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                    )
-
-                                    if (groupColor != null) {
-                                        Surface(
-                                            color = groupColor,
-                                            contentColor = ArmyristColors.OnDark,
-                                            shape = ArmyristPanelShape,
-                                            border = BorderStroke(
-                                                1.dp,
-                                                groupColor.copy(alpha = 0.90f)
-                                            ),
-                                            modifier = Modifier.sizeIn(
-                                                minWidth = 22.dp,
-                                                minHeight = 20.dp
-                                            )
-                                        ) {
-                                            Box(
-                                                modifier = Modifier.padding(
-                                                    horizontal = if (markerNumber != null) 5.dp else 7.dp,
-                                                    vertical = 2.dp
-                                                ),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                if (markerNumber != null) {
-                                                    Text(
-                                                        markerNumber.toString(),
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        fontWeight = FontWeight.Bold
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                if (assignmentMode) {
-                                    Text(
-                                        if (selected) "✓ 선택됨" else "선택",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = if (selected) {
-                                            ArmyristColors.PrimaryControl
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        }
-                                    )
-                                } else {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        OutlinedButton(
-                                            onClick = { onDecrement(item.id) },
-                                            modifier = Modifier.sizeIn(
-                                                minWidth = 48.dp,
-                                                minHeight = 48.dp
-                                            ),
-                                            shape = ArmyristPanelShape,
-                                            contentPadding = PaddingValues(0.dp)
-                                        ) {
-                                            Text(
-                                                "−",
-                                                style = MaterialTheme.typography.titleLarge,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-
-                                        TextButton(
-                                            onClick = { quantityTarget = item },
-                                            modifier = Modifier
-                                                .widthIn(min = 44.dp)
-                                                .heightIn(min = 48.dp),
-                                            contentPadding = PaddingValues(horizontal = 4.dp)
-                                        ) {
-                                            Text(
-                                                item.quantity.toString(),
-                                                fontWeight = FontWeight.Bold,
-                                                style = MaterialTheme.typography.titleLarge
-                                            )
-                                        }
-
-                                        Button(
-                                            onClick = { onIncrement(item.id) },
-                                            modifier = Modifier.sizeIn(
-                                                minWidth = 48.dp,
-                                                minHeight = 48.dp
-                                            ),
-                                            shape = ArmyristPanelShape,
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = ArmyristColors.PrimaryControl,
-                                                contentColor = ArmyristColors.OnDark
-                                            ),
-                                            contentPadding = PaddingValues(0.dp)
-                                        ) {
-                                            Text(
-                                                "+",
-                                                style = MaterialTheme.typography.titleLarge,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        OutlinedButton(
-                            onClick = { creating = true },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
-                            shape = ArmyristPanelShape,
-                            border = BorderStroke(1.dp, ArmyristColors.Accent)
-                        ) { Text("+ 새 항목 추가") }
-                    }
-                }
-            } else {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    start = 8.dp,
-                    end = 8.dp,
-                    top = 6.dp,
-                    bottom = 24.dp
-                ),
-                verticalArrangement = Arrangement.spacedBy(if (animatedViewMode == CountingViewMode.COMPACT) 2.dp else 6.dp)
-            ) {
-                if (sheet.items.isEmpty()) {
-                    item {
-                        Column(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 28.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text("항목이 없습니다", style = MaterialTheme.typography.titleMedium)
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                "아래 새 항목 추가 버튼으로 시작하세요.",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-
-                itemsIndexed(
-                    visualItems,
-                    key = { _, item -> item.id }
-                ) { index, item ->
-                    val currentGroup = sheet.groups.firstOrNull { it.id == item.groupId }
+            val detailedCardNarrow = maxWidth - 16.dp < 430.dp
+            val detailedCard: @Composable (CountingItem, Int, Modifier, Boolean) -> Unit =
+                { item, index, cardModifier, detailedDragging ->
+                    val currentGroup = groupsById[item.groupId]
                     val groupName = currentGroup?.name ?: "미지정"
                     val assignmentMode = assignmentGroupId != null
                     val selected = item.id in assignmentSelected
-
-                    // Detailed drag ownership is global (stable parent host).
-                    // Do not keep an item-local drag/auto-scroll controller here.
-                    val detailedDragging =
-                        !dragOverlayCompact &&
-                            dragOverlayItemId == item.id
 
                     val groupColor =
                         currentGroup?.let { parseColor(it.color) }
@@ -1718,50 +1122,7 @@ private fun CountingScreen(
                                 else -> ArmyristColors.Divider
                             }
                         ),
-                        modifier = (
-                            if (detailedDragging) {
-                                // TimePlan rule: the held visual is controlled only
-                                // by translationY. It must never also receive Lazy
-                                // placement animation.
-                                Modifier.fillMaxWidth()
-                            } else {
-                                Modifier
-                                    .fillMaxWidth()
-                                    .animateItem(
-                                        fadeInSpec = null,
-                                        placementSpec = tween(
-                                            145,
-                                            easing = FastOutSlowInEasing
-                                        ),
-                                        fadeOutSpec = null
-                                    )
-                            }
-                        )
-                            .zIndex(
-                                if (
-                                    !dragOverlayCompact &&
-                                    dragOverlayItemId == item.id
-                                ) 2f else 0f
-                            )
-                            .graphicsLayer {
-                                // Detailed has exactly one visual actor:
-                                // this real Lazy item. Detached overlay rendering
-                                // is Compact-only.
-                                alpha =
-                                    if (
-                                        dragOverlayCompact &&
-                                        dragOverlayItemId == item.id
-                                    ) 0f else 1f
-                                translationY =
-                                    if (detailedDragging) {
-                                        detailedTimePlanDragOffsetY
-                                    } else {
-                                        0f
-                                    }
-                                shadowElevation =
-                                    if (detailedDragging) 4f else 0f
-                            }
-
+                        modifier = cardModifier
                             .clickable {
                                 if (assignmentMode) {
                                     assignmentSelectedList =
@@ -1772,9 +1133,9 @@ private fun CountingScreen(
                                 }
                             }
                     ) {
-                        BoxWithConstraints(Modifier.fillMaxWidth()) {
+                        Box(Modifier.fillMaxWidth()) {
                             val stackedDetailed =
-                                animatedViewMode == CountingViewMode.DETAILED && maxWidth < 430.dp
+                                animatedViewMode == CountingViewMode.DETAILED && detailedCardNarrow
 
                             Row(
                                 Modifier.fillMaxWidth(),
@@ -2057,9 +1418,315 @@ private fun CountingScreen(
                             }
                             }
                             } // responsive horizontal branch
-                        } // BoxWithConstraints
+                        } // Card content
                     }
                 }
+                }
+            if (animatedViewMode == CountingViewMode.COMPACT) {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    state = compactGridState,
+                    userScrollEnabled = dragOverlayItemId == null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    if (sheet.items.isEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Column(
+                                Modifier.fillMaxWidth().padding(vertical = 28.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text("항목이 없습니다", style = MaterialTheme.typography.titleMedium)
+                                Spacer(Modifier.height(6.dp))
+                                Text("아래 새 항목 추가 버튼으로 시작하세요.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+
+                    gridItems(
+                        items = visualItems,
+                        key = { it.id },
+                        contentType = { "counting-grid-item" }
+                    ) { item ->
+                        val displayIndex = countingReorder.projectedIndexOf(item.id) + 1
+                        val currentGroup = groupsById[item.groupId]
+                        val groupColor = currentGroup?.let { parseColor(it.color) }
+                        val assignmentMode = assignmentGroupId != null
+                        val selected = item.id in assignmentSelected
+                        val selectedColor = sheet.groups
+                            .firstOrNull { it.id == assignmentGroupId }
+                            ?.let { parseColor(it.color).copy(alpha = 0.26f) }
+                            ?: ArmyristColors.SecondaryControl
+
+                        val compactDragging = dragOverlayCompact && dragOverlayItemId == item.id
+
+                        // Group marker number is presentation-only.
+                        // It appears only when multiple groups use the same configured color.
+                        val markerNumber = currentGroup?.let { groupMarkers[it.id] }
+
+                        val compactBackground = when {
+                            selected -> selectedColor
+                            groupColor != null -> groupColor.copy(alpha = 0.12f)
+                            else -> ArmyristColors.RaisedSurface
+                        }
+
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = compactBackground),
+                            shape = ArmyristPanelShape,
+                            border = BorderStroke(
+                                1.dp,
+                                when {
+                                    selected -> ArmyristColors.PrimaryControl
+                                    groupColor != null -> groupColor.copy(alpha = 0.62f)
+                                    else -> ArmyristColors.Divider
+                                }
+                            ),
+                            modifier = (
+                                if (compactDragging) {
+                                    Modifier.fillMaxWidth()
+                                } else {
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .animateItem(
+                                            fadeInSpec = null,
+                                            placementSpec = spring(stiffness = Spring.StiffnessMediumLow, dampingRatio = Spring.DampingRatioNoBouncy),
+                                            fadeOutSpec = null
+                                        )
+                                }
+                            )
+                                .heightIn(min = 96.dp)
+                                .zIndex(0f)
+                                .graphicsLayer {
+                                    // Keep this cell's exact layout size as the
+                                    // placeholder, but render its content only
+                                    // through the detached overlay.
+                                    alpha =
+                                        if (dragOverlayItemId == item.id) {
+                                            0f
+                                        } else {
+                                            1f
+                                        }
+                                    translationX = 0f
+                                    translationY = 0f
+                                    shadowElevation = 0f
+                                    scaleX = 1f
+                                    scaleY = 1f
+                                }
+                                .clickable {
+                                    if (assignmentMode) {
+                                        assignmentSelectedList =
+                                            (if (selected) assignmentSelected - item.id
+                                            else assignmentSelected + item.id).toList()
+                                    } else {
+                                        itemEditor = item
+                                    }
+                                }
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (!assignmentMode) {
+                                        Box(
+                                            modifier = Modifier
+                                                .sizeIn(
+                                                    minWidth = 40.dp,
+                                                    minHeight = 40.dp
+                                                )
+,
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                "⠿",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                color = ArmyristColors.SecondaryText,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        Spacer(Modifier.width(2.dp))
+                                    }
+
+                                    Text(
+                                        "$displayIndex.",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        item.name,
+                                        modifier = Modifier.weight(1f),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+
+                                    if (groupColor != null) {
+                                        Surface(
+                                            color = groupColor,
+                                            contentColor = ArmyristColors.OnDark,
+                                            shape = ArmyristPanelShape,
+                                            border = BorderStroke(
+                                                1.dp,
+                                                groupColor.copy(alpha = 0.90f)
+                                            ),
+                                            modifier = Modifier.sizeIn(
+                                                minWidth = 22.dp,
+                                                minHeight = 20.dp
+                                            )
+                                        ) {
+                                            Box(
+                                                modifier = Modifier.padding(
+                                                    horizontal = if (markerNumber != null) 5.dp else 7.dp,
+                                                    vertical = 2.dp
+                                                ),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                if (markerNumber != null) {
+                                                    Text(
+                                                        markerNumber.toString(),
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (assignmentMode) {
+                                    Text(
+                                        if (selected) "✓ 선택됨" else "선택",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = if (selected) {
+                                            ArmyristColors.PrimaryControl
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+                                    )
+                                } else {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        OutlinedButton(
+                                            onClick = { onDecrement(item.id) },
+                                            modifier = Modifier.sizeIn(
+                                                minWidth = 48.dp,
+                                                minHeight = 48.dp
+                                            ),
+                                            shape = ArmyristPanelShape,
+                                            contentPadding = PaddingValues(0.dp)
+                                        ) {
+                                            Text(
+                                                "−",
+                                                style = MaterialTheme.typography.titleLarge,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+
+                                        TextButton(
+                                            onClick = { quantityTarget = item },
+                                            modifier = Modifier
+                                                .widthIn(min = 44.dp)
+                                                .heightIn(min = 48.dp),
+                                            contentPadding = PaddingValues(horizontal = 4.dp)
+                                        ) {
+                                            Text(
+                                                item.quantity.toString(),
+                                                fontWeight = FontWeight.Bold,
+                                                style = MaterialTheme.typography.titleLarge
+                                            )
+                                        }
+
+                                        Button(
+                                            onClick = { onIncrement(item.id) },
+                                            modifier = Modifier.sizeIn(
+                                                minWidth = 48.dp,
+                                                minHeight = 48.dp
+                                            ),
+                                            shape = ArmyristPanelShape,
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = ArmyristColors.PrimaryControl,
+                                                contentColor = ArmyristColors.OnDark
+                                            ),
+                                            contentPadding = PaddingValues(0.dp)
+                                        ) {
+                                            Text(
+                                                "+",
+                                                style = MaterialTheme.typography.titleLarge,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        OutlinedButton(
+                            onClick = { creating = true },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
+                            shape = ArmyristPanelShape,
+                            border = BorderStroke(1.dp, ArmyristColors.Accent)
+                        ) { Text("+ 새 항목 추가") }
+                    }
+                }
+            } else {
+            LazyColumn(
+                state = listState,
+                userScrollEnabled = dragOverlayItemId == null,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = 8.dp,
+                    end = 8.dp,
+                    top = 6.dp,
+                    bottom = 24.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(if (animatedViewMode == CountingViewMode.COMPACT) 2.dp else 6.dp)
+            ) {
+                if (sheet.items.isEmpty()) {
+                    item {
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 28.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("항목이 없습니다", style = MaterialTheme.typography.titleMedium)
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "아래 새 항목 추가 버튼으로 시작하세요.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                itemsIndexed(
+                    visualItems,
+                    key = { _, item -> item.id },
+                    contentType = { _, _ -> "counting-item" }
+                ) { index, item ->
+                    val dragging = !dragOverlayCompact && dragOverlayItemId == item.id
+                    val placement = if (dragging) Modifier else Modifier.animateItem(
+                        fadeInSpec = null,
+                        placementSpec = spring(stiffness = Spring.StiffnessMediumLow, dampingRatio = Spring.DampingRatioNoBouncy),
+                        fadeOutSpec = null
+                    )
+                    detailedCard(item, index, placement.fillMaxWidth().graphicsLayer {
+                        alpha = if (dragging) 0f else 1f
+                    }, false)
             } // itemsIndexed
 
                 item {
@@ -2130,6 +1797,21 @@ private fun CountingScreen(
                     visualItems.firstOrNull { it.id == id }
                         ?: sheet.items.firstOrNull { it.id == id }
                 }
+
+            if (!dragOverlayCompact && overlayItem != null && dragOverlayWidth > 0f) {
+                detailedCard(
+                    overlayItem, countingReorder.projectedIndexOf(overlayItem.id),
+                    Modifier.width(with(countingDensity) { dragOverlayWidth.toDp() })
+                        .height(with(countingDensity) { dragOverlayHeight.toDp() })
+                        .zIndex(100f)
+                        .graphicsLayer {
+                            translationX = dragOverlayX
+                            translationY = dragOverlayY
+                            shadowElevation = 7f
+                        },
+                    true
+                )
+            }
 
             if (
                 dragOverlayCompact &&

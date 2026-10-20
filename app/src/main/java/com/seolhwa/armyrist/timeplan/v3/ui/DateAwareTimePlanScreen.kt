@@ -3,7 +3,6 @@
 package com.seolhwa.armyrist.timeplan.v3.ui
 
 import android.view.HapticFeedbackConstants
-import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -68,10 +67,12 @@ import com.seolhwa.armyrist.trash.*
 import org.json.JSONObject
 import com.seolhwa.armyrist.timeplan.v3.domain.*
 import com.seolhwa.armyrist.voice.*
+import com.seolhwa.armyrist.ui.DragMotion
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import java.time.*
-import java.io.File
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
@@ -244,9 +245,10 @@ fun DateAwareTimePlanApp(
             legacyPlans = legacyPlans.map { it.id to it.title },
             onHome = onHome,
             onCreate = {
-                val plan = repository.createPlan()
-                revision++
-                selectedId = plan.id
+                repository.createPlan()?.let { plan ->
+                    revision++
+                    selectedId = plan.id
+                }
             },
             onOpen = { selectedId = it },
             onOrderChanged = { orderedIds ->
@@ -434,11 +436,11 @@ private fun DateAwarePlanList(
     val folders = remember(collectionRevision, datePlans.map { it.id }) {
         collectionRepository.folders(CollectionToolType.TIME_PLAN)
     }
-    val validPlanIds = datePlans.map { it.id }.toSet()
-    val memberToFolder = folders
-        .flatMap { folder -> folder.memberIds.map { memberId -> memberId to folder.id } }
-        .filter { it.first in validPlanIds }
-        .toMap()
+    val validPlanIds = remember(datePlans) { datePlans.map { it.id }.toSet() }
+    val memberToFolder = remember(folders, validPlanIds) {
+        folders.flatMap { folder -> folder.memberIds.map { it to folder.id } }
+            .filter { it.first in validPlanIds }.toMap()
+    }
     val openedFolder = openedFolderId?.let { id -> folders.firstOrNull { it.id == id } }
 
     // TimePlan list navigation contract:
@@ -465,7 +467,7 @@ private fun DateAwarePlanList(
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     var reorderDirty by remember { mutableStateOf(false) }
     var dragAutoScrollDirection by remember { mutableIntStateOf(0) }
-    val dragAutoScrollStepPx = with(LocalDensity.current) { 34.dp.toPx() }
+    var dragAutoScrollStepPx by remember { mutableFloatStateOf(0f) }
 
     LaunchedEffect(datePlans.map { Triple(it.id, it.title, it.updatedAt) }, draggingPlanId) {
         if (draggingPlanId == null) {
@@ -556,6 +558,7 @@ private fun DateAwarePlanList(
                 draggedCenter < target.offset + target.size * 0.52f
             }
         if (!crossed) return false
+        if ((targetIndex > fromIndex) != (target.offset > draggedInfo.offset)) return false
 
         val oldOffset = draggedInfo.offset
         val targetOffset = target.offset
@@ -569,7 +572,9 @@ private fun DateAwarePlanList(
         }
 
         // Cancel the layout jump of the dragged card.
-        dragOffsetY += (oldOffset - targetOffset)
+        dragOffsetY += DragMotion.compensation(
+            oldOffset, draggedInfo.size, targetOffset, target.size, targetIndex > fromIndex
+        )
         reorderDirty = true
         return true
     }
@@ -619,17 +624,22 @@ private fun DateAwarePlanList(
         }
         draggingPlanId = null
         dragAutoScrollDirection = 0
+        dragAutoScrollStepPx = 0f
         dragOffsetY = 0f
         reorderDirty = false
     }
 
-    LaunchedEffect(draggingPlanId, dragAutoScrollDirection) {
-        while (draggingPlanId != null && dragAutoScrollDirection != 0) {
-            val consumed =
-                listState.scrollBy(dragAutoScrollStepPx * dragAutoScrollDirection)
-            dragOffsetY += consumed
+    LaunchedEffect(draggingPlanId) {
+        var previousFrame = 0L
+        while (draggingPlanId != null) {
+            val frame = withFrameNanos { it }
+            val scale = DragMotion.frameScale(previousFrame, frame)
+            previousFrame = frame
+            if (dragAutoScrollDirection != 0) {
+                val consumed = listState.scrollBy(dragAutoScrollStepPx * scale)
+                dragOffsetY += consumed
+            }
             draggingPlanId?.let { reorderPlanAtFinger(it) }
-            delay(16)
         }
     }
 
@@ -821,7 +831,7 @@ private fun DateAwarePlanList(
                 }
 
                 if (openedFolder == null) {
-                    items(folderVisualList, key = { "folder-${it.id}" }) { folder ->
+                    items(folderVisualList, key = { "folder-${it.id}" }, contentType = { "folder" }) { folder ->
                         val memberCount = folder.memberIds.count { it in validPlanIds }
                         val isFolderDragging = draggingFolderId == folder.id
                         Card(
@@ -839,10 +849,7 @@ private fun DateAwarePlanList(
                                         .fillMaxWidth()
                                         .animateItem(
                                             fadeInSpec = null,
-                                            placementSpec = tween(
-                                                180,
-                                                easing = FastOutSlowInEasing
-                                            ),
+                                            placementSpec = spring(stiffness = Spring.StiffnessMediumLow, dampingRatio = Spring.DampingRatioNoBouncy),
                                             fadeOutSpec = null
                                         )
                                 }
@@ -939,7 +946,7 @@ private fun DateAwarePlanList(
                                                                             target.size * 0.52f
                                                                 }
 
-                                                            if (crossed) {
+                                                            if (crossed && ((targetIndex > fromIndex) == (target.offset > draggedInfo.offset))) {
                                                                 val oldOffset =
                                                                     draggedInfo.offset
                                                                 val targetOffset =
@@ -951,8 +958,9 @@ private fun DateAwarePlanList(
                                                                     targetIndex,
                                                                     moved
                                                                 )
-                                                                folderDragOffsetY +=
-                                                                    oldOffset - targetOffset
+                                                                folderDragOffsetY += DragMotion.compensation(
+                                                                    oldOffset, draggedInfo.size, targetOffset, target.size, targetIndex > fromIndex
+                                                                )
                                                                 folderReorderDirty = true
                                                             }
                                                         }
@@ -1041,7 +1049,8 @@ private fun DateAwarePlanList(
 
                 itemsIndexed(
                     visiblePlansForFolder(),
-                    key = { _, plan -> "v3-${plan.id}" }
+                    key = { _, plan -> "v3-${plan.id}" },
+                    contentType = { _, _ -> "time-plan" }
                 ) { _, plan ->
                     val isDragging = draggingPlanId == plan.id
                     val cardKey = "v3-${plan.id}"
@@ -1060,10 +1069,7 @@ private fun DateAwarePlanList(
                                     .fillMaxWidth()
                                     .animateItem(
                                         fadeInSpec = null,
-                                        placementSpec = tween(
-                                            180,
-                                            easing = FastOutSlowInEasing
-                                        ),
+                                        placementSpec = spring(stiffness = Spring.StiffnessMediumLow, dampingRatio = Spring.DampingRatioNoBouncy),
                                         fadeOutSpec = null
                                     )
                             }
@@ -1169,6 +1175,7 @@ private fun DateAwarePlanList(
                                                     else -> 0f
                                                 }
 
+                                                dragAutoScrollStepPx = scrollDelta
                                                 dragAutoScrollDirection = when {
                                                     scrollDelta < 0f -> -1
                                                     scrollDelta > 0f -> 1
@@ -1222,7 +1229,7 @@ private fun DateAwarePlanList(
                                 )
                                 Spacer(Modifier.height(3.dp))
                                 Text(
-                                    planSpanText(plan),
+                                    remember(plan.start, plan.end, plan.dateDisplayMode) { planSpanText(plan) },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = ArmyristColors.SecondaryText
                                 )
@@ -1611,26 +1618,23 @@ private fun DateAwarePlanList(
 
 @Composable
 private fun FolderCoverThumbnail(path: String?) {
-    val bitmap = remember(path) {
-        path?.let { value ->
-            runCatching {
-                File(value)
-                    .takeIf { it.isFile }
-                    ?.let { BitmapFactory.decodeFile(it.absolutePath) }
-                    ?.asImageBitmap()
-            }.getOrNull()
-        }
+    val pixels = with(LocalDensity.current) { 52.dp.roundToPx() }
+    val cached = path?.let { FolderThumbnailLoader.cached(it, pixels)?.asImageBitmap() }
+    val bitmap by produceState(cached, path, pixels) {
+        value = cached
+        if (value == null) value = path?.let { FolderThumbnailLoader.load(it, pixels)?.asImageBitmap() }
     }
 
+    val thumbnail = bitmap
     Surface(
         modifier = Modifier.size(52.dp),
         shape = RoundedCornerShape(10.dp),
         color = ArmyristColors.InfoSurface,
         border = BorderStroke(1.dp, ArmyristColors.SoftBorder)
     ) {
-        if (bitmap != null) {
+        if (thumbnail != null) {
             Image(
-                bitmap = bitmap,
+                bitmap = thumbnail,
                 contentDescription = "폴더 대표 이미지",
                 modifier = Modifier.fillMaxSize()
             )

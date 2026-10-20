@@ -10,12 +10,24 @@ class CountingRepository(context: Context) {
         context.getSharedPreferences("armyrist_stage1", Context.MODE_PRIVATE)
     private val key = "snapshot_v1"
 
+    private val snapshots = GuardedSnapshotStore(
+        readRaw = { prefs.getString(key, null) },
+        writeRaw = { raw ->
+            val editor = prefs.edit()
+            if (raw == null) editor.remove(key) else editor.putString(key, raw)
+            editor.commit()
+        },
+        decode = ::decodeSnapshot,
+        encode = ::encodeSnapshot,
+        onError = { reportStorageError(context.applicationContext, it) }
+    )
+
     @Volatile
-    private var sheets: List<CountingSheet> = load()
+    private var sheets: List<CountingSheet> = snapshots.load(emptyList())
 
     @Synchronized
     fun reloadFromPersistence() {
-        sheets = load()
+        sheets = snapshots.load(emptyList(), sheets)
     }
 
     @Synchronized
@@ -27,11 +39,9 @@ class CountingRepository(context: Context) {
         sheets.firstOrNull { it.id == id }
 
     @Synchronized
-    fun createSheet(): CountingSheet {
+    fun createSheet(): CountingSheet? {
         val sheet = CountingSheet()
-        sheets = sheets + sheet
-        persist()
-        return sheet
+        return if (saveSheets(sheets + sheet)) sheet else null
     }
 
     @Synchronized
@@ -61,9 +71,7 @@ class CountingRepository(context: Context) {
             }
         )
 
-        sheets = sheets.map { if (it.id == id) next else it }
-        persist()
-        return next
+        return if (saveSheets(sheets.map { if (it.id == id) next else it })) next else null
     }
 
     @Synchronized
@@ -74,8 +82,7 @@ class CountingRepository(context: Context) {
 
     @Synchronized
     fun deleteSheet(id: String) {
-        sheets = sheets.filterNot { it.id == id }
-        persist()
+        saveSheets(sheets.filterNot { it.id == id })
     }
 
     /**
@@ -94,11 +101,7 @@ class CountingRepository(context: Context) {
     @Synchronized
     fun deleteSheetForTrash(id: String): Boolean {
         if (sheets.none { it.id == id }) return false
-        val before = sheets
-        sheets = sheets.filterNot { it.id == id }
-        if (persistChecked()) return true
-        sheets = before
-        return false
+        return saveSheets(sheets.filterNot { it.id == id })
     }
 
     @Synchronized
@@ -110,11 +113,7 @@ class CountingRepository(context: Context) {
         }.getOrNull() ?: return false
 
         if (sheets.any { it.id == restored.id }) return false
-        val before = sheets
-        sheets = sheets + restored
-        if (persistChecked()) return true
-        sheets = before
-        return false
+        return saveSheets(sheets + restored)
     }
 
     @Synchronized
@@ -459,33 +458,22 @@ class CountingRepository(context: Context) {
         updateSheet(sheetId) { it.copy(memo = memo) }
     }
 
-    private fun persist() {
-        persistChecked()
+    private fun saveSheets(next: List<CountingSheet>): Boolean {
+        if (!snapshots.save(next)) return false
+        sheets = next
+        return true
     }
 
-    private fun persistChecked(): Boolean {
-        val root =
-            JSONObject()
-                .put("version", 2)
-                .put(
-                    "sheets",
-                    JSONArray().apply {
-                        sheets.forEach { put(sheetToJson(it)) }
-                    }
-                )
+    private fun encodeSnapshot(values: List<CountingSheet>): String = JSONObject()
+        .put("version", 2)
+        .put("sheets", JSONArray().apply { values.forEach { put(sheetToJson(it)) } })
+        .toString()
 
-        return prefs.edit().putString(key, root.toString()).commit()
-    }
-
-    private fun load(): List<CountingSheet> {
-        val raw = prefs.getString(key, null) ?: return emptyList()
-
-        return runCatching {
-            val arr = JSONObject(raw).getJSONArray("sheets")
-            List(arr.length()) { index ->
-                sheetFromJson(arr.getJSONObject(index))
-            }
-        }.getOrElse { emptyList() }
+    private fun decodeSnapshot(raw: String): List<CountingSheet> {
+        val root = JSONObject(raw)
+        require(root.optInt("version", 1) in 1..2)
+        val arr = root.getJSONArray("sheets")
+        return List(arr.length()) { index -> sheetFromJson(arr.getJSONObject(index)) }
     }
 
     private fun sheetToJson(s: CountingSheet) =

@@ -19,8 +19,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class DataManagementActivity : ComponentActivity() {
+    private var backupBusy by mutableStateOf(false)
     private var pendingBackupBytes: ByteArray? = null
     private var selectedRestoreBytes: ByteArray? = null
 
@@ -85,33 +90,28 @@ class DataManagementActivity : ComponentActivity() {
                 ) {
                     DataManagementScreen(
                         onBack = { finish() },
+                        backupBusy = backupBusy,
                         onCreateBackup = { encrypted, password ->
-                            val result =
-                                ArmyristPortableDataManager
-                                    .createFullBackup(
-                                        this,
-                                        if (encrypted) {
-                                            password.toCharArray()
-                                        } else {
-                                            null
+                            if (!backupBusy) {
+                                backupBusy = true
+                                lifecycleScope.launch {
+                                    try {
+                                        val chars = if (encrypted) password.toCharArray() else null
+                                        val result = withContext(Dispatchers.Default) {
+                                            try {
+                                                ArmyristPortableDataManager.createFullBackup(this@DataManagementActivity, chars)
+                                            } finally { chars?.fill('\u0000') }
                                         }
-                                    )
-
-                            when (result) {
-                                is PortableResult.Success -> {
-                                    pendingBackupBytes = result.value
-                                    createBackupFile.launch(
-                                        "armyrist-backup-${
-                                            LocalDate.now()
-                                        }.armyrist"
-                                    )
-                                }
-                                is PortableResult.Error -> {
-                                    Toast.makeText(
-                                        this,
-                                        result.message,
-                                        Toast.LENGTH_SHORT
-                                    ).show()
+                                        when (result) {
+                                            is PortableResult.Success -> {
+                                                pendingBackupBytes = result.value
+                                                createBackupFile.launch("armyrist-backup-${LocalDate.now()}.armyrist")
+                                            }
+                                            is PortableResult.Error -> Toast.makeText(
+                                                this@DataManagementActivity, result.message, Toast.LENGTH_LONG
+                                            ).show()
+                                        }
+                                    } finally { backupBusy = false }
                                 }
                             }
                         },
@@ -184,6 +184,7 @@ class DataManagementActivity : ComponentActivity() {
 @Composable
 private fun DataManagementScreen(
     onBack: () -> Unit,
+    backupBusy: Boolean,
     onCreateBackup: (Boolean, String) -> Unit,
     onChooseRestoreFile: (((ByteArray) -> Unit) -> Unit),
     onRestoreValidated: (ValidatedBackup) -> Boolean
@@ -206,6 +207,33 @@ private fun DataManagementScreen(
     var restoreConfirm by remember {
         mutableStateOf(false)
     }
+
+    val scope = rememberCoroutineScope()
+    var validating by remember { mutableStateOf(false) }
+
+    fun validateRestore(bytes: ByteArray, password: String?) {
+        if (validating) return
+        validating = true
+        scope.launch {
+            try {
+                val chars = password?.toCharArray()
+                val result = withContext(Dispatchers.Default) {
+                    try { ArmyristPortableDataManager.validateBackup(bytes, chars) }
+                    finally { chars?.fill('\u0000') }
+                }
+                when (result) {
+                    is PortableResult.Success -> {
+                        restorePasswordDialog = false
+                        restoreBackup = result.value
+                        restoreConfirm = true
+                    }
+                    is PortableResult.Error -> Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+                }
+            } finally { validating = false }
+        }
+    }
+
+    if (validating || backupBusy) PortableWorkDialog()
 
     BackHandler(onBack = onBack)
 
@@ -324,27 +352,7 @@ private fun DataManagementScreen(
                                     if (inspection.value.encrypted) {
                                         restorePasswordDialog = true
                                     } else {
-                                        when (
-                                            val validated =
-                                                ArmyristPortableDataManager
-                                                    .validateBackup(
-                                                        bytes,
-                                                        null
-                                                    )
-                                        ) {
-                                            is PortableResult.Success -> {
-                                                restoreBackup =
-                                                    validated.value
-                                                restoreConfirm = true
-                                            }
-                                            is PortableResult.Error -> {
-                                                Toast.makeText(
-                                                    context,
-                                                    validated.message,
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            }
-                                        }
+                                        validateRestore(bytes, null)
                                     }
                                 }
                                 is PortableResult.Error -> {
@@ -425,26 +433,7 @@ private fun DataManagementScreen(
             },
             onConfirm = { password ->
                 val bytes = restoreBytes ?: return@PasswordInputDialog
-                when (
-                    val validated =
-                        ArmyristPortableDataManager.validateBackup(
-                            bytes,
-                            password.toCharArray()
-                        )
-                ) {
-                    is PortableResult.Success -> {
-                        restorePasswordDialog = false
-                        restoreBackup = validated.value
-                        restoreConfirm = true
-                    }
-                    is PortableResult.Error -> {
-                        Toast.makeText(
-                            context,
-                            validated.message,
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                }
+                validateRestore(bytes, password)
             }
         )
     }

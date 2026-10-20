@@ -1,6 +1,9 @@
 package com.seolhwa.armyrist.counting.reorder
 
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import com.seolhwa.armyrist.domain.CountingItem
@@ -33,7 +36,8 @@ data class CountingReorderSlot(
  */
 @Stable
 class CountingReorderV2(
-    initialItems: List<CountingItem>
+    initialItems: List<CountingItem>,
+    private val nowMillis: () -> Long = { android.os.SystemClock.uptimeMillis() }
 ) {
     private val canonicalItems =
         mutableStateListOf<CountingItem>().apply {
@@ -52,10 +56,10 @@ class CountingReorderV2(
     val placeholderIndex: Int
         get() = _placeholderIndex.value
 
-    var draggingItemId: String? = null
+    var draggingItemId: String? by mutableStateOf(null)
         private set
 
-    var mode: CountingReorderMode? = null
+    var mode: CountingReorderMode? by mutableStateOf(null)
         private set
 
     private var dragStartOrder: List<String> = restingOrder.toList()
@@ -88,18 +92,23 @@ class CountingReorderV2(
      * invisible size-preserving placeholder. Its visible representation is
      * owned by the stable parent overlay.
      */
-    val items: List<CountingItem>
-        get() {
-            val byId = canonicalItems.associateBy { it.id }
-            return projectedIds().mapNotNull(byId::get)
-        }
+    private val canonicalById = derivedStateOf { canonicalItems.associateBy { it.id } }
+    private val restingIndices = derivedStateOf { restingOrder.withIndex().associate { it.value to it.index } }
+    private val backgroundIndices = derivedStateOf { backgroundOrder.withIndex().associate { it.value to it.index } }
+    private val projectedItems = derivedStateOf {
+        val byId = canonicalById.value
+        projectedIds().mapNotNull(byId::get)
+    }
 
-    /**
-     * Synchronous live projection lookup for pointer-time geometry.
-     * Do not derive drag indices from a previous Compose frame snapshot.
-     */
-    fun projectedIndexOf(itemId: String): Int =
-        projectedIds().indexOf(itemId)
+    val items: List<CountingItem> get() = projectedItems.value
+
+    /** O(1) lookup without allocating the entire projection on every pointer event. */
+    fun projectedIndexOf(itemId: String): Int {
+        val dragged = draggingItemId ?: return restingIndices.value[itemId] ?: -1
+        if (itemId == dragged) return placeholderIndex
+        val index = backgroundIndices.value[itemId] ?: return -1
+        return if (index >= placeholderIndex) index + 1 else index
+    }
 
     /**
      * TimePlan-style 1-D adapter entry point.
@@ -134,7 +143,7 @@ class CountingReorderV2(
         lastPlaceholderMoveAtMs = 0L
         lastDetailedPointerY = Float.NaN
         detailedDirection = 0
-        detailedDragStartedAtMs = android.os.SystemClock.uptimeMillis()
+        detailedDragStartedAtMs = nowMillis()
         lastDetailedMoveAtMs = 0L
     }
 
@@ -146,24 +155,31 @@ class CountingReorderV2(
         val latestById = latest.associateBy { it.id }
         val pending = pendingCommit
 
-        canonicalItems.clear()
-
         if (
             pending != null &&
             latestIds != pending &&
             pending.all(latestById::containsKey)
         ) {
-            canonicalItems.addAll(
-                pending.mapNotNull(latestById::get)
-            )
-            restingOrder.clear()
-            restingOrder.addAll(pending)
+            val projected = pending.mapNotNull(latestById::get)
+            if (canonicalItems.toList() != projected) {
+                canonicalItems.clear()
+                canonicalItems.addAll(projected)
+            }
+            if (restingOrder.toList() != pending) {
+                restingOrder.clear()
+                restingOrder.addAll(pending)
+            }
             return
         }
 
-        canonicalItems.addAll(latest)
-        restingOrder.clear()
-        restingOrder.addAll(latestIds)
+        if (canonicalItems.toList() != latest) {
+            canonicalItems.clear()
+            canonicalItems.addAll(latest)
+        }
+        if (restingOrder.toList() != latestIds) {
+            restingOrder.clear()
+            restingOrder.addAll(latestIds)
+        }
 
         if (pending != null && latestIds == pending) {
             pendingCommit = null
@@ -171,6 +187,7 @@ class CountingReorderV2(
     }
 
     fun cancel(latestItems: List<CountingItem>) {
+        pendingCommit = null
         val latestById = latestItems.associateBy { it.id }
 
         restingOrder.clear()
@@ -230,10 +247,6 @@ class CountingReorderV2(
         nowMs: Long
     ): Boolean {
         if (!isDragging) return false
-        if (nowMs - lastPlaceholderMoveAtMs < 88L) {
-            return false
-        }
-
         val target =
             targetIndex.coerceIn(0, backgroundOrder.size)
         if (target == placeholderIndex) return false

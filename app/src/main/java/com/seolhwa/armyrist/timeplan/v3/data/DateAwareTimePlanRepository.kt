@@ -1,6 +1,8 @@
 package com.seolhwa.armyrist.timeplan.v3.data
 
 import android.content.Context
+import com.seolhwa.armyrist.data.GuardedSnapshotStore
+import com.seolhwa.armyrist.data.reportStorageError
 import com.seolhwa.armyrist.notification.TimePlanActionNotificationManager
 import com.seolhwa.armyrist.timeplan.domain.RevisedTimePlan
 import com.seolhwa.armyrist.timeplan.domain.EventTimeSpec as LegacySpec
@@ -16,9 +18,22 @@ import java.util.UUID
 class DateAwareTimePlanRepository(context: Context) {
     private val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    @Volatile private var plans: List<DateAwareTimePlan> = load()
+    private val snapshots = GuardedSnapshotStore(
+        readRaw = { prefs.getString(KEY, null) },
+        writeRaw = { raw ->
+            val editor = prefs.edit()
+            if (raw == null) editor.remove(KEY) else editor.putString(KEY, raw)
+            editor.commit()
+        },
+        decode = ::decodeSnapshot,
+        encode = ::encodeSnapshot,
+        onError = { reportStorageError(appContext, it) }
+    )
+    @Volatile private var plans: List<DateAwareTimePlan> = snapshots.load(emptyList())
 
-    @Synchronized fun reloadFromPersistence() { plans = load() }
+    internal val storageReadable: Boolean get() = snapshots.readable
+
+    @Synchronized fun reloadFromPersistence() { plans = snapshots.load(emptyList(), plans) }
 
     @Synchronized
     fun getPlans(): List<DateAwareTimePlan> {
@@ -63,7 +78,7 @@ class DateAwareTimePlanRepository(context: Context) {
     @Synchronized fun contains(id: String): Boolean = plans.any { it.id == id }
 
     @Synchronized
-    fun createPlan(now: LocalDateTime = LocalDateTime.now()): DateAwareTimePlan {
+    fun createPlan(now: LocalDateTime = LocalDateTime.now()): DateAwareTimePlan? {
         val end = now.plusHours(1)
         val plan = DateTimePlanRules.normalizeTopology(
             DateAwareTimePlan(
@@ -76,7 +91,7 @@ class DateAwareTimePlanRepository(context: Context) {
             )
         )
         val next = plans + plan
-        check(persist(next)) { "Failed to persist new TimePlan." }
+        if (!persist(next)) return null
         plans = next
         if (loadPlanOrder().isNotEmpty()) {
             savePlanOrder(listOf(plan.id) + getPlans().map { it.id }.filterNot { it == plan.id })
@@ -275,10 +290,13 @@ class DateAwareTimePlanRepository(context: Context) {
         return true
     }
 
-    fun exportSnapshot(): String = JSONObject()
+    fun exportSnapshot(): String {
+        check(snapshots.readable) { "Cannot export unreadable TimePlan data." }
+        return JSONObject()
         .put("schemaVersion", SCHEMA)
         .put("plans", JSONArray().apply { getPlans().forEach { put(DateAwareTimePlanJson.encode(it)) } })
         .toString()
+    }
 
     /**
      * User-confirmed atomic legacy date migration. No persistence happens before the candidate validates.
@@ -295,22 +313,18 @@ class DateAwareTimePlanRepository(context: Context) {
         return normalized
     }
 
-    private fun persist(values: List<DateAwareTimePlan>): Boolean {
-        val root = JSONObject().put("schemaVersion", SCHEMA).put("plans", JSONArray().apply {
-            values.forEach { put(DateAwareTimePlanJson.encode(it)) }
-        })
-        return prefs.edit().putString(KEY, root.toString()).commit()
-    }
+    private fun persist(values: List<DateAwareTimePlan>): Boolean = snapshots.save(values)
 
-    private fun load(): List<DateAwareTimePlan> {
-        val raw = prefs.getString(KEY, null) ?: return emptyList()
-        return runCatching {
-            val root = JSONObject(raw)
-            val storedSchema = root.getInt("schemaVersion")
-            require(storedSchema in setOf(3, 4, SCHEMA))
-            val a = root.optJSONArray("plans") ?: JSONArray()
-            List(a.length()) { DateAwareTimePlanJson.decode(a.getJSONObject(it)) }
-        }.getOrDefault(emptyList())
+    private fun encodeSnapshot(values: List<DateAwareTimePlan>): String = JSONObject()
+        .put("schemaVersion", SCHEMA)
+        .put("plans", JSONArray().apply { values.forEach { put(DateAwareTimePlanJson.encode(it)) } })
+        .toString()
+
+    private fun decodeSnapshot(raw: String): List<DateAwareTimePlan> {
+        val root = JSONObject(raw)
+        require(root.getInt("schemaVersion") in setOf(3, 4, SCHEMA))
+        val array = root.getJSONArray("plans")
+        return List(array.length()) { DateAwareTimePlanJson.decode(array.getJSONObject(it)) }
     }
 
     private fun loadPlanOrder(): List<String> =

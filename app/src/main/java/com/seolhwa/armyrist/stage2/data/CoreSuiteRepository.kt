@@ -5,6 +5,7 @@ import com.seolhwa.armyrist.stage2.domain.*
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
+import com.seolhwa.armyrist.ui.reorderedByIds
 
 class CoreSuiteRepository(context: Context) {
     private val prefs = context.getSharedPreferences(
@@ -312,6 +313,29 @@ class CoreSuiteRepository(context: Context) {
                 }
             )
         }
+    }
+
+    /** Dragging is a UI draft; write the complete final order once on drop. */
+    @Synchronized
+    fun reorderChecklistItems(checklistId: String, ids: List<String>): Boolean {
+        val checklist = getChecklist(checklistId) ?: return false
+        val ordered = reorderedByIds(checklist.items, ids) { it.id } ?: return false
+        if (checklist.items.sortedBy { it.order }.map { it.id } == ids) return true
+        val before = checklists
+        val oldRaw = prefs.getString(snapshotKey, null)
+        val next = checklist.copy(
+            items = ordered.mapIndexed { index, item -> item.copy(order = index) },
+            updatedAt = System.currentTimeMillis()
+        )
+        checklists = checklists.map { if (it.id == checklistId) next else it }
+        if (runCatching { persistChecked() }.getOrDefault(false)) return true
+        checklists = before
+        runCatching {
+            val editor = prefs.edit()
+            if (oldRaw == null) editor.remove(snapshotKey) else editor.putString(snapshotKey, oldRaw)
+            editor.commit()
+        }
+        return false
     }
 
     @Synchronized

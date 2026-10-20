@@ -32,6 +32,9 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val NONE_TEMPLATE = "__NONE__"
 
@@ -128,7 +131,11 @@ fun CommonShareScreen(
             )
         }
 
-    fun createPortableBytes(): ByteArray? {
+    val scope = rememberCoroutineScope()
+    var exporting by remember { mutableStateOf(false) }
+    if (exporting) PortableWorkDialog()
+
+    suspend fun createPortableBytes(): ByteArray? {
         val type = portableType
         val rootId = portableRootId
         if (type == null || rootId.isNullOrBlank()) {
@@ -155,17 +162,13 @@ fun CommonShareScreen(
             return null
         }
 
-        return when (
-            val generated =
-                ArmyristPortableDataManager.createIndividualExport(
-                    context = context,
-                    dataType = type,
-                    rootId = rootId,
-                    password =
-                        if (encrypt) password.toCharArray()
-                        else null
-                )
-        ) {
+        val chars = if (encrypt) password.toCharArray() else null
+        val generated = withContext(Dispatchers.Default) {
+            try {
+                ArmyristPortableDataManager.createIndividualExport(context, type, rootId, chars)
+            } finally { chars?.fill('\u0000') }
+        }
+        return when (generated) {
             is PortableResult.Success -> generated.value
             is PortableResult.Error -> {
                 Toast.makeText(
@@ -175,6 +178,15 @@ fun CommonShareScreen(
                 ).show()
                 null
             }
+        }
+    }
+
+    fun exportPortable(onReady: (ByteArray) -> Unit) {
+        if (exporting) return
+        exporting = true
+        scope.launch {
+            try { createPortableBytes()?.let(onReady) }
+            finally { exporting = false }
         }
     }
 
@@ -486,7 +498,7 @@ fun CommonShareScreen(
                         ArmyristUtilityActionButton(
                             text = "파일 저장",
                             onClick = {
-                                createPortableBytes()?.let {
+                                exportPortable {
                                     pendingSaveBytes = it
                                     saveFile.launch(fileName())
                                 }
@@ -515,7 +527,7 @@ fun CommonShareScreen(
                         ArmyristUtilityActionButton(
                             text = "파일 공유",
                             onClick = {
-                                createPortableBytes()?.let {
+                                exportPortable {
                                     sharePortable(it)
                                 }
                             },
@@ -528,7 +540,7 @@ fun CommonShareScreen(
                         ArmyristActionButton(
                             text = "주변 Armyrist (PoC)",
                             onClick = {
-                                createPortableBytes()?.let { bytes ->
+                                exportPortable { bytes ->
                                     runCatching {
                                         val dir = java.io.File(context.cacheDir, "nearby-send").apply { mkdirs() }
                                         val file = java.io.File(dir, "nearby-${System.currentTimeMillis()}.armyrist")
@@ -557,7 +569,7 @@ fun CommonShareScreen(
                         ArmyristActionButton(
                             text = "주변 Armyrist · 백그라운드 PoC",
                             onClick = {
-                                createPortableBytes()?.let { bytes ->
+                                exportPortable { bytes ->
                                     runCatching {
                                         val dir = java.io.File(
                                             context.cacheDir,

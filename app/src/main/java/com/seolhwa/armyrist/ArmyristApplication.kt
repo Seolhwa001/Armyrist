@@ -65,8 +65,6 @@ class ArmyristApplication : Application() {
             legacyRepository = coreSuiteRepository,
             v2Repository = timePlanV2Repository
         )
-        dateAwareTimePlanRepository = DateAwareTimePlanRepository(this)
-
         ChecklistNotificationManager.reconcile(
             this,
             coreSuiteRepository

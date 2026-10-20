@@ -23,13 +23,23 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 157
-        versionName = "0.6.69"
+        versionCode = 160
+        versionName = "0.6.72"
+        manifestPlaceholders["appLabel"] = "아미리스"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
+        getByName("debug") {
+            val workspaceStore = file("signing/workspace-debug.keystore")
+            if (workspaceStore.isFile) {
+                storeFile = workspaceStore
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
         if (stableSigningAvailable) {
             create("stableRelease") {
                 storeFile = file(signingStoreFile!!)
@@ -41,6 +51,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            // The delivered workspace APK is used for performance checks, not debugger attachment.
+            isDebuggable = false
+            applicationIdSuffix = ".workspace"
+            versionNameSuffix = "-workspace"
+            manifestPlaceholders["appLabel"] = "아미리스 테스트"
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
