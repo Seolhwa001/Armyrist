@@ -32,6 +32,7 @@
         android:label="${appLabel}"
         android:supportsRtl="true"
         android:theme="@style/Theme.Armyrist">
+        <activity android:name=".handicap.HandicapActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="false" />
         <activity android:name=".ChecklistActivity" android:exported="false" />
         <activity android:name=".TimePlanActivity" android:exported="false" />

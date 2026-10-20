@@ -37,6 +37,8 @@ import androidx.compose.material.icons.outlined.FormatListNumbered
 import androidx.compose.material.icons.outlined.FactCheck
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.PhoneInTalk
+import com.seolhwa.armyrist.handicap.HandicapActivity
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.seolhwa.armyrist.update.ArmyristUpdateManager
 import com.seolhwa.armyrist.update.AutoUpdateCheckHost
@@ -82,6 +84,7 @@ class HomeActivity : ComponentActivity() {
                         onReportTemplate = {
                             startActivity(Intent(this, ReportTemplateActivity::class.java))
                         },
+                        onHandicap = { startActivity(Intent(this, HandicapActivity::class.java)) },
                         onUserProfile = {
                             startActivity(Intent(this, UserProfileActivity::class.java))
                         },
@@ -109,6 +112,7 @@ private fun HomeScreen(
     onChecklist: () -> Unit,
     onTimePlan: () -> Unit,
     onReportTemplate: () -> Unit,
+    onHandicap: () -> Unit,
     onUserProfile: () -> Unit,
     onDataManagement: () -> Unit,
     availableUpdate: UpdateReleaseMetadata?,
@@ -146,6 +150,13 @@ private fun HomeScreen(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 HomeToolPanel("시간계획", "일정과 실시사항", Icons.Outlined.Schedule, onTimePlan, Modifier.weight(1f))
                 HomeToolPanel("보고 양식", "결과 작성과 공유", Icons.Outlined.Description, onReportTemplate, Modifier.weight(1f))
+            }
+        }
+
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                HomeToolPanel("핸디캡 상황", "단어 선택과 연락 안내", Icons.Outlined.PhoneInTalk, onHandicap, Modifier.weight(1f))
+                Spacer(Modifier.weight(1f))
             }
         }
 
