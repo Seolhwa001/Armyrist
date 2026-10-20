@@ -2,7 +2,7 @@ name: Android Build
 
 on:
   push:
-    branches: [ "main", "release/0.6.72" ]
+    branches: [ "main", "release/0.6.73" ]
   workflow_dispatch:
 
 permissions:
@@ -18,39 +18,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Apply reviewed 0.6.72 source changes
-        if: hashFiles('Armyrist-0.6.72-source-changes.json') != ''
+      - name: Apply reviewed 0.6.73 interface changes
+        if: hashFiles('Killomris-0.6.73-source-changes.json') != ''
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PYTHON'
-          import hashlib, json
+          import hashlib, json, base64
           from pathlib import Path
-          patch = Path('Armyrist-0.6.72-source-changes.json')
-          assert hashlib.sha256(patch.read_bytes()).hexdigest() == '1759b835cde6840849cce3fade1d27e86862ffa8e1b3ed73e4f366fefe152b85'
-          deletions = {
-              'app/src/test/java/com/seolhwa/armyrist/timeplan/data/TimePlanV2Repository.kt',
-              'app/src/test/java/com/seolhwa/armyrist/timeplan/data/TimePlanV2MigrationCoordinator.kt'
-          }
+          patch = Path('Killomris-0.6.73-source-changes.json')
+          assert hashlib.sha256(patch.read_bytes()).hexdigest() == '607719ddda7f6822a484f82930903dbbb951df62f3de788ef9072c761ead5745'
           for entry in json.loads(patch.read_text()):
               name = entry['path']
               target = Path(name)
               assert not target.is_absolute() and '..' not in target.parts
-              assert name.startswith('app/') or name in {'.gitignore', 'release/release-notes.txt'}
+              assert name.startswith(('app/', 'design/')) or name == 'release/release-notes.txt'
               assert target.suffix not in {'.keystore', '.jks', '.p12', '.pem', '.key'}
-              if entry.get('sha', 'content') is None:
-                  assert name in deletions
-                  target.unlink(missing_ok=True)
+              target.parent.mkdir(parents=True, exist_ok=True)
+              if entry['encoding'] == 'base64':
+                  target.write_bytes(base64.b64decode(entry['content'], validate=True))
               else:
-                  target.parent.mkdir(parents=True, exist_ok=True)
                   target.write_text(entry['content'])
           patch.unlink()
           PYTHON
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'Apply reviewed Armyrist 0.6.72 fixes [skip ci]'
-          git push origin HEAD:refs/heads/release/0.6.72
+          git commit -m 'Refresh Killomris home, live banner and visual identity [skip ci]'
+          git push origin HEAD:refs/heads/release/0.6.73
 
       - name: Set up Java 17
         uses: actions/setup-java@v5
@@ -102,6 +97,19 @@ jobs:
 
       - name: Run unit tests
         run: ./gradlew --no-parallel --max-workers=2 test --stacktrace
+
+      - name: Record unit test results
+        shell: bash
+        run: |
+          python3 - <<'PYTHON'
+          import os, json, xml.etree.ElementTree as E
+          from pathlib import Path
+          files = list(Path('app/build/test-results/testReleaseUnitTest').glob('TEST-*.xml'))
+          stats = {key: sum(int(E.parse(f).getroot().get(key, 0)) for f in files) for key in ['tests', 'failures', 'errors', 'skipped']}
+          assert stats['tests'] >= 212 and stats['failures'] == stats['errors'] == stats['skipped'] == 0, stats
+          Path(os.environ['RUNNER_TEMP'], 'Killomris-test-results.json').write_text(json.dumps(stats))
+          print(stats)
+          PYTHON
 
       - name: Build debug APK
         run: ./gradlew --no-parallel --max-workers=2 assembleDebug --stacktrace
@@ -204,6 +212,7 @@ jobs:
             --output "$DIST/release.json"
 
           cp release/release-notes.txt "$DIST/RELEASE_NOTES.txt"
+          cp "$RUNNER_TEMP/Killomris-test-results.json" "$DIST/Killomris-test-results.json"
           printf 'versionName=%s\nversionCode=%s\ntag=v%s\n' \
             "$VERSION_NAME" "$VERSION_CODE" "$VERSION_NAME" \
             > "$DIST/VERSION.txt"
@@ -232,13 +241,13 @@ jobs:
           if-no-files-found: error
 
       - name: Prepare draft release for review
-        if: github.ref == 'refs/heads/release/0.6.72'
+        if: github.ref == 'refs/heads/release/0.6.73'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="v0.6.72"
+          TAG="v0.6.73"
           DIST="$RUNNER_TEMP/armyrist-distribution"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release tag already exists; refusing to replace it."
@@ -247,10 +256,10 @@ jobs:
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$(git rev-parse HEAD)" \
-            --title "Armyrist 0.6.72" \
+            --title "낄롬리스 0.6.73" \
             --notes-file "$DIST/RELEASE_NOTES.txt" \
             --draft \
-            "$DIST/Armyrist-0.6.72.apk" "$DIST/release.json"
+            "$DIST/Armyrist-0.6.73.apk" "$DIST/release.json"
 
       - name: Remove temporary signing material
         if: always()
