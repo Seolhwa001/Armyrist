@@ -29,15 +29,26 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.seolhwa.armyrist.home.HomeBannerCard
+import com.seolhwa.armyrist.home.HomeBannerPreferences
+import com.seolhwa.armyrist.home.HomeBannerMode
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.FormatListNumbered
+import androidx.compose.material.icons.outlined.FactCheck
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.ui.graphics.vector.ImageVector
 import com.seolhwa.armyrist.update.ArmyristUpdateManager
 import com.seolhwa.armyrist.update.AutoUpdateCheckHost
 import com.seolhwa.armyrist.update.UpdateReleaseMetadata
 
 class HomeActivity : ComponentActivity() {
+    private var homeRevision by mutableIntStateOf(0)
     private var homeAvailableUpdate by mutableStateOf<UpdateReleaseMetadata?>(null)
 
     override fun onResume() {
         super.onResume()
+        homeRevision++
         homeAvailableUpdate = ArmyristUpdateManager(this).knownAvailable()
     }
 
@@ -58,6 +69,7 @@ class HomeActivity : ComponentActivity() {
                     color = ArmyristColors.AppBackground
                 ) {
                     HomeScreen(
+                        revision = homeRevision,
                         onCounting = {
                             startActivity(Intent(this, MainActivity::class.java))
                         },
@@ -92,6 +104,7 @@ class HomeActivity : ComponentActivity() {
 
 @Composable
 private fun HomeScreen(
+    revision: Int,
     onCounting: () -> Unit,
     onChecklist: () -> Unit,
     onTimePlan: () -> Unit,
@@ -102,6 +115,10 @@ private fun HomeScreen(
     onUpdateAvailabilityChanged: (UpdateReleaseMetadata?) -> Unit
 ) {
     AutoUpdateCheckHost(onUpdateAvailabilityChanged = onUpdateAvailabilityChanged)
+    val context = LocalContext.current
+    val bannerPreferences = remember(context) { HomeBannerPreferences(context) }
+    val bannerConfig = remember(revision) { bannerPreferences.load() }
+
 
     LazyColumn(
         modifier = Modifier
@@ -115,66 +132,24 @@ private fun HomeScreen(
         ),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        if (bannerConfig.mode != HomeBannerMode.HIDDEN) {
+            item { HomeBannerCard(bannerConfig, onTimePlan, onUserProfile) }
+        }
+        item { ArmyristSectionLabel("업무 도구") }
         item {
-            ArmyristPanel(
-                modifier = Modifier.fillMaxWidth(),
-                dark = true,
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            "ARMYRIST",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        ArmyristSystemLabel("ARMYRIST SYSTEM", onDark = true)
-                    }
-                    Text(
-                        "SYS: NORMAL",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color(0xFFD7E0B9),
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                HomeToolPanel("실셈", "수량 기록과 집계", Icons.Outlined.FormatListNumbered, onCounting, Modifier.weight(1f))
+                HomeToolPanel("체크리스트", "점검과 진행 현황", Icons.Outlined.FactCheck, onChecklist, Modifier.weight(1f))
+            }
+        }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                HomeToolPanel("시간계획", "일정과 실시사항", Icons.Outlined.Schedule, onTimePlan, Modifier.weight(1f))
+                HomeToolPanel("보고 양식", "결과 작성과 공유", Icons.Outlined.Description, onReportTemplate, Modifier.weight(1f))
             }
         }
 
-        item { ArmyristSectionLabel("업무 도구") }
-        item {
-            HomeToolPanel(
-                title = "실셈",
-                subtitle = "수량 기록 · 그룹 집계 · 결과 공유",
-                onClick = onCounting
-            )
-        }
-        item {
-            HomeToolPanel(
-                title = "체크리스트",
-                subtitle = "반복 점검 · 상태 관리 · 진행 현황",
-                onClick = onChecklist
-            )
-        }
-        item {
-            HomeToolPanel(
-                title = "시간계획",
-                subtitle = "시각 · 경과시간 · 중도 지점 관리",
-                onClick = onTimePlan
-            )
-        }
-        item {
-            HomeToolPanel(
-                title = "보고 양식",
-                subtitle = "공통 결과 전달 양식 관리",
-                onClick = onReportTemplate
-            )
-        }
-
-        item { ArmyristSectionLabel("공통 / 설정") }
+        item { ArmyristSectionLabel("설정") }
 
         item {
             Surface(
@@ -210,7 +185,7 @@ private fun HomeScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            "내 정보",
+                            "설정 · 내 정보",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -220,7 +195,7 @@ private fun HomeScreen(
                                 "새 업데이트 발견",
                                 modifier = Modifier.alpha(updatePulse),
                                 style = MaterialTheme.typography.labelMedium,
-                                color = Color(0xFF60764A),
+                                color = ArmyristColors.PrimaryControl,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -229,7 +204,7 @@ private fun HomeScreen(
                         if (availableUpdate != null) {
                             "사용자 · 앱 정보 · ${availableUpdate.versionName}  ›"
                         } else {
-                            "사용자 · 앱 정보  ›"
+                            "사용자 · 홈 배너 · 앱 정보  ›"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = ArmyristColors.SecondaryText
@@ -270,7 +245,7 @@ private fun HomeScreen(
 
         item {
             ArmyristSystemLabel(
-                "CORE SUITE v1  ·  OFFLINE READY",
+                "모든 기록은 이 기기에 보관됩니다",
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -415,7 +390,7 @@ private fun NearbyReceiveToggle() {
             if (enabled) {
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "아미리스를 보고 있지 않아도 주변 전송 요청을 받을 수 있도록 수신 서비스를 유지합니다.",
+                    "낄롬리스를 보고 있지 않아도 주변 전송 요청을 받을 수 있도록 수신 서비스를 유지합니다.",
                     style = MaterialTheme.typography.bodySmall,
                     color = ArmyristColors.SecondaryText
                 )
@@ -428,41 +403,23 @@ private fun NearbyReceiveToggle() {
 private fun HomeToolPanel(
     title: String,
     subtitle: String,
-    onClick: () -> Unit
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        modifier = modifier.heightIn(min = 148.dp).clickable(onClick = onClick),
         color = ArmyristColors.RaisedSurface,
         shape = ArmyristPanelShape,
-        border = BorderStroke(1.dp, ArmyristColors.Border)
+        border = BorderStroke(1.dp, ArmyristColors.SoftBorder)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 13.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ArmyristColors.SecondaryText
-                )
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Surface(color = ArmyristColors.SecondaryControl, shape = ArmyristControlShape) {
+                Icon(icon, contentDescription = null, tint = ArmyristColors.PrimaryControl,
+                    modifier = Modifier.padding(10.dp).size(24.dp))
             }
-
-            Text(
-                "›",
-                style = MaterialTheme.typography.headlineSmall,
-                color = ArmyristColors.PrimaryControl
-            )
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = ArmyristColors.SecondaryText)
         }
     }
 }

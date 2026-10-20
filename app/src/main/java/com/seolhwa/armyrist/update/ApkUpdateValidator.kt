@@ -38,7 +38,7 @@ object ApkUpdateValidator {
             ?: return UpdateValidationResult.Invalid("유효한 Android APK로 확인할 수 없습니다.")
 
         if (archive.packageName != EXPECTED_PACKAGE) {
-            return UpdateValidationResult.Invalid("Armyrist와 다른 패키지의 APK입니다.")
+            return UpdateValidationResult.Invalid("낄롬리스와 다른 패키지의 APK입니다.")
         }
 
         val archiveCode = packageVersionCode(archive)
@@ -50,7 +50,7 @@ object ApkUpdateValidator {
         val installed = runCatching {
             context.packageManager.getPackageInfo(context.packageName, flags)
         }.getOrNull()
-            ?: return UpdateValidationResult.Invalid("현재 Armyrist의 서명 정보를 확인할 수 없습니다.")
+            ?: return UpdateValidationResult.Invalid("현재 낄롬리스의 서명 정보를 확인할 수 없습니다.")
 
         val installedSigners = signerDigests(installed)
         val archiveSigners = signerDigests(archive)
@@ -58,7 +58,7 @@ object ApkUpdateValidator {
             return UpdateValidationResult.Invalid("APK 서명 정보를 확인할 수 없습니다.")
         }
         if (installedSigners != archiveSigners) {
-            return UpdateValidationResult.Invalid("현재 Armyrist와 업데이트 APK의 서명이 일치하지 않습니다.")
+            return UpdateValidationResult.Invalid("현재 낄롬리스와 업데이트 APK의 서명이 일치하지 않습니다.")
         }
 
         return UpdateValidationResult.Valid

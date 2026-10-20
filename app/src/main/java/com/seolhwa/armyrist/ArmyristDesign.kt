@@ -13,33 +13,36 @@ import androidx.compose.ui.unit.dp
 
 object ArmyristColors {
     // Light work surfaces
-    val AppBackground = Color(0xFFE7E9E1)
-    val WorkSurface = Color(0xFFF2F3ED)
-    val RaisedSurface = Color(0xFFFBFBF7)
-    val InputSurface = Color(0xFFFCFCF8)
+    val AppBackground = Color(0xFFF5F7FB)
+    val WorkSurface = Color(0xFFF0F4FA)
+    val RaisedSurface = Color(0xFFFFFFFF)
+    val InputSurface = Color(0xFFFFFFFF)
 
-    // Dark military control frame
-    val Header = Color(0xFF2F3A26)
-    val HeaderActionSurface = Color(0xFF3B4931)
-    val HeaderActionBorder = Color(0xFFB9C1AE)
-    val HeaderRaised = Color(0xFF424A37)
-    val PrimaryControl = Color(0xFF4F5A3C)
-    val SecondaryControl = Color(0xFFD8DDCC)
+    // Calm blue control surfaces
+    val Header = Color(0xFF172842)
+    val HeaderActionSurface = Color(0xFF243D60)
+    val HeaderActionBorder = Color(0xFF7189AC)
+    val HeaderRaised = Color(0xFF2D4D76)
+    val PrimaryControl = Color(0xFF4263D8)
+    val SecondaryControl = Color(0xFFE8EEFF)
 
     // Text
-    val PrimaryText = Color(0xFF171A15)
-    val SecondaryText = Color(0xFF52584D)
-    val MutedText = Color(0xFF777D72)
-    val OnDark = Color(0xFFF4F5EF)
+    val PrimaryText = Color(0xFF17233B)
+    val SecondaryText = Color(0xFF59677E)
+    val MutedText = Color(0xFF7F8BA0)
+    val OnDark = Color(0xFFFFFFFF)
 
     // Structure
-    val Border = Color(0xFF8A9181)
-    val Divider = Color(0xFFB9BEB2)
-    val Accent = Color(0xFF687447)
-    val Danger = Color(0xFF9A3F36)
-    val DangerMuted = Color(0xFFA34D43)
-    val SoftBorder = Color(0xFFD5D8CF)
-    val InfoSurface = Color(0xFFF2F3ED)
+    val Border = Color(0xFFA7B5CA)
+    val Divider = Color(0xFFD8E0ED)
+    val Accent = Color(0xFF5474D9)
+    val Danger = Color(0xFFC44857)
+    val DangerMuted = Color(0xFFB9636E)
+    val SoftBorder = Color(0xFFE0E6F0)
+    val LiveGreen = Color(0xFF16845D)
+    val LiveSurface = Color(0xFFE6F6EE)
+    val LiveBorder = Color(0xFF83CDA9)
+    val InfoSurface = Color(0xFFF0F4FA)
 }
 
 private val ArmyristLightScheme = lightColorScheme(
@@ -66,8 +69,8 @@ fun ArmyristTheme(content: @Composable () -> Unit) {
 }
 
 // Armyrist common UI language: soft work cards, compact controls, functional icons.
-val ArmyristPanelShape: Shape = RoundedCornerShape(12.dp)
-val ArmyristControlShape: Shape = RoundedCornerShape(10.dp)
+val ArmyristPanelShape: Shape = RoundedCornerShape(18.dp)
+val ArmyristControlShape: Shape = RoundedCornerShape(12.dp)
 
 @Composable
 fun ArmyristPanel(
@@ -117,7 +120,7 @@ fun ArmyristSystemLabel(
         text = text,
         modifier = modifier,
         style = MaterialTheme.typography.labelSmall,
-        color = if (onDark) Color(0xFFC8CEBD) else ArmyristColors.MutedText
+        color = if (onDark) Color(0xFFCBD9EF) else ArmyristColors.MutedText
     )
 }
 
@@ -131,7 +134,7 @@ fun ArmyristToolNumber(
         shape = ArmyristPanelShape,
         color = ArmyristColors.HeaderRaised,
         contentColor = ArmyristColors.OnDark,
-        border = BorderStroke(1.dp, Color(0xFF727C61))
+        border = BorderStroke(1.dp, Color(0xFF5E779D))
     ) {
         Text(
             text = "[$number]",

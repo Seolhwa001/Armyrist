@@ -66,7 +66,7 @@ class NearbyConnectionsReceiveActivity : ComponentActivity() {
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        "Armyrist 데이터 수신",
+                        "낄롬리스 데이터 수신",
                         fontWeight = FontWeight.Bold
                     )
                     Text(status.value)

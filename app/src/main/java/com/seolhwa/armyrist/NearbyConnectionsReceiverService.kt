@@ -323,10 +323,10 @@ class NearbyConnectionsReceiverService : Service() {
         manager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_REQUEST,
-                "Armyrist 데이터 수신 요청",
+                "낄롬리스 데이터 수신 요청",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "주변 Armyrist에서 데이터 전송 요청이 왔을 때 표시됩니다."
+                description = "주변 낄롬리스에서 데이터 전송 요청이 왔을 때 표시됩니다."
             }
         )
     }
@@ -393,7 +393,7 @@ class NearbyConnectionsReceiverService : Service() {
         val notification =
             NotificationCompat.Builder(this, CHANNEL_REQUEST)
                 .setSmallIcon(android.R.drawable.stat_sys_download_done)
-                .setContentTitle("Armyrist 데이터 수신 요청")
+                .setContentTitle("낄롬리스 데이터 수신 요청")
                 .setContentText(
                     "${request.metadata.device} · ${request.metadata.title}"
                 )

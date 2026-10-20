@@ -271,7 +271,7 @@ private fun DataManagementScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(Modifier.height(8.dp))
-                Text("현재 Armyrist 데이터를 하나의 파일로 보관합니다.")
+                Text("현재 낄롬리스 데이터를 하나의 파일로 보관합니다.")
                 Spacer(Modifier.height(12.dp))
                 DataCount("실셈", summary.countingSheets)
                 DataCount("체크리스트", summary.checklists)
@@ -327,7 +327,7 @@ private fun DataManagementScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "백업 파일의 데이터로 현재 Armyrist 데이터를 교체합니다."
+                    "백업 파일의 데이터로 현재 낄롬리스 데이터를 교체합니다."
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
@@ -400,7 +400,7 @@ private fun DataManagementScreen(
 
                 Spacer(Modifier.height(8.dp))
                 ArmyristActionButton(
-                    text = "주변 Armyrist 수신 (PoC)",
+                    text = "주변 낄롬리스 수신 (PoC)",
                     onClick = {
                         context.startActivity(
                             android.content.Intent(context, NearbyTransferActivity::class.java)
@@ -426,7 +426,7 @@ private fun DataManagementScreen(
 
     if (restorePasswordDialog) {
         PasswordInputDialog(
-            title = "암호화된 Armyrist 파일",
+            title = "암호화된 낄롬리스 파일",
             onDismiss = {
                 restorePasswordDialog = false
                 restoreBytes = null
@@ -610,7 +610,7 @@ private fun RestoreConfirmDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    "현재 Armyrist 데이터가 선택한 백업의 데이터로 교체됩니다.",
+                    "현재 낄롬리스 데이터가 선택한 백업의 데이터로 교체됩니다.",
                     fontWeight = FontWeight.Bold
                 )
 

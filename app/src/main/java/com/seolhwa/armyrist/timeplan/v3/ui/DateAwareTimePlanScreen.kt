@@ -57,6 +57,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.seolhwa.armyrist.*
+import com.seolhwa.armyrist.home.rememberLiveTime
+import com.seolhwa.armyrist.timeplan.v3.domain.TimePlanLiveStatus
 import com.seolhwa.armyrist.collection.*
 import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
 import com.seolhwa.armyrist.stage2.domain.ToolResult
@@ -405,6 +407,7 @@ private fun DateAwarePlanList(
     }
     val context = LocalContext.current
     val density = LocalDensity.current
+    val liveNow = rememberLiveTime()
     val listState = rememberLazyListState()
     val reorderScope = rememberCoroutineScope()
 
@@ -1059,6 +1062,7 @@ private fun DateAwarePlanList(
                     val maxAutoScrollPx = with(density) { 46.dp.toPx() }
 
                     val isSelected = plan.id in selectedPlanIds
+                    val isRunning = TimePlanLiveStatus.isActive(plan, liveNow)
 
                     Card(
                         modifier = (
@@ -1087,6 +1091,7 @@ private fun DateAwarePlanList(
                             when {
                                 isDragging -> ArmyristColors.PrimaryControl
                                 isSelected -> ArmyristColors.PrimaryControl
+                                isRunning -> ArmyristColors.LiveBorder
                                 else -> ArmyristColors.SoftBorder
                             }
                         ),
@@ -1095,7 +1100,8 @@ private fun DateAwarePlanList(
                         ),
                         colors = CardDefaults.cardColors(
                             containerColor =
-                                if (isSelected) ArmyristColors.SecondaryControl
+                                if (isRunning) ArmyristColors.LiveSurface
+                                else if (isSelected) ArmyristColors.SecondaryControl
                                 else ArmyristColors.RaisedSurface
                         )
                     ) {
@@ -1225,8 +1231,10 @@ private fun DateAwarePlanList(
                                     plan.title,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = ArmyristColors.PrimaryText
+                                    color = if (isRunning) ArmyristColors.LiveGreen else ArmyristColors.PrimaryText
                                 )
+                                if (isRunning) Text("● 진행 중", style = MaterialTheme.typography.labelMedium,
+                                    color = ArmyristColors.LiveGreen, fontWeight = FontWeight.SemiBold)
                                 Spacer(Modifier.height(3.dp))
                                 Text(
                                     remember(plan.start, plan.end, plan.dateDisplayMode) { planSpanText(plan) },
@@ -2469,10 +2477,19 @@ private fun TimelineList(
     onStart:()->Unit,onEnd:()->Unit,onEvent:(DateTimeEvent)->Unit,onLink:(DateTimeLink)->Unit,
     onMemo:()->Unit,onAddMid:()->Unit,onAddFinal:()->Unit
 ){
+    val liveNow = rememberLiveTime()
+    val isRunning = TimePlanLiveStatus.isActive(plan, liveNow)
     val nodes=DateTimePlanRules.nodeIds(plan)
     val events=plan.orderedEvents().associateBy{it.id}
     var lastDate: LocalDate? = null
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(8.dp,4.dp,8.dp,24.dp),verticalArrangement=Arrangement.spacedBy(2.dp)){
+        if (isRunning) item {
+            Surface(Modifier.fillMaxWidth(), color = ArmyristColors.LiveSurface, shape = ArmyristPanelShape,
+                border = BorderStroke(1.dp, ArmyristColors.LiveBorder)) {
+                Text("● 현재 진행 중인 시간계획", Modifier.padding(14.dp),
+                    color = ArmyristColors.LiveGreen, fontWeight = FontWeight.Bold)
+            }
+        }
         nodes.forEachIndexed { index,id ->
             val arrival=DateTimePlanRules.nodeArrival(plan,id)
             val date=arrival?.toLocalDate()

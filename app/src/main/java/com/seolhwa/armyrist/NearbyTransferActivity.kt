@@ -46,7 +46,7 @@ class NearbyTransferActivity : ComponentActivity() {
     private var discovery: NsdManager.DiscoveryListener? = null
 
     private val peers = mutableStateListOf<Peer>()
-    private var status by mutableStateOf("주변 Armyrist를 찾는 중입니다.")
+    private var status by mutableStateOf("주변 낄롬리스를 찾는 중입니다.")
     private var incoming by mutableStateOf<ByteArray?>(null)
     private var incomingFrom by mutableStateOf("")
 
@@ -63,7 +63,7 @@ class NearbyTransferActivity : ComponentActivity() {
             val sendFile = remember { intent.getStringExtra(EXTRA_SEND_FILE)?.let(::File) }
             Scaffold(topBar = {
                 ArmyristTopBar(
-                    title = "주변 Armyrist",
+                    title = "주변 낄롬리스",
                     subtitle = "근거리 직접전송 · PoC",
                     leadingLabel = "뒤로",
                     onLeading = { finish() }
@@ -74,7 +74,7 @@ class NearbyTransferActivity : ComponentActivity() {
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     ArmyristPanel(Modifier.fillMaxWidth()) {
-                        Text("같은 Wi-Fi 또는 로컬 네트워크의 Armyrist를 찾습니다.", fontWeight = FontWeight.Bold)
+                        Text("같은 Wi-Fi 또는 로컬 네트워크의 낄롬리스를 찾습니다.", fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(6.dp))
                         Text("인터넷 서버·계정은 사용하지 않습니다. 두 기기 모두 이 화면을 열어두세요.")
                         Spacer(Modifier.height(8.dp))
@@ -108,7 +108,7 @@ class NearbyTransferActivity : ComponentActivity() {
             incoming?.let { bytes ->
                 AlertDialog(
                     onDismissRequest = { incoming = null },
-                    title = { Text("Armyrist 데이터 수신") },
+                    title = { Text("낄롬리스 데이터 수신") },
                     text = { Text("${incomingFrom.ifBlank { "주변 기기" }}에서 ${bytes.size} bytes의 데이터를 받았습니다. 내용을 확인하시겠습니까?") },
                     dismissButton = { TextButton(onClick = { incoming = null }) { Text("거절") } },
                     confirmButton = { Button(onClick = {

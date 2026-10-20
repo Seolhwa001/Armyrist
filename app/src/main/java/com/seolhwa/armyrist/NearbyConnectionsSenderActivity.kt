@@ -36,7 +36,7 @@ class NearbyConnectionsSenderActivity : ComponentActivity() {
 
     private lateinit var client: ConnectionsClient
     private val endpoints = mutableStateListOf<Endpoint>()
-    private var status by mutableStateOf("주변 Armyrist를 찾는 중입니다.")
+    private var status by mutableStateOf("주변 낄롬리스를 찾는 중입니다.")
     private var connectingEndpoint by mutableStateOf<String?>(null)
     private var activeEndpoint by mutableStateOf<String?>(null)
     private var activePayloadId by mutableStateOf<Long?>(null)
@@ -75,7 +75,7 @@ class NearbyConnectionsSenderActivity : ComponentActivity() {
             Scaffold(
                 topBar = {
                     ArmyristTopBar(
-                        title = "주변 Armyrist",
+                        title = "주변 낄롬리스",
                         subtitle = "Background Receive PoC",
                         leadingLabel = "뒤로",
                         onLeading = { finish() }
@@ -91,7 +91,7 @@ class NearbyConnectionsSenderActivity : ComponentActivity() {
                 ) {
                     ArmyristPanel(Modifier.fillMaxWidth()) {
                         Text(
-                            "수신 모드를 켜 둔 주변 Armyrist를 찾습니다.",
+                            "수신 모드를 켜 둔 주변 낄롬리스를 찾습니다.",
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(Modifier.height(6.dp))
@@ -154,7 +154,7 @@ class NearbyConnectionsSenderActivity : ComponentActivity() {
         }
 
         endpoints.clear()
-        status = "주변 Armyrist를 찾는 중입니다."
+        status = "주변 낄롬리스를 찾는 중입니다."
 
         client.stopDiscovery()
         client.startDiscovery(
@@ -197,7 +197,7 @@ class NearbyConnectionsSenderActivity : ComponentActivity() {
                                 .removePrefix("Armyrist · ")
                                 .ifBlank { "Android 기기" }
                     )
-                    status = "주변 Armyrist ${endpoints.size}대 발견"
+                    status = "주변 낄롬리스 ${endpoints.size}대 발견"
                 }
             }
 
@@ -215,7 +215,7 @@ class NearbyConnectionsSenderActivity : ComponentActivity() {
 
         val title =
             intent.getStringExtra(NearbyConnectionsPoC.EXTRA_TITLE)
-                ?: "Armyrist 데이터"
+                ?: "낄롬리스 데이터"
         val type =
             intent.getStringExtra(NearbyConnectionsPoC.EXTRA_TYPE)
                 ?: "PORTABLE"

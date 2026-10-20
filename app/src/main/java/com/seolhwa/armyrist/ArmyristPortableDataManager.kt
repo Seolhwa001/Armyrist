@@ -239,7 +239,7 @@ object ArmyristPortableDataManager {
                     )
                 } else {
                     PortableResult.Error(
-                        "지원하는 Armyrist 데이터 파일이 아닙니다."
+                        "지원하는 낄롬리스 데이터 파일이 아닙니다."
                     )
                 }
             }
@@ -377,7 +377,7 @@ object ArmyristPortableDataManager {
                         )
                     is UnsupportedTimePlanSchemaException ->
                         PortableResult.Error(
-                            "이 파일의 시간계획 데이터 버전은 현재 Armyrist에서 지원하지 않습니다."
+                            "이 파일의 시간계획 데이터 버전은 현재 낄롬리스에서 지원하지 않습니다."
                         )
                     else ->
                         PortableResult.Error(
@@ -1137,7 +1137,7 @@ object ArmyristPortableDataManager {
                     )
                 is UnsupportedTimePlanSchemaException ->
                     PortableResult.Error(
-                        "이 시간계획 데이터 버전은 현재 Armyrist에서 지원하지 않습니다."
+                        "이 시간계획 데이터 버전은 현재 낄롬리스에서 지원하지 않습니다."
                     )
                 else ->
                     PortableResult.Error(
@@ -1376,7 +1376,7 @@ object ArmyristPortableDataManager {
         createdAt: String
     ): PortableDocumentPreview {
         val title = document.optString("title",
-            document.optString("name", "Armyrist 데이터"))
+            document.optString("name", "낄롬리스 데이터"))
         return when (type) {
             ArmyristPortableDataType.COUNTING -> PortableDocumentPreview(
                 type, title,

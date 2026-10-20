@@ -249,7 +249,7 @@ class WifiDirectTransferActivity : ComponentActivity() {
             incoming?.let { bytes ->
                 AlertDialog(
                     onDismissRequest = { incoming = null },
-                    title = { Text("Armyrist 데이터 수신") },
+                    title = { Text("낄롬리스 데이터 수신") },
                     text = {
                         Text(
                             "${incomingFrom.ifBlank { "Wi-Fi Direct 기기" }}에서 " +

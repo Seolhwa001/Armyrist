@@ -60,7 +60,7 @@ fun AutoUpdateCheckHost(
             title = {
                 Column {
                     Text(
-                        "새로운 Armyrist ${release.versionName}",
+                        "새로운 낄롬리스 ${release.versionName}",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold
                     )
@@ -253,7 +253,7 @@ fun UpdateAppInfoPanel(startUpdateImmediately: Boolean = false) {
                         is UpdateCheckResult.Available -> {
                             available = result.release
                             latestConfirmed = false
-                            message = "새로운 Armyrist ${result.release.versionName} 버전이 있습니다."
+                            message = "새로운 낄롬리스 ${result.release.versionName} 버전이 있습니다."
                         }
                         is UpdateCheckResult.Latest -> {
                             available = null
@@ -299,7 +299,7 @@ fun UpdateAppInfoPanel(startUpdateImmediately: Boolean = false) {
                 shape = ArmyristPanelShape,
                 border = BorderStroke(1.dp, ArmyristColors.PrimaryControl)
             ) {
-                Text("Armyrist ${release.versionName} 업데이트")
+                Text("낄롬리스 ${release.versionName} 업데이트")
             }
         }
 

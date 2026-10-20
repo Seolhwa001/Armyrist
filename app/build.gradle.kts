@@ -23,9 +23,9 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 160
-        versionName = "0.6.72"
-        manifestPlaceholders["appLabel"] = "아미리스"
+        versionCode = 161
+        versionName = "0.6.73"
+        manifestPlaceholders["appLabel"] = "낄롬리스"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -56,7 +56,7 @@ android {
             isDebuggable = false
             applicationIdSuffix = ".workspace"
             versionNameSuffix = "-workspace"
-            manifestPlaceholders["appLabel"] = "아미리스 테스트"
+            manifestPlaceholders["appLabel"] = "낄롬리스 테스트"
         }
         release {
             isMinifyEnabled = false

@@ -124,7 +124,7 @@ internal object NearbyConnectionsPoC {
         if (parts.size != 4 || parts[0] != "ARMYRIST") {
             return RequestMetadata(
                 device = raw.ifBlank { "주변 Android 기기" }.take(48),
-                title = "Armyrist 데이터",
+                title = "낄롬리스 데이터",
                 type = "PORTABLE"
             )
         }
@@ -139,7 +139,7 @@ internal object NearbyConnectionsPoC {
 
         return RequestMetadata(
             device = dec(parts[1]).ifBlank { "주변 Android 기기" }.take(48),
-            title = dec(parts[2]).ifBlank { "Armyrist 데이터" }.take(64),
+            title = dec(parts[2]).ifBlank { "낄롬리스 데이터" }.take(64),
             type = dec(parts[3]).ifBlank { "PORTABLE" }.take(24)
         )
     }

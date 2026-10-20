@@ -229,7 +229,7 @@ fun CommonShareScreen(
             context.startActivity(
                 Intent.createChooser(
                     intent,
-                    "Armyrist 데이터 공유"
+                    "낄롬리스 데이터 공유"
                 )
             )
         }.onFailure {
@@ -538,7 +538,7 @@ fun CommonShareScreen(
                     if (portableType == ArmyristPortableDataType.COUNTING) {
                         Spacer(Modifier.height(10.dp))
                         ArmyristActionButton(
-                            text = "주변 Armyrist (PoC)",
+                            text = "주변 낄롬리스 (PoC)",
                             onClick = {
                                 exportPortable { bytes ->
                                     runCatching {
@@ -560,14 +560,14 @@ fun CommonShareScreen(
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "같은 Wi-Fi/로컬 네트워크의 Armyrist로 직접 전송합니다. 인터넷 서버는 사용하지 않습니다.",
+                            "같은 Wi-Fi/로컬 네트워크의 낄롬리스로 직접 전송합니다. 인터넷 서버는 사용하지 않습니다.",
                             style = MaterialTheme.typography.bodySmall,
                             color = ArmyristColors.SecondaryText
                         )
 
                         Spacer(Modifier.height(8.dp))
                         ArmyristActionButton(
-                            text = "주변 Armyrist · 백그라운드 PoC",
+                            text = "주변 낄롬리스 · 백그라운드 PoC",
                             onClick = {
                                 exportPortable { bytes ->
                                     runCatching {
@@ -614,7 +614,7 @@ fun CommonShareScreen(
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "수신 모드를 켜 둔 주변 Armyrist를 찾는 독립 기술검증입니다. 기존 전송 기능은 유지됩니다.",
+                            "수신 모드를 켜 둔 주변 낄롬리스를 찾는 독립 기술검증입니다. 기존 전송 기능은 유지됩니다.",
                             style = MaterialTheme.typography.bodySmall,
                             color = ArmyristColors.SecondaryText
                         )

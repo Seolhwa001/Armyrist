@@ -18,6 +18,7 @@ import com.seolhwa.armyrist.update.ArmyristUpdateManager
 import com.seolhwa.armyrist.update.UpdateCheckResult
 import com.seolhwa.armyrist.update.UpdateSessionState
 import kotlinx.coroutines.launch
+import com.seolhwa.armyrist.home.HomeBannerSettingsPanel
 import com.seolhwa.armyrist.update.UpdateAppInfoPanel
 
 class UserProfileActivity : ComponentActivity() {
@@ -76,8 +77,8 @@ private fun UserProfileScreen(
     Scaffold(
         topBar = {
             ArmyristTopBar(
-                title = "내 정보",
-                subtitle = "PROFILE · APP INFORMATION · AUTO SAVE",
+                title = "설정 · 내 정보",
+                subtitle = "프로필 · 홈 배너 · 앱 정보",
                 leadingLabel = "홈",
                 leadingIcon = ArmyristTopBarLeadingIcon.HOME,
                 onLeading = {
@@ -92,6 +93,7 @@ private fun UserProfileScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            item { HomeBannerSettingsPanel() }
             item {
                 ArmyristPanel(Modifier.fillMaxWidth()) {
                     Text(
