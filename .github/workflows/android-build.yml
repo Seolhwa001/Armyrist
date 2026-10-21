@@ -18,16 +18,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Apply approved 0.6.75 changes
-        if: hashFiles('Killomris-0.6.75-source-changes.json') != ''
+      - name: Apply approved 0.6.75 visibility changes
+        if: hashFiles('Killomris-0.6.75-visibility-changes.json') != ''
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PYTHON'
           import hashlib, json, base64
           from pathlib import Path
-          patch = Path('Killomris-0.6.75-source-changes.json')
-          assert hashlib.sha256(patch.read_bytes()).hexdigest() == '8dbaa11af2df2ba38fb1e8ce84c9824fc7d3455f3e96e64463107a805a15a2bc'
+          patch = Path('Killomris-0.6.75-visibility-changes.json')
+          assert hashlib.sha256(patch.read_bytes()).hexdigest() == 'bce3198006c473ee45a780437ac33410c27eed4e1d491ef20e13b21715672c0c'
           for entry in json.loads(patch.read_text()):
               name = entry['path']
               target = Path(name)
@@ -44,7 +44,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'Apply approved compact handicap screen and home ordering [skip ci]'
+          git commit -m 'Improve approved handicap input and report visibility [skip ci]'
           git push origin HEAD:refs/heads/release/0.6.75
 
       - name: Set up Java 17
@@ -105,7 +105,7 @@ jobs:
           import os, json, xml.etree.ElementTree as E
           from pathlib import Path
           results = {}
-          for variant, minimum in [('Debug', 268), ('Release', 262)]:
+          for variant, minimum in [('Debug', 271), ('Release', 262)]:
               files = list(Path(f'app/build/test-results/test{variant}UnitTest').glob('TEST-*.xml'))
               stats = {key: sum(int(E.parse(f).getroot().get(key, 0)) for f in files) for key in ['tests', 'failures', 'errors', 'skipped']}
               assert stats['tests'] >= minimum and stats['failures'] == stats['errors'] == stats['skipped'] == 0, (variant, stats)
@@ -252,17 +252,21 @@ jobs:
           set -euo pipefail
           TAG="v0.6.75"
           DIST="$RUNNER_TEMP/armyrist-distribution"
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release tag already exists; refusing to replace it."
-            exit 1
+          RELEASE_ID="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.tag_name == "v0.6.75") | .id')"
+          if [ -n "$RELEASE_ID" ]; then
+            test "$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq '.draft')" = 'true'
+            export RELEASE_SOURCE="$(git rev-parse HEAD)"
+            python3 - <<'PYTHON'
+          import json, os
+          from pathlib import Path
+          payload = {'target_commitish': os.environ['RELEASE_SOURCE'], 'name': '낄롬리스 0.6.75', 'draft': True, 'body': Path('release/release-notes.txt').read_text()}
+          Path(os.environ['RUNNER_TEMP'], 'draft-update.json').write_text(json.dumps(payload))
+          PYTHON
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --input "$RUNNER_TEMP/draft-update.json" > /dev/null
+            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber "$DIST/Armyrist-0.6.75.apk" "$DIST/release.json"
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" --title "낄롬리스 0.6.75" --notes-file "$DIST/RELEASE_NOTES.txt" --draft "$DIST/Armyrist-0.6.75.apk" "$DIST/release.json"
           fi
-          gh release create "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$(git rev-parse HEAD)" \
-            --title "낄롬리스 0.6.75" \
-            --notes-file "$DIST/RELEASE_NOTES.txt" \
-            --draft \
-            "$DIST/Armyrist-0.6.75.apk" "$DIST/release.json"
 
       - name: Remove temporary signing material
         if: always()
