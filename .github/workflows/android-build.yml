@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   build:
+    if: "!contains(github.event.head_commit.message, '[assets only]')"
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -259,7 +260,7 @@ jobs:
             python3 - <<'PYTHON'
           import json, os
           from pathlib import Path
-          payload = {'target_commitish': os.environ['RELEASE_SOURCE'], 'name': '낄롬리스 0.6.75', 'draft': True, 'body': Path('release/release-notes.txt').read_text()}
+          payload = {'tag_name': 'v0.6.75', 'target_commitish': os.environ['RELEASE_SOURCE'], 'name': '낄롬리스 0.6.75', 'draft': True, 'body': Path('release/release-notes.txt').read_text()}
           Path(os.environ['RUNNER_TEMP'], 'draft-update.json').write_text(json.dumps(payload))
           PYTHON
             gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --input "$RUNNER_TEMP/draft-update.json" > /dev/null
@@ -273,3 +274,38 @@ jobs:
         shell: bash
         run: |
           rm -f "$RUNNER_TEMP/armyrist-stable-release.jks"
+
+  attach_verified_assets:
+    if: "contains(github.event.head_commit.message, '[assets only]')"
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Attach verified 0.6.75 distribution to draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          DIST="$RUNNER_TEMP/verified-dist"
+          gh run download 39526518352 --repo "$GITHUB_REPOSITORY" --name Armyrist-stable-distribution --dir "$DIST"
+          export DIST
+          python3 - <<'PYTHON'
+          import os, json, hashlib
+          from pathlib import Path
+          dist = Path(os.environ['DIST'])
+          apk = dist / 'Armyrist-0.6.75.apk'
+          digest = hashlib.sha256(apk.read_bytes()).hexdigest()
+          assert digest == '8cf8ec6bae9f0134a7a66796ea19c7cac291e36c6950d5d16ca0f6b5f331b8fc'
+          meta = json.loads((dist / 'release.json').read_text())
+          assert meta['apkSha256'] == digest and meta['versionName'] == '0.6.75' and meta['versionCode'] == 163
+          tests = json.loads((dist / 'Killomris-test-results.json').read_text())
+          assert tests == {'debug': {'tests': 271, 'failures': 0, 'errors': 0, 'skipped': 0}, 'release': {'tests': 262, 'failures': 0, 'errors': 0, 'skipped': 0}}
+          payload = {'tag_name': 'v0.6.75', 'target_commitish': '022fd991c5c9432a5f44f49a0c1d609cc29a4aa1', 'name': '낄롬리스 0.6.75', 'draft': True, 'body': (dist / 'RELEASE_NOTES.txt').read_text()}
+          Path(os.environ['RUNNER_TEMP'], 'verified-draft-update.json').write_text(json.dumps(payload))
+          PYTHON
+          RELEASE_ID="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.name == "낄롬리스 0.6.75" and .draft == true) | .id')"
+          test -n "$RELEASE_ID"
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --input "$RUNNER_TEMP/verified-draft-update.json" > /dev/null
+          gh release upload v0.6.75 --repo "$GITHUB_REPOSITORY" --clobber "$DIST/Armyrist-0.6.75.apk" "$DIST/release.json"
