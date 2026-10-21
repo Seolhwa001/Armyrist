@@ -18,13 +18,14 @@ val stableSigningAvailable =
 android {
     namespace = "com.seolhwa.armyrist"
     compileSdk = 36
+    buildToolsVersion = "36.0.0"
 
     defaultConfig {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 162
-        versionName = "0.6.74"
+        versionCode = 163
+        versionName = "0.6.75"
         manifestPlaceholders["appLabel"] = "낄롬리스"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -54,9 +55,9 @@ android {
         debug {
             // The delivered workspace APK is used for performance checks, not debugger attachment.
             isDebuggable = false
-            applicationIdSuffix = ".workspace"
-            versionNameSuffix = "-workspace"
-            manifestPlaceholders["appLabel"] = "낄롬리스 테스트"
+            applicationIdSuffix = ".preview075"
+            versionNameSuffix = "-preview"
+            manifestPlaceholders["appLabel"] = "낄롬리스 미리보기"
         }
         release {
             isMinifyEnabled = false
@@ -75,6 +76,16 @@ android {
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            // Compose UI fixtures belong to the debug test manifest, never the distribution APK.
+            if (it.name.contains("Release")) it.exclude("**/*UiTest.class")
+            it.maxHeapSize = "1536m"
+            it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+        }
     }
 
     buildFeatures {
@@ -104,6 +115,10 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("com.google.android.gms:play-services-nearby:19.3.0")
 
+    testImplementation(composeBom)
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+    testImplementation("org.robolectric:robolectric:4.16.1")
     testImplementation("junit:junit:4.13.2")
     // JVM unit tests need a real org.json implementation; android.jar provides only stubs.
     testImplementation("org.json:json:20260522")

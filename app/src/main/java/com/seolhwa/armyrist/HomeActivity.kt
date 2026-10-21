@@ -21,6 +21,10 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -29,6 +33,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.seolhwa.armyrist.home.HomeToolGrid
 import com.seolhwa.armyrist.home.HomeBannerCard
 import com.seolhwa.armyrist.home.HomeBannerPreferences
 import com.seolhwa.armyrist.home.HomeBannerMode
@@ -122,12 +127,16 @@ private fun HomeScreen(
     val context = LocalContext.current
     val bannerPreferences = remember(context) { HomeBannerPreferences(context) }
     val bannerConfig = remember(revision) { bannerPreferences.load() }
+    val homeListState = rememberLazyListState()
+    var homeViewport by remember { mutableStateOf(Rect.Zero) }
 
 
     LazyColumn(
+        state = homeListState,
         modifier = Modifier
             .fillMaxSize()
-            .statusBarsPadding(),
+            .statusBarsPadding()
+            .onGloballyPositioned { homeViewport = it.boundsInRoot() },
         contentPadding = PaddingValues(
             start = 14.dp,
             end = 14.dp,
@@ -139,24 +148,20 @@ private fun HomeScreen(
         if (bannerConfig.mode != HomeBannerMode.HIDDEN) {
             item { HomeBannerCard(bannerConfig, onTimePlan, onUserProfile) }
         }
-        item { ArmyristSectionLabel("업무 도구") }
+        item { ArmyristSectionLabel("업무 도구 · 길게 눌러 배치 변경") }
         item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                HomeToolPanel("실셈", "수량 기록과 집계", Icons.Outlined.FormatListNumbered, onCounting, Modifier.weight(1f))
-                HomeToolPanel("체크리스트", "점검과 진행 현황", Icons.Outlined.FactCheck, onChecklist, Modifier.weight(1f))
-            }
-        }
-        item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                HomeToolPanel("시간계획", "일정과 실시사항", Icons.Outlined.Schedule, onTimePlan, Modifier.weight(1f))
-                HomeToolPanel("보고 양식", "결과 작성과 공유", Icons.Outlined.Description, onReportTemplate, Modifier.weight(1f))
-            }
-        }
-
-        item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                HomeToolPanel("핸디캡 상황", "단어 선택과 연락 안내", Icons.Outlined.PhoneInTalk, onHandicap, Modifier.weight(1f))
-                Spacer(Modifier.weight(1f))
+            HomeToolGrid(homeListState, homeViewport) { id, modifier, dragging ->
+                val action = when (id) {
+                    "counting" -> onCounting
+                    "checklist" -> onChecklist
+                    "timeplan" -> onTimePlan
+                    "report" -> onReportTemplate
+                    else -> onHandicap
+                }
+                val title = when (id) { "counting" -> "실셈"; "checklist" -> "체크리스트"; "timeplan" -> "시간계획"; "report" -> "보고 양식"; else -> "핸디캡 상황" }
+                val subtitle = when (id) { "counting" -> "수량 기록과 집계"; "checklist" -> "점검과 진행 현황"; "timeplan" -> "일정과 실시사항"; "report" -> "결과 작성과 공유"; else -> "단어 선택과 연락 안내" }
+                val icon = when (id) { "counting" -> Icons.Outlined.FormatListNumbered; "checklist" -> Icons.Outlined.FactCheck; "timeplan" -> Icons.Outlined.Schedule; "report" -> Icons.Outlined.Description; else -> Icons.Outlined.PhoneInTalk }
+                HomeToolPanel(title, subtitle, icon, { if (!dragging) action() }, modifier)
             }
         }
 
