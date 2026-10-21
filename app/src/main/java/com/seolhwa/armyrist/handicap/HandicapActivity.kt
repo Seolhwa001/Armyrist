@@ -10,7 +10,15 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.border
+import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -75,7 +83,7 @@ internal fun HandicapRoot(onClose: () -> Unit) {
             Surface(color = ArmyristColors.RaisedSurface) {
                 Row(Modifier.fillMaxWidth().statusBarsPadding().height(48.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = onClose) { Text("뒤로") }
-                    Text("핸디캡 상황", Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                    Text("핸디캡 상황", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     TextButton(onClick = { settings = true }) { Text("설정") }
                 }
             }
@@ -87,7 +95,7 @@ internal fun HandicapRoot(onClose: () -> Unit) {
                     Button(onClick = {
                         if (result.missing.isEmpty()) resultOpen = true
                         else Toast.makeText(context, "선택해주세요: ${result.missing.joinToString(", ")}", Toast.LENGTH_LONG).show()
-                    }, modifier = Modifier.weight(1f)) { Text("확인 · 문장 정리") }
+                    }, modifier = Modifier.weight(1f)) { Text("확인 · 문장 정리", fontWeight = FontWeight.Bold) }
                 }
             }
         }
@@ -96,31 +104,31 @@ internal fun HandicapRoot(onClose: () -> Unit) {
             val short = maxHeight < 430.dp
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("부여제대", Modifier.width(58.dp), style = MaterialTheme.typography.labelMedium)
-                    OutlinedButton(onClick = { issuerPicker = true }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) {
-                        Text(draft.issuer.name.ifBlank { config.issuer.name.ifBlank { "제대 선택 / 직접입력" } }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("부여제대", Modifier.width(58.dp), fontSize = 13.sp, color = Color(0xFF19324F), fontWeight = FontWeight.Bold)
+                    OutlinedButton(onClick = { issuerPicker = true }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, Color(0xFFA9BBD2)), colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.White, contentColor = Color(0xFF19324F)), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) {
+                        Text(draft.issuer.name.ifBlank { config.issuer.name.ifBlank { "제대 선택 / 직접입력" } }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
                 Row(Modifier.fillMaxWidth().height(40.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("핸디캡", Modifier.width(52.dp), style = MaterialTheme.typography.labelMedium)
+                    Text("핸디캡", Modifier.width(52.dp), fontSize = 13.sp, color = Color(0xFF19324F), fontWeight = FontWeight.Bold)
                     CompactChip("블랙 ↑ 상급", draft.kind == HandicapKind.BLACK, { update(draft.copy(kind = HandicapKind.BLACK)) }, Modifier.weight(1f), dark = true)
                     CompactChip("화이트 ↓ 하급", draft.kind == HandicapKind.WHITE, { update(draft.copy(kind = HandicapKind.WHITE)) }, Modifier.weight(1f))
                 }
                 CompactWords(WordCategory.WHO, config.words[WordCategory.WHO].orEmpty(), draft.who, Modifier.weight(1f), short) { update(draft.copy(who = toggled(draft.who, it))) }
-                Row(Modifier.fillMaxWidth().height(if (short) 64.dp else 72.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Text("언제", Modifier.width(36.dp), style = MaterialTheme.typography.labelMedium)
+                Row(Modifier.fillMaxWidth().height(if (short) 64.dp else 72.dp).background(Color(0xFFEAF1FC), RoundedCornerShape(12.dp)).border(1.dp, Color(0xFFCCD9ED), RoundedCornerShape(12.dp)).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text("언제", Modifier.width(44.dp), fontSize = 13.sp, color = Color(0xFF19324F), fontWeight = FontWeight.Bold)
                     Column(Modifier.weight(1f)) {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             CompactChip("현재시간", false, { update(draft.copy(whenText = HandicapRules.currentTime(LocalDateTime.now()))) })
                             CompactChip("직접입력", false, { manualTime = draft.whenText; timeOpen = true })
                             if (config.words[WordCategory.WHEN].orEmpty().isNotEmpty()) TextButton(onClick = { timePicker = true }, contentPadding = PaddingValues(4.dp)) { Text("등록 시각", fontSize = 12.sp) }
                         }
-                        if (!short || draft.whenText.isNotBlank()) Text(draft.whenText.ifBlank { "누른 순간의 시각 기록" }, style = MaterialTheme.typography.labelSmall, color = ArmyristColors.PrimaryControl, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (!short || draft.whenText.isNotBlank()) Text(draft.whenText.ifBlank { "누른 순간의 시각 기록" }, fontSize = 12.sp, fontWeight = if (draft.whenText.isBlank()) FontWeight.Normal else FontWeight.Bold, color = ArmyristColors.PrimaryControl, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
                 CompactWords(WordCategory.WHERE, config.words[WordCategory.WHERE].orEmpty(), draft.where, Modifier.weight(1f), short) { update(draft.copy(where = toggled(draft.where, it))) }
                 CompactWords(WordCategory.WHAT, config.words[WordCategory.WHAT].orEmpty(), draft.what, Modifier.weight(1f), short) { update(draft.copy(what = toggled(draft.what, it))) }
-                CompactWords(WordCategory.HOW, config.words[WordCategory.HOW].orEmpty(), draft.how, Modifier.weight(0.85f), true) { update(draft.copy(how = toggled(draft.how, it))) }
+                CompactWords(WordCategory.HOW, config.words[WordCategory.HOW].orEmpty(), draft.how, Modifier.height(if (short) 48.dp else 56.dp), true) { update(draft.copy(how = toggled(draft.how, it))) }
             }
         }
     }
@@ -147,24 +155,21 @@ internal fun HandicapRoot(onClose: () -> Unit) {
     }, confirmButton = { TextButton(enabled = issuerName.isNotBlank(), onClick = { update(draft.copy(issuer = UnitContact(issuerName.trim(), issuerPhone.trim()))); issuerOpen = false }) { Text("적용") } }, dismissButton = { TextButton(onClick = { issuerOpen = false }) { Text("취소") } })
     if (clearOpen) AlertDialog(onDismissRequest = { clearOpen = false }, title = { Text("새 상황을 입력할까요?") }, text = { Text("선택한 단어와 발생 시각을 지웁니다. 제대 설정과 단어 버튼은 유지합니다.") },
         confirmButton = { TextButton(onClick = { update(SituationDraft()); resultOpen = false; clearOpen = false }) { Text("초기화") } }, dismissButton = { TextButton(onClick = { clearOpen = false }) { Text("취소") } })
-    if (resultOpen) AlertDialog(onDismissRequest = { resultOpen = false }, title = { Text("${if (draft.kind == HandicapKind.BLACK) "블랙" else "화이트"} 상황 정리") }, text = {
-        Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(result.sentence, style = MaterialTheme.typography.bodyLarge)
-            HorizontalDivider()
-            Text("연락할 제대", color = ArmyristColors.SecondaryText)
-            Text(result.recipient.name.ifBlank { "제대 미등록" }, fontWeight = FontWeight.Bold)
-            Text(result.route, style = MaterialTheme.typography.bodySmall)
-            Text(result.recipient.phone.ifBlank { "전화번호 미등록 · 설정에서 추가하세요" })
-            OutlinedButton(onClick = {
-                (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("핸디캡 상황", result.sentence + "\n" + result.route + "\n" + result.recipient.name + " " + result.recipient.phone))
-                Toast.makeText(context, "정리 내용을 복사했습니다.", Toast.LENGTH_SHORT).show()
-            }) { Text("내용 복사") }
-            Button(enabled = result.recipient.phone.isNotBlank(), onClick = {
-                runCatching { context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${Uri.encode(result.recipient.phone)}"))) }
-                    .onFailure { Toast.makeText(context, "전화 앱을 열 수 없습니다.", Toast.LENGTH_LONG).show() }
-            }) { Text("전화 앱 열기") }
+    if (resultOpen) SituationResultDialog(
+        kind = draft.kind ?: HandicapKind.BLACK,
+        sentence = result.sentence,
+        recipient = result.recipient,
+        route = result.route,
+        onDismiss = { resultOpen = false },
+        onCopy = {
+            (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("핸디캡 상황", result.sentence + "\n" + result.route + "\n" + result.recipient.name + " " + result.recipient.phone))
+            Toast.makeText(context, "정리 내용을 복사했습니다.", Toast.LENGTH_SHORT).show()
+        },
+        onCall = {
+            runCatching { context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${Uri.encode(result.recipient.phone)}"))) }
+                .onFailure { Toast.makeText(context, "전화 앱을 열 수 없습니다.", Toast.LENGTH_LONG).show() }
         }
-    }, confirmButton = { TextButton(onClick = { resultOpen = false }) { Text("돌아가서 수정") } })
+    )
 }
 
 private fun toggled(values: List<String>, text: String) = if (text in values) values - text else values + text
@@ -251,14 +256,56 @@ private fun UnitFields(value: UnitContact, onChange: (UnitContact) -> Unit) {
     OutlinedTextField(value.phone, { onChange(value.copy(phone = it.take(40))) }, label = { Text("전화번호 (선택)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
 }
 
+// A check mark, strong fill and border make selection readable without relying on color alone.
 @Composable
 private fun CompactChip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, dark: Boolean = false) {
-    Surface(onClick = onClick, modifier = modifier.heightIn(min = 32.dp), shape = ArmyristControlShape,
-        color = if (selected && dark) ArmyristColors.Header else if (selected) ArmyristColors.SecondaryControl else ArmyristColors.RaisedSurface,
-        contentColor = if (selected && dark) Color.White else ArmyristColors.PrimaryText,
-        border = BorderStroke(if (selected) 1.5.dp else 1.dp, if (selected) ArmyristColors.PrimaryControl else ArmyristColors.SoftBorder)) {
-        Box(Modifier.padding(horizontal = 9.dp, vertical = 5.dp), contentAlignment = Alignment.Center) {
-            Text(text, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+    Surface(onClick = onClick, modifier = modifier.heightIn(min = 36.dp).semantics { this.selected = selected }, shape = RoundedCornerShape(10.dp),
+        color = if (selected && dark) Color(0xFF202B3D) else if (selected) Color(0xFF245DCF) else Color.White,
+        contentColor = if (selected) Color.White else Color(0xFF26364D),
+        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected && dark) Color(0xFF202B3D) else if (selected) Color(0xFF245DCF) else Color(0xFFCBD5E1))) {
+        Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+            if (selected) Text("✓", Modifier.padding(end = 4.dp), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text(text, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+        }
+    }
+}
+
+@Composable
+internal fun SituationResultDialog(kind: HandicapKind, sentence: String, recipient: UnitContact, route: String, onDismiss: () -> Unit, onCopy: () -> Unit, onCall: () -> Unit) {
+    val accent = Color(0xFF245DCF)
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 24.dp), contentAlignment = Alignment.Center) {
+            Surface(Modifier.widthIn(max = 560.dp).fillMaxWidth().heightIn(max = maxHeight), shape = RoundedCornerShape(24.dp), color = Color.White, contentColor = Color(0xFF17253A)) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Surface(color = if (kind == HandicapKind.BLACK) Color(0xFF202B3D) else Color(0xFFE8EFFD), contentColor = if (kind == HandicapKind.BLACK) Color.White else accent, shape = RoundedCornerShape(8.dp)) {
+                            Text(if (kind == HandicapKind.BLACK) "블랙 ↑" else "화이트 ↓", Modifier.padding(horizontal = 10.dp, vertical = 7.dp), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                        Text("상황 정리", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    }
+                    Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Surface(color = Color(0xFFF1F5FB), shape = RoundedCornerShape(14.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("정리된 문장", fontSize = 12.sp, color = Color(0xFF52647C), fontWeight = FontWeight.Bold)
+                                SelectionContainer { Text(sentence, fontSize = 18.sp, lineHeight = 29.sp, fontWeight = FontWeight.Medium) }
+                            }
+                        }
+                        Surface(color = Color(0xFFEFF5FF), shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, Color(0xFFC7D8FC))) {
+                            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("연락할 제대", fontSize = 12.sp, color = accent, fontWeight = FontWeight.Bold)
+                                Text(recipient.name.ifBlank { "제대 미등록" }, fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.Bold)
+                                Text(route, fontSize = 13.sp, lineHeight = 19.sp, color = Color(0xFF415675))
+                                Text(recipient.phone.ifBlank { "전화번호 미등록 · 설정에서 추가하세요" }, fontSize = if (recipient.phone.isBlank()) 13.sp else 19.sp, fontWeight = FontWeight.SemiBold, color = if (recipient.phone.isBlank()) Color(0xFF52647C) else accent)
+                            }
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = onCopy, modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 6.dp)) { Text("내용 복사", fontWeight = FontWeight.Bold) }
+                        Button(enabled = recipient.phone.isNotBlank(), onClick = onCall, modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 6.dp), colors = ButtonDefaults.buttonColors(containerColor = accent)) { Text("전화 앱 열기", fontWeight = FontWeight.Bold) }
+                    }
+                    TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("돌아가서 수정", fontWeight = FontWeight.SemiBold) }
+                }
+            }
         }
     }
 }
@@ -267,15 +314,19 @@ private fun CompactChip(text: String, selected: Boolean, onClick: () -> Unit, mo
 private fun CompactWords(category: WordCategory, words: List<SituationWord>, selected: List<String>, modifier: Modifier, oneRow: Boolean, onSelect: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     val all = (words.map { it.text } + selected).distinct()
-    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-        Column(Modifier.width(40.dp)) {
-            Text(category.title, style = MaterialTheme.typography.labelMedium)
-            TextButton(onClick = { expanded = true }, contentPadding = PaddingValues(0.dp), modifier = Modifier.height(25.dp)) { Text("전체", fontSize = 10.sp) }
+    Row(modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(12.dp)).border(1.dp, Color(0xFFD3DEEC), RoundedCornerShape(12.dp)).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        Column(Modifier.width(44.dp)) {
+            Text(category.title, fontSize = 13.sp, color = Color(0xFF19324F), fontWeight = FontWeight.Bold)
+            TextButton(onClick = { expanded = true }, contentPadding = PaddingValues(0.dp), modifier = Modifier.height(25.dp)) { Text("전체", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
         }
         if (all.isEmpty()) TextButton(onClick = { expanded = true }) { Text("등록 항목 없음", fontSize = 12.sp) }
         else LazyHorizontalGrid(rows = GridCells.Fixed(if (oneRow) 1 else 2), modifier = Modifier.weight(1f).fillMaxHeight().padding(vertical = 3.dp),
             horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            items(all, key = { it }) { text -> CompactChip(text, text in selected, { onSelect(text) }) }
+            items(all, key = { it }) { text ->
+                Box(Modifier.fillMaxHeight(), contentAlignment = Alignment.CenterStart) {
+                    CompactChip(text, text in selected, { onSelect(text) }, Modifier.widthIn(min = 76.dp, max = 168.dp).heightIn(max = 44.dp))
+                }
+            }
         }
     }
     if (expanded) AlertDialog(onDismissRequest = { expanded = false }, title = { Text("${category.title} · 여러 개 선택") }, text = {

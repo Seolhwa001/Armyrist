@@ -55,9 +55,9 @@ android {
         debug {
             // The delivered workspace APK is used for performance checks, not debugger attachment.
             isDebuggable = false
-            applicationIdSuffix = ".preview075"
-            versionNameSuffix = "-preview"
-            manifestPlaceholders["appLabel"] = "낄롬리스 미리보기"
+            applicationIdSuffix = ".preview075ui"
+            versionNameSuffix = "-preview-ui"
+            manifestPlaceholders["appLabel"] = "낄롬리스 화면검수"
         }
         release {
             isMinifyEnabled = false

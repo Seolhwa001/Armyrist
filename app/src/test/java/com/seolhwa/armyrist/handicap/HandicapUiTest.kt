@@ -64,4 +64,45 @@ class HandicapUiTest {
         listOf("발견", "위병소", "화재", "불침번", "화이트 ↓ 하급", "현재시간", "확인 · 문장 정리").forEach { compose.onNodeWithText(it).performClick() }
         compose.onNodeWithText("1차 하급 미등록 → 상황부여 제대").assertIsDisplayed()
     }
+    @Test fun resultDialogShowsReadableReportAndPinnedActions() {
+        compose.setContent { ArmyristTheme {
+            SituationResultDialog(HandicapKind.BLACK, "2026.10.21 09:00, 위병소에서 불침번이 화재 상황발생. 수행사항: 발견, 보고.", UnitContact("1차 상급제대", "010-1234-5678"), "블랙 ↑ 1차 상급제대", {}, {}, {})
+        } }
+        listOf("상황 정리", "정리된 문장", "연락할 제대", "1차 상급제대", "010-1234-5678", "내용 복사", "전화 앱 열기", "돌아가서 수정").forEach { compose.onNodeWithText(it).assertIsDisplayed() }
+        compose.runOnIdle {
+            val view = android.view.inspector.WindowInspector.getGlobalWindowViews().last()
+            val image = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+            view.draw(Canvas(image))
+            val output = File("build/preview-screens/handicap-result-360x640.png").also { it.parentFile?.mkdirs() }
+            output.outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+    }
+    @Test @Config(qualifiers = "w320dp-h480dp") fun longReportKeepsActionsAvailableAndCanScrollToRecipient() {
+        var copied = false
+        compose.setContent { ArmyristTheme {
+            SituationResultDialog(HandicapKind.WHITE, "상황 발생에 대한 상세 설명입니다. ".repeat(40), UnitContact("상황부여 제대"), "1차 하급 미등록 → 상황부여 제대", {}, { copied = true }, {})
+        } }
+        compose.onNodeWithText("내용 복사").assertIsDisplayed().performClick()
+        compose.runOnIdle { org.junit.Assert.assertTrue(copied) }
+        compose.onNodeWithText("전화 앱 열기").assertIsDisplayed().assertIsNotEnabled()
+        compose.onNodeWithText("돌아가서 수정").assertIsDisplayed()
+        compose.onNodeWithText("상황부여 제대").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test @Config(qualifiers = "w412dp-h820dp") fun tallPhoneDoesNotStretchHowButtons() {
+        compose.setContent { ArmyristTheme { HandicapRoot {} } }
+        val how = compose.onNodeWithText("발견").fetchSemanticsNode().boundsInRoot.height
+        val time = compose.onNodeWithText("현재시간").fetchSemanticsNode().boundsInRoot.height
+        org.junit.Assert.assertTrue("How controls must keep a compact height on tall phones", how <= time * 1.3f)
+        listOf("누가", "언제", "어디서", "무엇을", "어떻게", "확인 · 문장 정리").forEach { compose.onNodeWithText(it).assertIsDisplayed() }
+        compose.runOnIdle {
+            val activity = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED).single()
+            val view = activity.window.decorView
+            val image = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+            view.draw(Canvas(image))
+            val output = File("build/preview-screens/handicap-412x820.png").also { it.parentFile?.mkdirs() }
+            output.outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+    }
+
 }
