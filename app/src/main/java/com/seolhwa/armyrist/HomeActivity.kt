@@ -145,6 +145,11 @@ private fun HomeScreen(
         ),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                ArmyristHelpButton(ArmyristHelpTopic.HOME)
+            }
+        }
         if (bannerConfig.mode != HomeBannerMode.HIDDEN) {
             item { HomeBannerCard(bannerConfig, onTimePlan, onUserProfile) }
         }

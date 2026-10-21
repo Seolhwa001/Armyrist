@@ -71,7 +71,10 @@ fun ArmyristTopBar(
                 }
             }
         },
-        actions = actions,
+        actions = {
+            actions()
+            ArmyristHelpButton(ArmyristHelpTopic.forScreen(title, subtitle))
+        },
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = ArmyristColors.Header,
             titleContentColor = ArmyristColors.OnDark,

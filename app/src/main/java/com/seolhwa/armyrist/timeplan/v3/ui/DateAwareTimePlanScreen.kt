@@ -98,7 +98,8 @@ fun DateAwareTimePlanApp(
     var trashOpen by rememberSaveable { mutableStateOf(false) }
     var trashMessage by remember { mutableStateOf<String?>(null) }
     var revision by remember { mutableIntStateOf(0) }
-    @Suppress("UNUSED_VARIABLE") val observed = revision
+    val notificationRevision by repository.notificationCompletionRevision.collectAsState()
+    @Suppress("UNUSED_VARIABLE") val observed = revision to notificationRevision
 
     if (trashOpen) {
         // System Back and the visible "뒤로" button must have the same contract:

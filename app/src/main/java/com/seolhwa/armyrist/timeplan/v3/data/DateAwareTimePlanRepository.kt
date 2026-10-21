@@ -16,6 +16,9 @@ import java.time.LocalTime
 import java.util.UUID
 
 class DateAwareTimePlanRepository(context: Context) {
+    private val notificationChanges = kotlinx.coroutines.flow.MutableStateFlow(0L)
+    val notificationCompletionRevision: kotlinx.coroutines.flow.StateFlow<Long> = notificationChanges
+
     private val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private val snapshots = GuardedSnapshotStore(
@@ -109,6 +112,32 @@ class DateAwareTimePlanRepository(context: Context) {
         if (!persist(next)) return false
         plans = next
         TimePlanActionNotificationManager.reconcile(appContext, this)
+        return true
+    }
+
+    /** A notification completes one existing action, never toggles it or rewrites a stale plan. */
+    @Synchronized
+    fun completeActionFromNotification(planId: String, actionId: String): Boolean {
+        reloadFromPersistence()
+        if (!storageReadable) return false
+        val plan = getPlan(planId) ?: return false
+        val action = plan.actions.firstOrNull { it.id == actionId } ?: return false
+        if (action.completionState != ActionCompletionState.COMPLETE) {
+            val now = System.currentTimeMillis().toString()
+            val changed = plan.copy(
+                actions = plan.actions.map { item ->
+                    if (item.id == actionId) item.copy(completionState = ActionCompletionState.COMPLETE, updatedAt = now)
+                    else item
+                },
+                updatedAt = now
+            )
+            val next = plans.map { if (it.id == planId) changed else it }
+            if (!persist(next)) return false
+            plans = next
+        }
+        // Open execution screens redraw their completion circles without navigation.
+        notificationChanges.value += 1
+        TimePlanActionNotificationManager.cancel(appContext, planId, actionId)
         return true
     }
 

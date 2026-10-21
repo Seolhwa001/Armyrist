@@ -85,6 +85,7 @@ internal fun HandicapRoot(onClose: () -> Unit) {
                     TextButton(onClick = onClose) { Text("뒤로") }
                     Text("핸디캡 상황", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     TextButton(onClick = { settings = true }) { Text("설정") }
+                    ArmyristHelpButton(ArmyristHelpTopic.HANDICAP)
                 }
             }
         },
@@ -212,7 +213,7 @@ private fun HandicapSettings(initial: HandicapConfig, onSave: (HandicapConfig) -
     var editingId by remember { mutableStateOf<String?>(null) }
     var wordText by remember { mutableStateOf("") }
     var deleteWord by remember { mutableStateOf<Pair<WordCategory, SituationWord>?>(null) }
-    Scaffold(topBar = { TopAppBar(title = { Text("핸디캡 설정") }, navigationIcon = { TextButton(onClick = { back() }) { Text("뒤로") } }, actions = { TextButton(onClick = { onSave(config) }) { Text("저장") } }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text("핸디캡 설정") }, navigationIcon = { TextButton(onClick = { back() }) { Text("뒤로") } }, actions = { TextButton(onClick = { onSave(config) }) { Text("저장") }; ArmyristHelpButton(ArmyristHelpTopic.HANDICAP) }) }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { Text("제대명과 전화번호를 입력하세요. 연락 안내에는 1차 제대를 사용하며 2~4차 제대도 상황부여 제대로 선택할 수 있습니다.", color = ArmyristColors.SecondaryText) }
             item { Section("기본 상황부여 제대") { UnitFields(config.issuer) { change(config.copy(issuer = it)) } } }

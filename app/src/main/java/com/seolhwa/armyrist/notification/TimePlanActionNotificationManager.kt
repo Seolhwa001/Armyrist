@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.net.Uri
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import com.seolhwa.armyrist.TimePlanExecutionActivity
@@ -93,6 +94,21 @@ object TimePlanActionNotificationManager {
             requestCode(planId, actionId) xor 0x40000000,
             Intent(context, TimePlanMusicAlarmService::class.java).apply {
                 action = TimePlanMusicAlarmService.ACTION_STOP
+                putExtra(EXTRA_PLAN_ID, planId)
+                putExtra(EXTRA_ACTION_ID, actionId)
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag()
+        )
+
+    fun completeActionPendingIntent(context: Context, planId: String, actionId: String): PendingIntent =
+        PendingIntent.getBroadcast(
+            context,
+            0,
+            Intent(context, TimePlanActionCompleteReceiver::class.java).apply {
+                action = TimePlanActionCompleteReceiver.ACTION_COMPLETE
+                // URI identity prevents two IDs with equal hash codes sharing an action.
+                data = Uri.Builder().scheme("killomris").authority("timeplan-complete")
+                    .appendPath(planId).appendPath(actionId).build()
                 putExtra(EXTRA_PLAN_ID, planId)
                 putExtra(EXTRA_ACTION_ID, actionId)
             },

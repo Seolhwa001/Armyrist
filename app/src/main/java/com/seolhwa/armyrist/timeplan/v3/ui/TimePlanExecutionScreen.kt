@@ -32,6 +32,9 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -62,7 +65,8 @@ fun TimePlanExecutionApp(
     onBack: () -> Unit
 ) {
     var revision by remember { mutableIntStateOf(0) }
-    @Suppress("UNUSED_VARIABLE") val observed = revision
+    val notificationRevision by repository.notificationCompletionRevision.collectAsState()
+    @Suppress("UNUSED_VARIABLE") val observed = revision to notificationRevision
     var mode by rememberSaveable(planId) {
         mutableStateOf(
             if (initialMode == TimePlanExecutionActivity.MODE_EXECUTE) {
@@ -452,6 +456,7 @@ private fun TimePlanPrepareScreen(
                 val candidate = plan.copy(
                     actions = plan.actions.map {
                         if (it.id == action.id) changed.copy(
+                            completionState = it.completionState,
                             id = action.id,
                             parentPointId = action.parentPointId,
                             order = action.order,
@@ -935,6 +940,7 @@ private fun TimePlanExecuteScreen(
                                 )
                             } else {
                                 CompletionRailControl(
+                                    content = action.content,
                                     completed = completed
                                 )
                             }
@@ -988,6 +994,7 @@ private fun TimePlanExecuteScreen(
                 val candidate = plan.copy(
                     actions = plan.actions.map {
                         if (it.id == action.id) changed.copy(
+                            completionState = it.completionState,
                             id = action.id,
                             parentPointId = action.parentPointId,
                             order = action.order,
@@ -1049,12 +1056,17 @@ private fun TimePlanExecuteScreen(
 
 @Composable
 private fun CompletionRailControl(
+    content: String,
     completed: Boolean
 ) {
     Box(
         modifier = Modifier
             .width(44.dp)
-            .heightIn(min = 48.dp),
+            .heightIn(min = 48.dp)
+            .semantics {
+                contentDescription = "$content 완료 상태"
+                stateDescription = if (completed) "완료" else "미완료"
+            },
         contentAlignment = Alignment.Center
     ) {
         Surface(

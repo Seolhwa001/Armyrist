@@ -66,6 +66,11 @@ class TimePlanActionAlarmReceiver : BroadcastReceiver() {
                     action.id
                 )
             )
+            .addAction(
+                android.R.drawable.checkbox_on_background,
+                "할 일 완료",
+                TimePlanActionNotificationManager.completeActionPendingIntent(context, plan.id, action.id)
+            )
             .build()
 
         context.getSystemService(NotificationManager::class.java)

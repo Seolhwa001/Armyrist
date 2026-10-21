@@ -63,41 +63,7 @@ class TimePlanMusicAlarmService : Service() {
                 activePlanId = planId
                 activeActionId = actionId
 
-                val notification = NotificationCompat.Builder(
-                    this,
-                    TimePlanActionNotificationManager.musicChannelId()
-                )
-                    .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-                    .setContentTitle(action.content)
-                    .setContentText(
-                        "${plan.title} · ${
-                            action.scheduledDateTime.format(
-                                DateTimeFormatter.ofPattern("HH:mm")
-                            )
-                        } 예정"
-                    )
-                    .setPriority(NotificationCompat.PRIORITY_HIGH)
-                    .setCategory(NotificationCompat.CATEGORY_ALARM)
-                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                    .setOngoing(true)
-                    .setAutoCancel(false)
-                    .setContentIntent(
-                        TimePlanActionNotificationManager.openActionPendingIntent(
-                            this,
-                            plan.id,
-                            action.id
-                        )
-                    )
-                    .addAction(
-                        android.R.drawable.ic_media_pause,
-                        "알림 중지",
-                        TimePlanActionNotificationManager.stopMusicPendingIntent(
-                            this,
-                            plan.id,
-                            action.id
-                        )
-                    )
-                    .build()
+                val notification = buildNotification(this, plan, action)
 
                 startForeground(
                     TimePlanActionNotificationManager.notificationId(plan.id, action.id),
@@ -157,6 +123,51 @@ class TimePlanMusicAlarmService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
+        internal fun buildNotification(
+            context: android.content.Context,
+            plan: com.seolhwa.armyrist.timeplan.v3.domain.DateAwareTimePlan,
+            action: com.seolhwa.armyrist.timeplan.v3.domain.TimePlanActionItem
+        ): Notification = NotificationCompat.Builder(
+                    context,
+                    TimePlanActionNotificationManager.musicChannelId()
+                )
+                    .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+                    .setContentTitle(action.content)
+                    .setContentText(
+                        "${plan.title} · ${
+                            action.scheduledDateTime.format(
+                                DateTimeFormatter.ofPattern("HH:mm")
+                            )
+                        } 예정"
+                    )
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setCategory(NotificationCompat.CATEGORY_ALARM)
+                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                    .setOngoing(true)
+                    .setAutoCancel(false)
+                    .setContentIntent(
+                        TimePlanActionNotificationManager.openActionPendingIntent(
+                            context,
+                            plan.id,
+                            action.id
+                        )
+                    )
+                    .addAction(
+                        android.R.drawable.checkbox_on_background,
+                        "할 일 완료",
+                        TimePlanActionNotificationManager.completeActionPendingIntent(context, plan.id, action.id)
+                    )
+                    .addAction(
+                        android.R.drawable.ic_media_pause,
+                        "알림 중지",
+                        TimePlanActionNotificationManager.stopMusicPendingIntent(
+                            context,
+                            plan.id,
+                            action.id
+                        )
+                    )
+                    .build()
+
         @Volatile private var runningService: TimePlanMusicAlarmService? = null
 
         internal fun stopIfActive(planId: String, actionId: String) {
