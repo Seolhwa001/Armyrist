@@ -37,9 +37,10 @@ fun ArmyristTopBar(
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    maxLines = 1
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
                 if (!subtitle.isNullOrBlank()) {
                     Spacer(Modifier.height(1.dp))
@@ -47,14 +48,15 @@ fun ArmyristTopBar(
                         text = subtitle,
                         style = MaterialTheme.typography.labelMedium,
                         color = ArmyristColors.OnDark.copy(alpha = 0.78f),
-                        maxLines = 1
+                        maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                 }
             }
         },
         navigationIcon = {
             Row(
-                modifier = Modifier.padding(start = 8.dp, end = 14.dp),
+                modifier = Modifier.padding(start = 8.dp, end = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 HeaderAction(
@@ -92,7 +94,7 @@ private fun HeaderAction(
 ) {
     if (icon == ArmyristTopBarLeadingIcon.HOME || icon == ArmyristTopBarLeadingIcon.BACK) {
         Surface(
-            modifier = Modifier.size(54.dp),
+            modifier = Modifier.size(48.dp),
             shape = RoundedCornerShape(12.dp),
             color = ArmyristColors.HeaderActionSurface,
             contentColor = ArmyristColors.OnDark,
@@ -106,7 +108,7 @@ private fun HeaderAction(
                     imageVector = if (icon == ArmyristTopBarLeadingIcon.HOME)
                         Icons.Outlined.Home else Icons.Outlined.ArrowBack,
                     contentDescription = if (icon == ArmyristTopBarLeadingIcon.HOME) "홈" else "뒤로",
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(25.dp)
                 )
             }
         }
@@ -122,7 +124,7 @@ private fun HeaderTextAction(
 ) {
     OutlinedButton(
         onClick = onClick,
-        modifier = Modifier.height(54.dp).widthIn(min = 66.dp),
+        modifier = Modifier.height(48.dp).widthIn(min = 58.dp),
         shape = RoundedCornerShape(12.dp),
         border = BorderStroke(1.dp, ArmyristColors.HeaderActionBorder),
         colors = ButtonDefaults.outlinedButtonColors(

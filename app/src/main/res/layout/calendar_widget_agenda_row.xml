@@ -1,0 +1,5 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/widget_entry_root" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="54dp" android:padding="8dp" android:orientation="vertical" android:background="@drawable/calendar_widget_entry_background">
+    <TextView android:id="@+id/widget_entry_meta" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="11sp" android:textStyle="bold" android:textColor="#2E55CC" android:maxLines="1" android:ellipsize="end" />
+    <TextView android:id="@+id/widget_entry_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="14sp" android:textColor="#142038" android:maxLines="2" android:ellipsize="end" />
+    <TextView android:id="@+id/widget_entry_parent" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="11sp" android:textColor="#47566D" android:maxLines="1" android:ellipsize="end" />
+</LinearLayout>

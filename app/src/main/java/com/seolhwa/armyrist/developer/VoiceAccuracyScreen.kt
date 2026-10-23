@@ -25,8 +25,8 @@ import java.time.format.DateTimeFormatter
 
 @Composable
 internal fun VoiceAccuracyScreen(onBack:()->Unit,
-    speechInput:@Composable (String,(String)->Unit,(VoiceUiState)->Unit,(String)->Unit)->Unit={prompt,result,state,error->
-        OfflineVoiceButton(modifier=Modifier.fillMaxWidth(),onTranscript=result,onStateChanged=state,onMessage=error,readingPrompt=prompt)
+    speechInput:@Composable (ProbeTool,String,(String)->Unit,(VoiceUiState)->Unit,(String)->Unit,(String)->Unit)->Unit={probe,prompt,result,state,error,notice->
+        OfflineVoiceButton(modifier=Modifier.fillMaxWidth(),toolContext=VoiceToolContext.valueOf(probe.name),onTranscript=result,onStateChanged=state,onMessage=error,readingPrompt=prompt,onNotice=notice)
     }
 ){
     val context=LocalContext.current;val repo=remember{VoiceAccuracyRepository(context)}
@@ -66,9 +66,9 @@ internal fun VoiceAccuracyScreen(onBack:()->Unit,
                 Text("읽을 제시문",style=MaterialTheme.typography.labelMedium,color=ArmyristColors.PrimaryControl)
                 Text(promptText,style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)
             }}
-            key(promptId){speechInput(promptText,{text->raw=text;source="MICROPHONE";manual=false;error=null;saved=false;elapsed=started.takeIf{it>0}?.let{SystemClock.elapsedRealtime()-it};started=0},{state->
+            key(promptId){speechInput(tool,promptText,{text->raw=text;source="MICROPHONE";manual=false;error=null;saved=false;elapsed=started.takeIf{it>0}?.let{SystemClock.elapsedRealtime()-it};started=0},{state->
                 if(state==VoiceUiState.LISTENING && started==0L){trialId=java.util.UUID.randomUUID().toString();started=SystemClock.elapsedRealtime();raw="";error=null;saved=false;source="MICROPHONE";elapsed=null}
-            },{value->trialId=java.util.UUID.randomUUID().toString();error=value;raw="";source="MICROPHONE";saved=false;started=0;elapsed=null})}
+            },{value->trialId=java.util.UUID.randomUUID().toString();error=value;raw="";source="MICROPHONE";saved=false;started=0;elapsed=null},{value->note=listOf(note,value).filter{it.isNotBlank()}.joinToString("\n");saved=false})}
             if(raw.isNotEmpty()){Text("실제 인식 원문 · ${if(source=="MANUAL")"수동 검수"else"마이크"}",fontWeight=FontWeight.Bold);Text(raw)}
             error?.let{Text("실패 기록: $it",color=ArmyristColors.Danger)}
             TextButton(onClick={manual=!manual}){Text(if(manual)"직접 입력 닫기"else"결과 직접 입력 (검수용)")}
@@ -78,7 +78,8 @@ internal fun VoiceAccuracyScreen(onBack:()->Unit,
             }
             OutlinedTextField(truth,{truth=it.take(4000);saved=false},label={Text("실제로 읽은 정답")},supportingText={Text("다르게 읽었다면 그 내용으로 고쳐주세요. 인식 원문은 그대로 보관됩니다.")},modifier=Modifier.fillMaxWidth())
             if(raw.isNotBlank()&&error==null)VoiceAccuracy.cer(truth,raw)?.let{cer->Text("${if(source=="MANUAL")"수동 비교 · "else""}문자 오류율 ${"%.1f".format(java.util.Locale.KOREAN,cer*100)}%",fontWeight=FontWeight.Bold)}
-            Text("공백·문장부호는 제외합니다. ‘스물네’와 ‘24’ 같은 표기 차이는 오류율에 포함되므로 항목 해석 결과도 함께 확인하세요.",style=MaterialTheme.typography.bodySmall)
+            if(raw.isNotBlank()&&error==null)VoiceAccuracy.numberAwareCer(truth,raw)?.let{cer->Text("숫자 표기 통일 후 오류율 ${"%.1f".format(java.util.Locale.KOREAN,cer*100)}%",style=MaterialTheme.typography.bodySmall)}
+            Text("문자 오류율은 원문 기준입니다. 추가 지표는 ‘스물네 병/24병’ 같은 숫자·단위 표기를 통일하며 의미 정확도를 뜻하지 않습니다.",style=MaterialTheme.typography.bodySmall)
             if(raw.isNotBlank()){
                 Text("현재 버전의 인식 문장 해석",fontWeight=FontWeight.Bold)
                 Text(VoiceAccuracy.structured(tool,raw,prompt.referenceDate).toString(2),style=MaterialTheme.typography.bodySmall)
@@ -96,6 +97,7 @@ internal fun VoiceAccuracyScreen(onBack:()->Unit,
             loaded.getOrNull()?.let{items->
                 val summary=VoiceAccuracy.summary(items)
                 Text("누적 ${items.size}건 · 마이크 ${summary.getInt("microphoneResults")}건 · 실패 ${summary.getInt("failedAttempts")}건 · 수동 ${summary.getInt("manualTrials")}건",fontWeight=FontWeight.Bold)
+                if(!summary.isNull("numberAwareCharacterErrorRate"))Text("누적 숫자 표기 통일 후 오류율 ${"%.1f".format(java.util.Locale.KOREAN,summary.getDouble("numberAwareCharacterErrorRate")*100)}%",style=MaterialTheme.typography.bodySmall)
                 if(!summary.isNull("characterErrorRate"))Text("누적 문자 오류율 ${"%.1f".format(java.util.Locale.KOREAN,summary.getDouble("characterErrorRate")*100)}% · 일치 ${summary.getInt("normalizedExactMatches")}/${summary.getInt("microphoneResults")}",style=MaterialTheme.typography.bodySmall)
                 Button(enabled=items.isNotEmpty(),onClick={export.launch("Killomris-voice-test-${LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))}.json")},modifier=Modifier.fillMaxWidth()){Text("테스트 자료 내보내기")}
                 items.takeLast(3).reversed().forEach{item->Text("${ProbeTool.valueOf(item.getString("tool")).label} · ${item.getString("outcome")} · ${item.getString("rawTranscript").ifBlank{item.optString("error")}}",style=MaterialTheme.typography.bodySmall)}

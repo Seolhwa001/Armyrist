@@ -1,0 +1,4 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/widget_day_container" android:layout_width="0dp" android:layout_weight="1" android:layout_height="28dp" android:gravity="center" android:orientation="vertical">
+    <TextView android:id="@+id/widget_day_number" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:textColor="#142038" android:textSize="13sp" android:textStyle="bold" android:includeFontPadding="false" android:maxLines="1" />
+    <TextView android:id="@+id/widget_day_marks" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:textColor="#2E55CC" android:textSize="8sp" android:includeFontPadding="false" android:maxLines="1" android:text=" " />
+</LinearLayout>

@@ -37,13 +37,13 @@ class VoiceStructuringTest {
         val d=KoreanVoiceStructurer.timePlan("14일 23시부터 1시까지 야간작업",LocalDate.of(2026,8,14)).single()
         assertEquals(LocalDateTime.of(2026,8,14,23,0),d.dateTime)
         assertEquals(LocalDateTime.of(2026,8,15,1,0),d.rangeEnd)
-        assertEquals(VoiceDraftState.VALID,d.state)
+        assertEquals(VoiceDraftState.REVIEW_REQUIRED,d.state)
     }
 
-    @Test fun ambiguousTimeWithoutDateIsUnresolved() {
+    @Test fun missingDateUsesReferenceWithReview() {
         val d=KoreanVoiceStructurer.timePlan("새벽 1시 작업",LocalDate.of(2026,8,14))
-        assertEquals(VoiceDraftState.INVALID,d.single().state)
-        assertNull(d.single().dateTime)
+        assertEquals(VoiceDraftState.REVIEW_REQUIRED,d.single().state)
+        assertEquals(LocalDateTime.of(2026,8,14,1,0),d.single().dateTime)
     }
 
     @Test

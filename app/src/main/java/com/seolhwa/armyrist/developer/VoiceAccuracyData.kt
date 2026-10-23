@@ -37,12 +37,13 @@ object VoiceAccuracy {
         return row.last()
     }
     fun cer(truth:String,raw:String):Double?=normalized(truth).takeIf{it.isNotEmpty()}?.let{distance(it,normalized(raw)).toDouble()/it.length}
+    fun numberAwareCer(truth:String,raw:String)=cer(KoreanVoiceStructurer.numberAwareComparison(truth),KoreanVoiceStructurer.numberAwareComparison(raw))
     /** Parser snapshots are diagnostic outputs of this version, not semantic ground truth. */
     fun structured(tool:ProbeTool,text:String,date:LocalDate):JSONArray=JSONArray().apply{
         when(tool){
-            ProbeTool.COUNTING->KoreanVoiceStructurer.counting(text).forEach{d->put(JSONObject().put("name",d.name).put("quantity",d.quantity?:JSONObject.NULL).put("unit",d.unit?:JSONObject.NULL).put("state",d.state.name))}
-            ProbeTool.CHECKLIST->KoreanVoiceStructurer.checklist(text).forEach{d->put(JSONObject().put("name",d.name).put("scheduledTimeMinutes",d.scheduledTimeMinutes?:JSONObject.NULL).put("state",d.state.name))}
-            ProbeTool.TIME_PLAN->KoreanVoiceStructurer.timePlan(text,date).forEach{d->put(JSONObject().put("name",d.name).put("dateTime",d.dateTime?.toString()?:JSONObject.NULL).put("rangeEnd",d.rangeEnd?.toString()?:JSONObject.NULL).put("state",d.state.name))}
+            ProbeTool.COUNTING->KoreanVoiceStructurer.counting(text).forEach{d->put(JSONObject().put("name",d.name).put("quantity",d.quantity?:JSONObject.NULL).put("unit",d.unit?:JSONObject.NULL).put("state",d.state.name).put("reviewReason",d.reviewReason))}
+            ProbeTool.CHECKLIST->KoreanVoiceStructurer.checklist(text).forEach{d->put(JSONObject().put("name",d.name).put("scheduledTimeMinutes",d.scheduledTimeMinutes?:JSONObject.NULL).put("state",d.state.name).put("reviewReason",d.reviewReason))}
+            ProbeTool.TIME_PLAN->KoreanVoiceStructurer.timePlan(text,date).forEach{d->put(JSONObject().put("name",d.name).put("dateTime",d.dateTime?.toString()?:JSONObject.NULL).put("rangeEnd",d.rangeEnd?.toString()?:JSONObject.NULL).put("state",d.state.name).put("reviewReason",d.reviewReason))}
         }
     }
     fun trial(tool:ProbeTool,kind:ProbeKind,prompt:VoicePrompt,truth:String,raw:String,source:String,error:String?,expectedMeaning:String,note:String,elapsedMs:Long?,environment:JSONObject):JSONObject{
@@ -52,6 +53,7 @@ object VoiceAccuracy {
             .put("tool",tool.name).put("kind",kind.name).put("promptId",prompt.id).put("prompt",prompt.text).put("referenceDate",prompt.referenceDate.toString())
             .put("spokenTruth",truth.trim()).put("rawTranscript",raw).put("inputSource",source).put("outcome",if(error==null)"RESULT"else"ERROR").put("error",error?:JSONObject.NULL)
             .put("characterErrorRate",if(eligible)cer(truth,raw)?:JSONObject.NULL else JSONObject.NULL)
+            .put("numberAwareCharacterErrorRate",if(eligible)numberAwareCer(truth,raw)?:JSONObject.NULL else JSONObject.NULL)
             .put("normalizedExactMatch",if(eligible)normalized(truth)==normalized(raw)else JSONObject.NULL)
             .put("elapsedMs",elapsedMs?:JSONObject.NULL).put("environment",environment)
             .put("recognizedParserOutput",structured(tool,raw,prompt.referenceDate)).put("truthParserOutput",structured(tool,truth,prompt.referenceDate))
@@ -61,7 +63,9 @@ object VoiceAccuracy {
         val valid=items.filter{it.optString("inputSource")=="MICROPHONE"&&it.optString("outcome")=="RESULT"}
         val chars=valid.sumOf{normalized(it.getString("spokenTruth")).length}
         val errors=valid.sumOf{distance(normalized(it.getString("spokenTruth")),normalized(it.getString("rawTranscript")))}
-        return JSONObject().put("trials",items.size).put("microphoneResults",valid.size).put("failedAttempts",items.count{it.optString("outcome")=="ERROR"})
+        val numberChars=valid.sumOf{normalized(KoreanVoiceStructurer.numberAwareComparison(it.getString("spokenTruth"))).length}
+        val numberErrors=valid.sumOf{distance(normalized(KoreanVoiceStructurer.numberAwareComparison(it.getString("spokenTruth"))),normalized(KoreanVoiceStructurer.numberAwareComparison(it.getString("rawTranscript"))))}
+        return JSONObject().put("numberAwareCharacterErrorRate",if(numberChars==0)JSONObject.NULL else numberErrors.toDouble()/numberChars).put("trials",items.size).put("microphoneResults",valid.size).put("failedAttempts",items.count{it.optString("outcome")=="ERROR"})
             .put("manualTrials",items.count{it.optString("inputSource")=="MANUAL"}).put("normalizedExactMatches",valid.count{it.optBoolean("normalizedExactMatch")})
             .put("characterErrorRate",if(chars==0)JSONObject.NULL else errors.toDouble()/chars)
     }
@@ -84,7 +88,7 @@ class VoiceAccuracyRepository(context:Context){
     }
     fun export(items:List<JSONObject> = load()):String=JSONObject().put("schemaVersion",1).put("datasetType","killomris_voice_accuracy")
         .put("exportedAt",java.time.Instant.now().toString()).put("language","ko-KR").put("audioIncluded",false)
-        .put("metricsDefinition","CER: Unicode letters/digits only; whitespace and punctuation ignored; spoken-number spelling differences remain. Manual input and failed attempts excluded from recognition metrics. Parser snapshots are diagnostic, not human-verified expected structures.")
+        .put("metricsDefinition","CER: Unicode letters/digits only; whitespace and punctuation ignored; spoken-number spelling differences remain. Manual input and failed attempts excluded from recognition metrics. Number-aware CER additionally normalizes known number+unit expressions; it is not semantic accuracy. Parser snapshots are diagnostic, not human-verified expected structures.")
         .put("summary",VoiceAccuracy.summary(items)).put("byTool",JSONObject().apply{ProbeTool.entries.forEach{t->put(t.name,VoiceAccuracy.summary(items.filter{it.optString("tool")==t.name}))}})
         .put("trials",JSONArray(items)).toString(2)
 }

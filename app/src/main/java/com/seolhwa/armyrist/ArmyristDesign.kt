@@ -10,39 +10,40 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 object ArmyristColors {
     // Light work surfaces
-    val AppBackground = Color(0xFFF5F7FB)
-    val WorkSurface = Color(0xFFF0F4FA)
+    val AppBackground = Color(0xFFF3F5F9)
+    val WorkSurface = Color(0xFFFFFFFF)
     val RaisedSurface = Color(0xFFFFFFFF)
     val InputSurface = Color(0xFFFFFFFF)
 
     // Calm blue control surfaces
-    val Header = Color(0xFF172842)
-    val HeaderActionSurface = Color(0xFF243D60)
-    val HeaderActionBorder = Color(0xFF7189AC)
-    val HeaderRaised = Color(0xFF2D4D76)
-    val PrimaryControl = Color(0xFF4263D8)
-    val SecondaryControl = Color(0xFFE8EEFF)
+    val Header = Color(0xFF18243A)
+    val HeaderActionSurface = Color(0xFF253650)
+    val HeaderActionBorder = Color(0xFF61738E)
+    val HeaderRaised = Color(0xFF2D4261)
+    val PrimaryControl = Color(0xFF2E55CC)
+    val SecondaryControl = Color(0xFFEAF0FF)
 
     // Text
-    val PrimaryText = Color(0xFF17233B)
-    val SecondaryText = Color(0xFF59677E)
-    val MutedText = Color(0xFF7F8BA0)
+    val PrimaryText = Color(0xFF142038)
+    val SecondaryText = Color(0xFF47566D)
+    val MutedText = Color(0xFF5D6B82)
     val OnDark = Color(0xFFFFFFFF)
 
     // Structure
-    val Border = Color(0xFFA7B5CA)
-    val Divider = Color(0xFFD8E0ED)
-    val Accent = Color(0xFF5474D9)
-    val Danger = Color(0xFFC44857)
-    val DangerMuted = Color(0xFFB9636E)
-    val SoftBorder = Color(0xFFE0E6F0)
+    val Border = Color(0xFFBCC8D8)
+    val Divider = Color(0xFFDFE5EF)
+    val Accent = Color(0xFF3157C8)
+    val Danger = Color(0xFFB52C43)
+    val DangerMuted = Color(0xFFA33B4C)
+    val SoftBorder = Color(0xFFDCE3ED)
     val LiveGreen = Color(0xFF16845D)
     val LiveSurface = Color(0xFFE6F6EE)
     val LiveBorder = Color(0xFF83CDA9)
-    val InfoSurface = Color(0xFFF0F4FA)
+    val InfoSurface = Color(0xFFFFFFFF)
 }
 
 private val ArmyristLightScheme = lightColorScheme(
@@ -51,7 +52,12 @@ private val ArmyristLightScheme = lightColorScheme(
     primaryContainer = ArmyristColors.SecondaryControl,
     onPrimaryContainer = ArmyristColors.PrimaryText,
     surfaceContainerHigh = ArmyristColors.RaisedSurface,
-    surfaceContainerHighest = ArmyristColors.SecondaryControl,
+    surfaceContainerHighest = Color(0xFFEBEFF5),
+    surfaceContainer = Color(0xFFF1F4F8),
+    surfaceContainerLow = ArmyristColors.RaisedSurface,
+    surfaceContainerLowest = ArmyristColors.RaisedSurface,
+    surfaceTint = Color.Transparent,
+    outlineVariant = ArmyristColors.Divider,
     secondary = ArmyristColors.SecondaryControl,
     onSecondary = ArmyristColors.PrimaryText,
     secondaryContainer = ArmyristColors.SecondaryControl,
@@ -70,6 +76,16 @@ private val ArmyristLightScheme = lightColorScheme(
 fun ArmyristTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = ArmyristLightScheme,
+        typography = Typography(
+            titleLarge=androidx.compose.ui.text.TextStyle(fontSize=22.sp,lineHeight=28.sp,fontWeight=FontWeight.Bold),
+            titleMedium=androidx.compose.ui.text.TextStyle(fontSize=17.sp,lineHeight=24.sp,fontWeight=FontWeight.SemiBold),
+            bodyLarge=androidx.compose.ui.text.TextStyle(fontSize=16.sp,lineHeight=24.sp),
+            bodyMedium=androidx.compose.ui.text.TextStyle(fontSize=14.sp,lineHeight=21.sp),
+            bodySmall=androidx.compose.ui.text.TextStyle(fontSize=13.sp,lineHeight=18.sp),
+            labelLarge=androidx.compose.ui.text.TextStyle(fontSize=14.sp,lineHeight=20.sp,fontWeight=FontWeight.SemiBold),
+            labelMedium=androidx.compose.ui.text.TextStyle(fontSize=12.sp,lineHeight=17.sp,fontWeight=FontWeight.Medium),
+            labelSmall=androidx.compose.ui.text.TextStyle(fontSize=11.sp,lineHeight=16.sp,fontWeight=FontWeight.Medium)
+        ),
         shapes = Shapes(extraSmall=RoundedCornerShape(8.dp),small=RoundedCornerShape(12.dp),medium=RoundedCornerShape(16.dp),large=RoundedCornerShape(20.dp),extraLarge=RoundedCornerShape(24.dp)),
         content = content
     )

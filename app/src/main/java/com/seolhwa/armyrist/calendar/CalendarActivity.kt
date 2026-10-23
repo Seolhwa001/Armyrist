@@ -79,7 +79,7 @@ internal fun CalendarScreen(externalRevision: Int, initialDate: String?, onBack:
         return
     }
     BackHandler(adding){adding=false}
-    Scaffold(topBar={TopAppBar(title={Text("달력")},navigationIcon={TextButton(onClick=onBack){Text("뒤로")}},actions={ArmyristHelpButton(ArmyristHelpTopic.CALENDAR)})},containerColor=ArmyristColors.AppBackground) { padding ->
+    Scaffold(topBar={TopAppBar(title={Text("달력")},navigationIcon={TextButton(onClick=onBack){Text("뒤로")}},actions={TextButton(onClick={com.seolhwa.armyrist.widget.CalendarWidgetProvider.requestPin(context)}){Text("위젯 추가")};ArmyristHelpButton(ArmyristHelpTopic.CALENDAR)})},containerColor=ArmyristColors.AppBackground) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding),contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
             item { Surface(shape=ArmyristPanelShape,color=ArmyristColors.WorkSurface){Column{
                 Row(Modifier.fillMaxWidth().padding(horizontal=12.dp),verticalAlignment=Alignment.CenterVertically){

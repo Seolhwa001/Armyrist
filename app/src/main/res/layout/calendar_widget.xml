@@ -1,0 +1,19 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/widget_root" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="@drawable/calendar_widget_background" android:padding="8dp">
+    <LinearLayout android:id="@+id/widget_mini" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:gravity="center" android:visibility="gone">
+        <TextView android:id="@+id/widget_mini_month" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:textColor="#2E55CC" android:textSize="11sp" android:maxLines="1" android:text="달력" />
+        <TextView android:id="@+id/widget_mini_day" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:textColor="#142038" android:textStyle="bold" android:textSize="24sp" android:includeFontPadding="false" android:maxLines="1" android:text="24" />
+        <TextView android:id="@+id/widget_mini_count" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:textColor="#47566D" android:textSize="10sp" android:maxLines="1" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/widget_header" android:layout_width="match_parent" android:layout_height="32dp" android:orientation="horizontal" android:gravity="center_vertical">
+        <TextView android:id="@+id/widget_month" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:gravity="center_vertical" android:text="낄롬리스 달력" android:textSize="14sp" android:textStyle="bold" android:textColor="#142038" android:maxLines="1" android:ellipsize="end" />
+        <TextView android:id="@+id/widget_previous" android:layout_width="34dp" android:layout_height="match_parent" android:gravity="center" android:text="‹" android:textColor="#2E55CC" android:textSize="24sp" android:contentDescription="이전 달" />
+        <TextView android:id="@+id/widget_today" android:layout_width="36dp" android:layout_height="match_parent" android:gravity="center" android:text="오늘" android:textColor="#2E55CC" android:textSize="11sp" android:contentDescription="이번 달로 이동" />
+        <TextView android:id="@+id/widget_next" android:layout_width="34dp" android:layout_height="match_parent" android:gravity="center" android:text="›" android:textColor="#2E55CC" android:textSize="24sp" android:contentDescription="다음 달" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/widget_days" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
+    <TextView android:id="@+id/widget_agenda_label" android:layout_width="match_parent" android:layout_height="32dp" android:gravity="center_vertical" android:text="이번 달 남은 일정" android:textColor="#47566D" android:textStyle="bold" android:textSize="12sp" />
+    <FrameLayout android:id="@+id/widget_agenda" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+        <ListView android:id="@+id/widget_agenda_list" android:layout_width="match_parent" android:layout_height="match_parent" android:divider="@android:color/transparent" android:dividerHeight="4dp" />
+        <TextView android:id="@+id/widget_empty" android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:text="남은 일정이 없습니다.\n눌러서 일정 추가" android:textSize="12sp" android:textColor="#47566D" />
+    </FrameLayout>
+</LinearLayout>

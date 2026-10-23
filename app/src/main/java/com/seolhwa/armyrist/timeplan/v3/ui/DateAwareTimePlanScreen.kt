@@ -3543,12 +3543,10 @@ private fun TimePlanVoiceReviewDialog(
         drafts = drafts.toMutableList().also { it[index] = KoreanVoiceStructurer.revalidate(draft) }
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Card(Modifier.fillMaxWidth().fillMaxHeight(.88f).imePadding(), shape = ArmyristPanelShape) {
-            Column(Modifier.padding(14.dp)) {
+    VoiceReviewFrame(onDismiss) {
                 Text("음성 입력 검토", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Text(
-                    "아래 Draft를 확인하고 필요한 항목을 수정하세요. 적용 전에는 기존 시간계획이 변경되지 않습니다.",
+                    "아래 일정을 확인하고 필요한 내용을 수정하세요. 적용 전에는 기존 시간계획이 변경되지 않습니다.",
                     style = MaterialTheme.typography.bodySmall,
                     color = ArmyristColors.SecondaryText
                 )
@@ -3576,6 +3574,7 @@ private fun TimePlanVoiceReviewDialog(
                         ) {
                             Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 VoiceDraftStatusHeader(d.state)
+                                if(d.reviewReason.isNotBlank())Text(d.reviewReason,style=MaterialTheme.typography.bodySmall,color=ArmyristColors.SecondaryText)
 
                                 OutlinedTextField(
                                     value = d.name,
@@ -3649,10 +3648,8 @@ private fun TimePlanVoiceReviewDialog(
                         enabled = drafts.isNotEmpty() && drafts.none { it.state == VoiceDraftState.INVALID },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(containerColor = ArmyristColors.PrimaryControl)
-                    ) { Text("적용") }
+                    ) { Text(if(drafts.any{it.state==VoiceDraftState.REVIEW_REQUIRED})"확인 후 적용"else"적용") }
                 }
-            }
-        }
     }
 
     editingDateIndex?.let { index ->

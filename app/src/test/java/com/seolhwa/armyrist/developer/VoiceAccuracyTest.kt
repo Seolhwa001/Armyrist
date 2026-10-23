@@ -50,6 +50,6 @@ class VoiceAccuracyTest{
         assertEquals(2,VoiceAccuracy.structured(ProbeTool.CHECKLIST,"인원 확인, 차량 점검",date).length())
         val time=VoiceAccuracy.structured(ProbeTool.TIME_PLAN,"24일 9시 집결",date).getJSONObject(0)
         assertEquals("2026-10-24T09:00",time.getString("dateTime"))
-        assertTrue(VoiceAccuracy.structured(ProbeTool.TIME_PLAN,"9시 집결",date).getJSONObject(0).isNull("dateTime"))
+        assertEquals("2026-10-24T09:00",VoiceAccuracy.structured(ProbeTool.TIME_PLAN,"9시 집결",date).getJSONObject(0).getString("dateTime"))
     }
 }

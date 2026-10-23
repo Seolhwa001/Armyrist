@@ -26,6 +26,9 @@ class ArmyristApplication : Application() {
     lateinit var commonTrashRepository: CommonTrashRepository
         private set
 
+    private val calendarWidgetListener=android.content.SharedPreferences.OnSharedPreferenceChangeListener { _,key ->
+        if(key=="snapshot_v1" || key=="snapshot_v3")com.seolhwa.armyrist.widget.CalendarWidgetRefresh.schedule(this)
+    }
     override fun onCreate() {
         super.onCreate()
 
@@ -40,6 +43,7 @@ class ArmyristApplication : Application() {
             v2Repository = timePlanV2Repository
         )
         dateAwareTimePlanRepository = DateAwareTimePlanRepository(this)
+        listOf("armyrist_stage2_core","armyrist_timeplan_v3").forEach { getSharedPreferences(it,MODE_PRIVATE).registerOnSharedPreferenceChangeListener(calendarWidgetListener) }
         commonTrashRepository = CommonTrashRepository(this).also {
             it.purgeExpired()
         }

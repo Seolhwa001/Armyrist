@@ -2,6 +2,13 @@ package com.seolhwa.armyrist.calendar
 
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -27,8 +34,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 internal fun AgendaKind.color(): Color = when(this) {
-    AgendaKind.PLAN -> Color(0xFF4263D8); AgendaKind.EVENT -> Color(0xFF8B5FC1)
-    AgendaKind.ACTION -> Color(0xFF16845D); AgendaKind.CHECKLIST -> Color(0xFFD5872A)
+    AgendaKind.PLAN -> ArmyristColors.PrimaryControl; AgendaKind.EVENT -> Color(0xFF7543A3)
+    AgendaKind.ACTION -> Color(0xFF147850); AgendaKind.CHECKLIST -> Color(0xFF975B0F)
 }
 
 @Composable
@@ -49,33 +56,60 @@ private fun DayThumbnail(path: String) {
 internal fun MonthCalendar(month: YearMonth, selected: LocalDate, plans: List<DateAwareTimePlan>, lists: List<Checklist>,
     onMonth: (YearMonth)->Unit, onSelect: (LocalDate)->Unit, compact: Boolean=false, dayImages: Map<LocalDate,String> = emptyMap()) {
     val today=LocalDate.now()
-    val marks=remember(month,plans,lists,today) { (1..month.lengthOfMonth()).associateWith { CalendarAgenda.entriesOn(month.atDay(it),plans,lists,today).map { e->e.kind }.distinct() } }
-    Column(Modifier.fillMaxWidth().padding(if(compact) 8.dp else 12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+    val currentMonth by rememberUpdatedState(month)
+    val changeMonth by rememberUpdatedState(onMonth)
+    val threshold=with(androidx.compose.ui.platform.LocalDensity.current){48.dp.toPx()}
+    Column(Modifier.fillMaxWidth().testTag("month-calendar").pointerInput(threshold) {
+        var distance=0f
+        detectHorizontalDragGestures(onDragStart={distance=0f},onDragCancel={distance=0f},onDragEnd={
+            if(kotlin.math.abs(distance)>=threshold)changeMonth(currentMonth.plusMonths(if(distance<0)1 else -1))
+            distance=0f
+        }) { change,dx->change.consume();distance+=dx }
+    }.padding(if(compact)8.dp else 12.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment=Alignment.CenterVertically) {
-            TextButton(onClick={onMonth(month.minusMonths(1))}) { Text("‹",style=MaterialTheme.typography.titleLarge) }
-            Text("${month.year}년 ${month.monthValue}월",Modifier.weight(1f),fontWeight=FontWeight.Bold)
+            IconButton(onClick={onMonth(month.minusMonths(1))}){Text("‹",style=MaterialTheme.typography.titleLarge,modifier=Modifier.semantics{contentDescription="이전 달"})}
+            Column(Modifier.weight(1f)){
+                Text("${month.year}년 ${month.monthValue}월",fontWeight=FontWeight.Bold,style=MaterialTheme.typography.titleMedium)
+                Text("좌우로 밀어 월 이동",style=MaterialTheme.typography.labelSmall,color=ArmyristColors.SecondaryText)
+            }
             TextButton(onClick={onMonth(YearMonth.from(today));onSelect(today)}){Text("오늘")}
-            TextButton(onClick={onMonth(month.plusMonths(1))}){Text("›",style=MaterialTheme.typography.titleLarge)}
+            IconButton(onClick={onMonth(month.plusMonths(1))}){Text("›",style=MaterialTheme.typography.titleLarge,modifier=Modifier.semantics{contentDescription="다음 달"})}
         }
-        Row { listOf("일","월","화","수","목","금","토").forEachIndexed { i,s-> Box(Modifier.weight(1f),contentAlignment=Alignment.Center){Text(s,style=MaterialTheme.typography.labelSmall,color=if(i==0)Color(0xFFC85555)else ArmyristColors.SecondaryText)} } }
+        AnimatedContent(targetState=month,transitionSpec={
+            val sign=if(targetState>initialState)1 else -1
+            (slideInHorizontally(tween(180)){it*sign}+fadeIn(tween(180))) togetherWith
+                (slideOutHorizontally(tween(180)){-it*sign}+fadeOut(tween(180)))
+        },label="calendar-month") { displayed ->
+            MonthGrid(displayed,selected,plans,lists,{date->if(displayed==month)onSelect(date)},compact,dayImages,today)
+        }
+    }
+}
+
+@Composable
+private fun MonthGrid(month:YearMonth,selected:LocalDate,plans:List<DateAwareTimePlan>,lists:List<Checklist>,
+    onSelect:(LocalDate)->Unit,compact:Boolean,dayImages:Map<LocalDate,String>,today:LocalDate) {
+    val marks=remember(month,plans,lists,today){(1..month.lengthOfMonth()).associateWith{CalendarAgenda.entriesOn(month.atDay(it),plans,lists,today).map{e->e.kind}.distinct()}}
+    Column(Modifier.fillMaxWidth().testTag("month-grid-$month"),verticalArrangement=Arrangement.spacedBy(3.dp)) {
+        Row{listOf("일","월","화","수","목","금","토").forEachIndexed{i,label->
+            Box(Modifier.weight(1f).height(28.dp),contentAlignment=Alignment.Center){Text(label,style=MaterialTheme.typography.labelMedium,color=when(i){0->ArmyristColors.Danger;6->ArmyristColors.PrimaryControl;else->ArmyristColors.SecondaryText})}
+        }}
         val offset=month.atDay(1).dayOfWeek.value%7
-        repeat((offset+month.lengthOfMonth()+6)/7) { week ->
-            Row {
-                repeat(7) { col ->
-                    val number=week*7+col-offset+1
-                    Box(Modifier.weight(1f).height(if(compact && dayImages.isEmpty())44.dp else 54.dp),contentAlignment=Alignment.Center) {
-                        if(number in 1..month.lengthOfMonth()) {
-                            val date=month.atDay(number);val active=date==selected
-                            Column(Modifier.fillMaxSize().background(if(active)ArmyristColors.SecondaryControl else Color.Transparent,ArmyristControlShape).clickable(onClickLabel="${date} 선택"){onSelect(date)},horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
-                                Text(number.toString(),fontWeight=if(active||date==today)FontWeight.Bold else FontWeight.Normal,color=when { active->ArmyristColors.PrimaryControl;date==today->Color(0xFF16845D);col==0->Color(0xFFC85555);else->ArmyristColors.PrimaryText })
-                                dayImages[date]?.let { DayThumbnail(it) }
-                                Row(horizontalArrangement=Arrangement.spacedBy(3.dp),modifier=Modifier.height(8.dp),verticalAlignment=Alignment.CenterVertically) { marks[number].orEmpty().forEach { Box(Modifier.size(4.dp).background(it.color(),CircleShape)) } }
-                            }
+        repeat((offset+month.lengthOfMonth()+6)/7){week->Row(horizontalArrangement=Arrangement.spacedBy(2.dp)){
+            repeat(7){col->val number=week*7+col-offset+1
+                Box(Modifier.weight(1f).height(if(compact&&dayImages.isEmpty())46.dp else 56.dp),contentAlignment=Alignment.Center){
+                    if(number in 1..month.lengthOfMonth()){
+                        val date=month.atDay(number);val active=date==selected
+                        val bg=when{active->ArmyristColors.PrimaryControl;date==today->ArmyristColors.SecondaryControl;else->Color.Transparent}
+                        Column(Modifier.fillMaxSize().background(bg,ArmyristControlShape).semantics{contentDescription="${date} 선택${if(marks[number].orEmpty().isEmpty())""else", 일정 있음"}"}.clickable(onClickLabel="${date} 선택"){onSelect(date)},horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center){
+                            Text(number.toString(),fontWeight=if(active||date==today)FontWeight.Bold else FontWeight.Medium,
+                                color=when{active->Color.White;date==today->ArmyristColors.PrimaryControl;col==0->ArmyristColors.Danger;col==6->ArmyristColors.PrimaryControl;else->ArmyristColors.PrimaryText})
+                            dayImages[date]?.let{DayThumbnail(it)}
+                            Row(horizontalArrangement=Arrangement.spacedBy(3.dp),modifier=Modifier.height(9.dp),verticalAlignment=Alignment.CenterVertically){marks[number].orEmpty().forEach{Box(Modifier.size(5.dp).background(if(active)Color.White else it.color(),CircleShape))}}
                         }
                     }
                 }
             }
-        }
+        }}
     }
 }
 

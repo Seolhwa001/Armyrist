@@ -22,7 +22,7 @@ class VoiceAccuracyUiTest{
     @get:Rule val compose=createComposeRule()
     private val app get()=ApplicationProvider.getApplicationContext<ArmyristApplication>()
     @Test fun microphoneRawIsKeptWhileTruthCanBeCorrectedAndRecordExported(){
-        compose.setContent{ArmyristTheme{VoiceAccuracyScreen({},speechInput={_,result,state,_->Button(onClick={state(VoiceUiState.LISTENING);result("생수 새 병")}){Text("테스트 인식")}})}}
+        compose.setContent{ArmyristTheme{VoiceAccuracyScreen({},speechInput={_,_,result,state,_,_->Button(onClick={state(VoiceUiState.LISTENING);result("생수 새 병")}){Text("테스트 인식")}})}}
         compose.onNodeWithText("테스트 인식").performScrollTo().performClick()
         compose.onNodeWithText("실제로 읽은 정답").performScrollTo().performTextReplacement("생수 세 병")
         compose.onNodeWithText("이 결과 저장").performScrollTo().performClick()
@@ -40,7 +40,7 @@ class VoiceAccuracyUiTest{
         compose.onNodeWithText("실제 인식 원문 · 마이크").assertDoesNotExist()
     }
     @Test fun unsupportedMicrophoneCanSaveFailureWithoutFalseAccuracy(){
-        compose.setContent{ArmyristTheme{VoiceAccuracyScreen({},speechInput={_,_,_,error->Button(onClick={error("미지원 기기")}){Text("실패 테스트")}})}}
+        compose.setContent{ArmyristTheme{VoiceAccuracyScreen({},speechInput={_,_,_,_,error,_->Button(onClick={error("미지원 기기")}){Text("실패 테스트")}})}}
         compose.onNodeWithText("실패 테스트").performScrollTo().performClick()
         compose.onNodeWithText("이 결과 저장").performScrollTo().performClick()
         compose.runOnIdle{val row=VoiceAccuracyRepository(app).load().single();assertEquals("ERROR",row.getString("outcome"));assertTrue(row.isNull("characterErrorRate"))}
