@@ -1,6 +1,7 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.seolhwa.armyrist.timeplan.v3.ui
+import com.seolhwa.armyrist.ArmyristDialog
 
 import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.BorderStroke
@@ -34,7 +35,7 @@ fun ArmyristActionDateTimeEditor(
     var raw by remember(initial) { mutableStateOf("%02d%02d".format(candidate.hour, candidate.minute)) }
     var calendar by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = onDismiss,
         shape = ArmyristPanelShape,
         containerColor = ArmyristColors.RaisedSurface,

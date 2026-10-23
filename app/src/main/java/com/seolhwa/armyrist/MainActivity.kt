@@ -2090,7 +2090,7 @@ private fun CountingScreen(
     }
 
     voiceMessage?.let { msg ->
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { voiceMessage = null },
             title = { Text("음성 입력") },
             text = { Text(msg) },
@@ -2292,7 +2292,7 @@ private fun ItemDialog(
     var groupId by remember { mutableStateOf(item?.groupId) }
     var error by remember { mutableStateOf("") }
 
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = { done(null) },
         shape = ArmyristPanelShape,
         containerColor = ArmyristColors.WorkSurface,
@@ -2568,7 +2568,7 @@ private fun QuantityDialog(
     var raw by remember { mutableStateOf(current.toString()) }
     var error by remember { mutableStateOf("") }
 
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = { done(null) },
         title = { Text("수량 직접 입력") },
         text = {
@@ -2620,7 +2620,7 @@ private fun CountingGroupManagerDialog(
     var rename by remember { mutableStateOf<CountingGroup?>(null) }
     var delete by remember { mutableStateOf<CountingGroup?>(null) }
 
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = onDismiss,
         shape = ArmyristPanelShape,
         containerColor = ArmyristColors.WorkSurface,
@@ -2767,7 +2767,7 @@ private fun CountingGroupManagerDialog(
     }
 
     delete?.let { group ->
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { delete = null },
             title = { Text("그룹 삭제") },
             text = {
@@ -3128,7 +3128,7 @@ private fun CalculationDialog(
         selectedLabelColor = ArmyristColors.OnDark
     )
 
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = { done(null) },
         shape = ArmyristPanelShape,
         containerColor = ArmyristColors.WorkSurface,
@@ -3360,7 +3360,7 @@ private fun GroupEditDialog(
     }
     var error by remember { mutableStateOf("") }
 
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = {
             done(null, color, showAggregate)
         },
@@ -3488,7 +3488,7 @@ private fun GroupPickerDialog(
     sheet: CountingSheet,
     done: (String?) -> Unit
 ) {
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = { done(null) },
         shape = ArmyristPanelShape,
         containerColor = ArmyristColors.WorkSurface,
@@ -3612,7 +3612,7 @@ private fun TextInputDialog(
     var value by remember { mutableStateOf(initial) }
     var error by remember { mutableStateOf("") }
 
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = { done(null) },
         title = { Text(title) },
         text = {
@@ -3664,7 +3664,7 @@ private fun ConfirmDialog(
     message: String,
     done: (Boolean) -> Unit
 ) {
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = { done(false) },
         title = { Text(title) },
         text = { Text(message) },

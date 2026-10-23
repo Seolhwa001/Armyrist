@@ -18,6 +18,7 @@ import com.seolhwa.armyrist.stage2.domain.Checklist
 import com.seolhwa.armyrist.stage2.domain.ChecklistItem
 import com.seolhwa.armyrist.stage2.domain.ChecklistStatus
 import java.util.Calendar
+import com.seolhwa.armyrist.timeplan.v3.domain.ActionNotificationMode
 
 object ChecklistNotificationManager {
     private const val CHANNEL_PREFIX = "checklist_item_sound_v4_"
@@ -44,6 +45,7 @@ object ChecklistNotificationManager {
     }
 
     fun channelId(context: Context, item: ChecklistItem): String {
+        if(item.notificationMode==ActionNotificationMode.MUSIC)return "checklist_music_loop_v1"
         val key = soundUri(context, item).toString()
         return CHANNEL_PREFIX + key.hashCode().toUInt().toString(16)
     }
@@ -62,11 +64,11 @@ object ChecklistNotificationManager {
                 manager.createNotificationChannel(
                     NotificationChannel(
                         id,
-                        "체크리스트 알람",
+                        if(item.notificationMode==ActionNotificationMode.MUSIC)"체크리스트 · 음악 알림"else"체크리스트 · 간단한 알림",
                         NotificationManager.IMPORTANCE_HIGH
                     ).apply {
                         description = "체크리스트 항목의 지정 시각 알람"
-                        setSound(soundUri(context, item), audioAttributes)
+                        setSound(if(item.notificationMode==ActionNotificationMode.MUSIC)null else soundUri(context,item), audioAttributes)
                         enableVibration(true)
                         vibrationPattern = longArrayOf(0, 300, 180, 300)
                         lockscreenVisibility =
@@ -114,10 +116,14 @@ object ChecklistNotificationManager {
 
     fun scheduledEpochMillis(
         minutes: Int,
-        nowMillis: Long = System.currentTimeMillis()
+        nowMillis: Long = System.currentTimeMillis(),
+        date: String? = null
     ): Long? {
         if (minutes !in 0..1439) return null
 
+        if(date != null) return runCatching {
+            java.time.LocalDate.parse(date).atTime(minutes / 60, minutes % 60).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        }.getOrNull()?.takeIf { it > nowMillis }
         val now = Calendar.getInstance().apply {
             timeInMillis = nowMillis
         }
@@ -139,8 +145,9 @@ object ChecklistNotificationManager {
     ): Boolean =
         item.status == ChecklistStatus.INCOMPLETE &&
             item.notificationEnabled &&
+            item.notificationMode != ActionNotificationMode.NONE &&
             item.scheduledTimeMinutes != null &&
-            scheduledEpochMillis(item.scheduledTimeMinutes, nowMillis) != null &&
+            scheduledEpochMillis(item.scheduledTimeMinutes, nowMillis, item.scheduledDate) != null &&
             notificationsEnabled(context, item)
 
     fun reconcile(context: Context, repository: CoreSuiteRepository) {
@@ -159,6 +166,7 @@ object ChecklistNotificationManager {
     fun reconcileChecklist(context: Context, checklist: Checklist) {
         checklist.deletedItems.forEach { cancel(context, it.id) }
         checklist.items.forEach { item ->
+            if(item.status==ChecklistStatus.INCOMPLETE && item.notificationEnabled && item.notificationMode==ActionNotificationMode.MUSIC && ChecklistMusicAlarmService.isActive(item)) return@forEach
             if (isEligible(context, item)) {
                 schedule(context, checklist, item)
             } else {
@@ -173,7 +181,7 @@ object ChecklistNotificationManager {
         item: ChecklistItem
     ): Boolean {
         val configured = item.scheduledTimeMinutes ?: return false
-        val triggerAt = scheduledEpochMillis(configured) ?: run {
+        val triggerAt = scheduledEpochMillis(configured, date=item.scheduledDate) ?: run {
             cancel(context, item.id)
             return false
         }
@@ -228,6 +236,7 @@ object ChecklistNotificationManager {
     }
 
     fun cancel(context: Context, itemId: String) {
+        ChecklistMusicAlarmService.stopItemIfActive(itemId)
         val alarmManager = context.getSystemService(AlarmManager::class.java)
 
         val pending = PendingIntent.getBroadcast(
@@ -292,6 +301,21 @@ object ChecklistNotificationManager {
             PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag()
         )
     }
+
+    fun notificationId(itemId:String)=requestCode(itemId)
+    fun scheduledLabel(item:ChecklistItem):String = (item.scheduledDate?.let{"$it "}.orEmpty()) + (item.scheduledTimeMinutes?.let{String.format(java.util.Locale.ROOT,"%02d:%02d",it/60,it%60)}?:"")
+    fun startMusicAlarm(context:Context,listId:String,itemId:String):Boolean = runCatching {
+        val intent=Intent(context,ChecklistMusicAlarmService::class.java).setAction(ChecklistMusicAlarmService.ACTION_START)
+            .putExtra(EXTRA_CHECKLIST_ID,listId).putExtra(EXTRA_ITEM_ID,itemId)
+        if(Build.VERSION.SDK_INT>=26)context.startForegroundService(intent)else context.startService(intent)
+        true
+    }.getOrDefault(false)
+    fun completePendingIntent(context:Context,listId:String,itemId:String)=actionPendingIntent(context,listId,itemId,ChecklistActionReceiver.ACTION_COMPLETE)
+    fun stopPendingIntent(context:Context,listId:String,itemId:String)=actionPendingIntent(context,listId,itemId,ChecklistActionReceiver.ACTION_STOP)
+    private fun actionPendingIntent(context:Context,listId:String,itemId:String,action:String):PendingIntent = PendingIntent.getBroadcast(
+        context,requestCode("$action:$listId:$itemId"),Intent(context,ChecklistActionReceiver::class.java).setAction(action)
+            .setData(Uri.Builder().scheme("killomris").authority("checklist-action").appendPath(action).appendPath(listId).appendPath(itemId).build())
+            .putExtra(EXTRA_CHECKLIST_ID,listId).putExtra(EXTRA_ITEM_ID,itemId),PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag())
 
     private fun requestCode(value: String): Int =
         value.hashCode() and 0x7fffffff

@@ -4,6 +4,7 @@
 )
 
 package com.seolhwa.armyrist
+import com.seolhwa.armyrist.timeplan.v3.domain.ActionNotificationMode
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -66,6 +67,8 @@ import com.seolhwa.armyrist.stage2.domain.*
 import com.seolhwa.armyrist.voice.*
 import com.seolhwa.armyrist.trash.*
 import kotlin.math.roundToInt
+import java.time.*
+import com.seolhwa.armyrist.calendar.ScheduleDateTimeFields
 
 class ChecklistActivity : ComponentActivity() {
     private lateinit var coreRepository: CoreSuiteRepository
@@ -237,7 +240,8 @@ private fun ChecklistApp(
     var selectedId by rememberSaveable { mutableStateOf(initialChecklistId) }
     var showingResult by rememberSaveable { mutableStateOf(false) }
     var revision by remember { mutableIntStateOf(0) }
-    @Suppress("UNUSED_VARIABLE") val observed = revision
+    val notificationRevision by repo.notificationCompletionRevision.collectAsState()
+    @Suppress("UNUSED_VARIABLE") val observed = revision to notificationRevision
 
     fun refresh() { revision++ }
 
@@ -323,7 +327,7 @@ private fun ChecklistApp(
                 onRename = {
                     if (repo.renameChecklist(selected.id, it)) refresh()
                 },
-                onAddItem = { name, note, groupId, notificationEnabled, scheduledTimeMinutes, notificationSoundUri ->
+                onAddItem = { name, note, groupId, notificationEnabled, scheduledTimeMinutes, notificationSoundUri, scheduledDate, notificationMode ->
                     if (
                         repo.addChecklistItem(
                             selected.id,
@@ -332,7 +336,9 @@ private fun ChecklistApp(
                             groupId,
                             notificationEnabled,
                             scheduledTimeMinutes,
-                            notificationSoundUri
+                            notificationSoundUri,
+                            scheduledDate,
+                            notificationMode
                         )
                     ) {
                         if (notificationEnabled) onRequestNotificationPermission()
@@ -340,7 +346,7 @@ private fun ChecklistApp(
                         refresh()
                     }
                 },
-                onEditItem = { itemId, name, note, groupId, notificationEnabled, scheduledTimeMinutes, notificationSoundUri ->
+                onEditItem = { itemId, name, note, groupId, notificationEnabled, scheduledTimeMinutes, notificationSoundUri, scheduledDate, notificationMode ->
                     if (
                         repo.editChecklistItem(
                             selected.id,
@@ -350,7 +356,9 @@ private fun ChecklistApp(
                             groupId,
                             notificationEnabled,
                             scheduledTimeMinutes,
-                            notificationSoundUri
+                            notificationSoundUri,
+                            scheduledDate,
+                            notificationMode
                         )
                     ) {
                         if (notificationEnabled) onRequestNotificationPermission()
@@ -631,7 +639,7 @@ private fun ChecklistListScreen(
 
     renameTarget?.let { target ->
         var renameValue by remember(target.id) { mutableStateOf(target.title) }
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { renameTarget = null },
             title = { Text("체크리스트 이름 변경") },
             text = {
@@ -658,7 +666,7 @@ private fun ChecklistListScreen(
     }
 
     deleteTarget?.let { target ->
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { deleteTarget = null },
             title = { Text("체크리스트 삭제") },
             text = { Text("'${target.title}'을 삭제합니다.") },
@@ -696,8 +704,8 @@ private fun ChecklistDetailScreen(
     onHome: () -> Unit,
     onResult: () -> Unit,
     onRename: (String) -> Unit,
-    onAddItem: (String, String, String?, Boolean, Int?, String?) -> Unit,
-    onEditItem: (String, String, String, String?, Boolean, Int?, String?) -> Unit,
+    onAddItem: (String, String, String?, Boolean, Int?, String?, String?, ActionNotificationMode) -> Unit,
+    onEditItem: (String, String, String, String?, Boolean, Int?, String?, String?, ActionNotificationMode) -> Unit,
     onDeleteItem: (String) -> Unit,
     onRestoreItem: (String) -> Unit,
     onPermanentlyDeleteItem: (String) -> Unit,
@@ -1145,14 +1153,16 @@ private fun ChecklistDetailScreen(
             onPickNotificationSound = onPickNotificationSound,
             onDismiss = { addingItem = false }
         ) {
-                name, note, groupId, notificationEnabled, scheduledTimeMinutes, notificationSoundUri ->
+                name, note, groupId, notificationEnabled, scheduledTimeMinutes, notificationSoundUri, scheduledDate, notificationMode ->
             onAddItem(
                 name,
                 note,
                 groupId,
                 notificationEnabled,
                 scheduledTimeMinutes,
-                notificationSoundUri
+                notificationSoundUri,
+                scheduledDate,
+                notificationMode
             )
             addingItem = false
         }
@@ -1165,7 +1175,7 @@ private fun ChecklistDetailScreen(
             onPickNotificationSound = onPickNotificationSound,
             onDismiss = { editingItem = null }
         ) {
-                name, note, groupId, notificationEnabled, scheduledTimeMinutes, notificationSoundUri ->
+                name, note, groupId, notificationEnabled, scheduledTimeMinutes, notificationSoundUri, scheduledDate, notificationMode ->
             onEditItem(
                 item.id,
                 name,
@@ -1173,7 +1183,9 @@ private fun ChecklistDetailScreen(
                 groupId,
                 notificationEnabled,
                 scheduledTimeMinutes,
-                notificationSoundUri
+                notificationSoundUri,
+                scheduledDate,
+                notificationMode
             )
             editingItem = null
         }
@@ -1210,7 +1222,7 @@ private fun ChecklistDetailScreen(
     }
 
     if (resetConfirm) {
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { resetConfirm = false },
             title = { Text("상태 초기화") },
             text = { Text("모든 항목을 미완료로 되돌립니다. 항목·그룹·비고·메모는 유지됩니다.") },
@@ -1227,7 +1239,7 @@ private fun ChecklistDetailScreen(
     }
 
     deleteTarget?.let { item ->
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { deleteTarget = null },
             title = { Text("항목 삭제") },
             text = {
@@ -1255,7 +1267,7 @@ private fun ChecklistDetailScreen(
     }
 
     permanentDeleteTarget?.let { item ->
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { permanentDeleteTarget = null },
             title = { Text("영구 삭제") },
             text = {
@@ -1285,7 +1297,9 @@ private fun ChecklistDetailScreen(
                         null,
                         false,
                         d.scheduledTimeMinutes,
-                        null
+                        null,
+                        null,
+                        ActionNotificationMode.NONE
                     )
                 }
                 voiceDrafts = null
@@ -1294,7 +1308,7 @@ private fun ChecklistDetailScreen(
     }
 
     voiceMessage?.let { msg ->
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { voiceMessage = null },
             title = { Text("음성 입력") },
             text = { Text(msg) },
@@ -1373,19 +1387,19 @@ private fun DetailChecklistRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                if (item.notificationEnabled && item.scheduledTimeMinutes != null) {
+                if (item.scheduledTimeMinutes != null) {
                     val context = LocalContext.current
                     val past = ChecklistNotificationManager.scheduledEpochMillis(
-                        item.scheduledTimeMinutes
+                        item.scheduledTimeMinutes, date=item.scheduledDate
                     ) == null
                     val deliveryUnavailable =
                         !ChecklistNotificationManager.notificationsEnabled(context, item)
 
                     Text(
                         buildString {
-                            append("알림 ${formatChecklistTime(item.scheduledTimeMinutes)}")
+                            append("${if(item.notificationEnabled) "알림" else "예정"} ${(item.scheduledDate?.let { "$it " }.orEmpty()+formatChecklistTime(item.scheduledTimeMinutes))}")
                             if (past) append(" · 지난 시각")
-                            else if (deliveryUnavailable) append(" · 현재 알림 사용 불가")
+                            else if (item.notificationEnabled && deliveryUnavailable) append(" · 현재 알림 사용 불가")
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1422,9 +1436,9 @@ private fun CompactChecklistRow(
             Text(
                 buildString {
                     append(groupName)
-                    if (item.notificationEnabled && item.scheduledTimeMinutes != null) {
+                    if (item.scheduledTimeMinutes != null) {
                         append(" · ")
-                        append(formatChecklistTime(item.scheduledTimeMinutes))
+                        append((item.scheduledDate?.let { "$it " }.orEmpty()+formatChecklistTime(item.scheduledTimeMinutes)))
                     }
                 },
                 style = MaterialTheme.typography.labelSmall
@@ -1545,7 +1559,7 @@ private fun TextEditDialog(
 ) {
     var text by remember(initial) { mutableStateOf(initial) }
 
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
@@ -1571,7 +1585,7 @@ private fun ItemEditDialog(
     groups: List<ChecklistGroup>,
     onPickNotificationSound: (String?, (String) -> Unit) -> Unit,
     onDismiss: () -> Unit,
-    onConfirm: (String, String, String?, Boolean, Int?, String?) -> Unit
+    onConfirm: (String, String, String?, Boolean, Int?, String?, String?, ActionNotificationMode) -> Unit
 ) {
     var name by remember { mutableStateOf(item?.name ?: "") }
     var note by remember { mutableStateOf(item?.note ?: "") }
@@ -1587,15 +1601,18 @@ private fun ItemEditDialog(
     var notificationSoundUri by remember {
         mutableStateOf(item?.notificationSoundUri)
     }
+    var scheduledDate by remember { mutableStateOf(item?.scheduledDate) }
+    var notificationMode by remember { mutableStateOf(item?.notificationMode?.takeUnless{it==ActionNotificationMode.NONE} ?: ActionNotificationMode.SIMPLE) }
+    var hasSchedule by remember { mutableStateOf(item?.scheduledTimeMinutes != null) }
     var error by remember { mutableStateOf("") }
     val context = LocalContext.current
 
     val parsedTime = parseChecklistTime(timeRaw)
     val isPast = notificationEnabled &&
         parsedTime != null &&
-        ChecklistNotificationManager.scheduledEpochMillis(parsedTime) == null
+        ChecklistNotificationManager.scheduledEpochMillis(parsedTime, date=scheduledDate) == null
 
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (item == null) "항목 추가" else "항목 편집") },
         text = {
@@ -1654,43 +1671,36 @@ private fun ItemEditDialog(
                             checked = notificationEnabled,
                             onCheckedChange = {
                                 notificationEnabled = it
+                                if(it) { hasSchedule = true; if(timeRaw.isBlank()) timeRaw="0900"; if(scheduledDate == null) scheduledDate=LocalDate.now().toString() }
                                 error = ""
                             }
                         )
                     }
                 }
-                if (notificationEnabled) {
-                    item {
-                        OutlinedTextField(
-                            value = timeRaw,
-                            onValueChange = {
-                                timeRaw = it.take(5)
-                                error = ""
-                            },
-                            label = { Text("예정시각") },
-                            supportingText = {
-                                Text("HHMM 입력 · 예: 1530")
-                            },
-                            keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Number
-                            ),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                item {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically) {
+                        Text("날짜·시간 지정", Modifier.weight(1f), fontWeight=FontWeight.SemiBold)
+                        Switch(checked=hasSchedule || notificationEnabled,onCheckedChange={ enabled ->
+                            hasSchedule=enabled
+                            if(enabled) { if(timeRaw.isBlank()) timeRaw="0900"; if(scheduledDate == null) scheduledDate=LocalDate.now().toString() }
+                            else { timeRaw=""; scheduledDate=null; notificationEnabled=false }
+                        })
                     }
-
-                    if (isPast) {
-                        item {
-                            Text(
-                                "지난 시각입니다. 알림이 예약되지 않습니다.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
+                    if(hasSchedule || notificationEnabled) ScheduleDateTimeFields(
+                        value=LocalDateTime.of(scheduledDate?.let { LocalDate.parse(it) } ?: LocalDate.now(), LocalTime.of((parsedTime ?: 540)/60,(parsedTime ?: 540)%60)),
+                        onChange={ dt -> scheduledDate=dt.toLocalDate().toString(); timeRaw=formatChecklistTimeRaw(dt.hour*60+dt.minute); error="" }
+                    )
+                    if(isPast) Text("지난 일시입니다. 일정은 저장되며 알림은 울리지 않습니다.", color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)
                 }
 
                 if (notificationEnabled) {
+                    item {
+                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            FilterChip(selected=notificationMode==ActionNotificationMode.SIMPLE,onClick={notificationMode=ActionNotificationMode.SIMPLE},label={Text("간단한 알림")})
+                            FilterChip(selected=notificationMode==ActionNotificationMode.MUSIC,onClick={notificationMode=ActionNotificationMode.MUSIC},label={Text("음악 알림")})
+                        }
+                        Text("음악 알림은 ‘알림 중지’ 또는 ‘할 일 완료’를 누를 때까지 반복됩니다.",style=MaterialTheme.typography.bodySmall,color=ArmyristColors.SecondaryText)
+                    }
                     item {
                         Card(Modifier.fillMaxWidth()) {
                             Row(
@@ -1754,7 +1764,9 @@ private fun ItemEditDialog(
                                 groupId,
                                 notificationEnabled,
                                 time,
-                                notificationSoundUri
+                                notificationSoundUri,
+                                scheduledDate,
+                                if(notificationEnabled)notificationMode else ActionNotificationMode.NONE
                             )
                         }
                     }
@@ -1797,7 +1809,7 @@ private fun GroupManagerDialog(
 ) {
     var creating by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = onDismiss,
         title = { Text("그룹 관리") },
         text = {
@@ -1874,7 +1886,7 @@ private fun GroupCreateDialog(
     var name by remember { mutableStateOf("") }
     var color by remember { mutableStateOf(GROUP_COLORS.first()) }
 
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = onDismiss,
         title = { Text("그룹 추가") },
         text = {
@@ -1935,7 +1947,7 @@ private fun GroupPickerDialog(
     onDismiss: () -> Unit,
     onSelect: (String?, Boolean) -> Unit
 ) {
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = onDismiss,
         title = { Text("그룹 지정") },
         text = {
@@ -1987,7 +1999,7 @@ private fun DeletedItemsDialog(
     onRequestPermanentDelete: (ChecklistItem) -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = onDismiss,
         title = { Text("삭제된 항목") },
         text = {

@@ -1,4 +1,5 @@
 package com.seolhwa.armyrist.trash
+import com.seolhwa.armyrist.ArmyristDialog
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
@@ -133,7 +134,7 @@ fun CommonTrashScreen(
     }
 
     if (retentionDialog) {
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { retentionDialog = false },
             shape = ArmyristPanelShape,
             containerColor = ArmyristColors.RaisedSurface,
@@ -182,7 +183,7 @@ fun CommonTrashScreen(
     }
 
     permanentDeleteTarget?.let { item ->
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { permanentDeleteTarget = null },
             shape = ArmyristPanelShape,
             containerColor = ArmyristColors.RaisedSurface,

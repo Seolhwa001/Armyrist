@@ -3,7 +3,7 @@ package com.seolhwa.armyrist.home
 import org.json.JSONArray
 
 object HomeToolOrder {
-    val defaults = listOf("counting", "checklist", "timeplan", "report", "handicap")
+    val defaults = listOf("counting", "checklist", "timeplan", "report", "handicap", "calendar")
     fun normalize(values: List<String>) = values.filter { it in defaults }.distinct().let { it + defaults.filterNot(it::contains) }
     fun decode(raw: String?): List<String> = runCatching {
         val array = JSONArray(raw ?: return defaults)

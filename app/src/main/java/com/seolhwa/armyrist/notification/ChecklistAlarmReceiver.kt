@@ -1,75 +1,22 @@
 package com.seolhwa.armyrist.notification
-
 import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import androidx.core.app.NotificationCompat
 import com.seolhwa.armyrist.stage2.data.CoreSuiteRepository
 import com.seolhwa.armyrist.stage2.domain.ChecklistStatus
-
-class ChecklistAlarmReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
-        val checklistId =
-            intent.getStringExtra(
-                ChecklistNotificationManager.EXTRA_CHECKLIST_ID
-            ) ?: return
-
-        val itemId =
-            intent.getStringExtra(
-                ChecklistNotificationManager.EXTRA_ITEM_ID
-            ) ?: return
-
-        val repository =
-            CoreSuiteRepository(context.applicationContext)
-
-        val checklist =
-            repository.getChecklist(checklistId) ?: return
-
-        val item =
-            checklist.items.firstOrNull { it.id == itemId } ?: return
-
-        // A delivered but stale alarm must never recreate or mutate deleted/completed data.
-        if (
-            item.status != ChecklistStatus.INCOMPLETE ||
-            !item.notificationEnabled
-        ) {
-            return
-        }
-
-        if (!ChecklistNotificationManager.notificationsEnabled(context, item)) {
-            return
-        }
-
-        val channelId =
-            ChecklistNotificationManager.createChannel(context, item)
-
-        val notification =
-            NotificationCompat.Builder(context, channelId)
-                .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-                .setContentTitle(checklist.title)
-                .setContentText(item.name)
-                .setStyle(
-                    NotificationCompat.BigTextStyle()
-                        .bigText(item.name)
-                )
-                .setPriority(NotificationCompat.PRIORITY_MAX)
-                .setCategory(NotificationCompat.CATEGORY_ALARM)
-                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setAutoCancel(true)
-                .setContentIntent(
-                    ChecklistNotificationManager.openChecklistIntent(
-                        context,
-                        checklist.id,
-                        item.id
-                    )
-                )
-                .build()
-
-        context.getSystemService(NotificationManager::class.java)
-            .notify(
-                item.id.hashCode() and 0x7fffffff,
-                notification
-            )
+import com.seolhwa.armyrist.timeplan.v3.domain.ActionNotificationMode
+class ChecklistAlarmReceiver:BroadcastReceiver(){
+    override fun onReceive(context:Context,intent:Intent){
+        val listId=intent.getStringExtra(ChecklistNotificationManager.EXTRA_CHECKLIST_ID)?:return
+        val itemId=intent.getStringExtra(ChecklistNotificationManager.EXTRA_ITEM_ID)?:return
+        val list=CoreSuiteRepository(context.applicationContext).getChecklist(listId)?:return
+        val item=list.items.find{it.id==itemId}?:return
+        if(item.status!=ChecklistStatus.INCOMPLETE||!item.notificationEnabled||item.notificationMode==ActionNotificationMode.NONE||!ChecklistNotificationManager.notificationsEnabled(context,item))return
+        if(item.notificationMode==ActionNotificationMode.MUSIC && ChecklistNotificationManager.startMusicAlarm(context,listId,itemId))return
+        val reminderItem=if(item.notificationMode==ActionNotificationMode.MUSIC)item.copy(notificationMode=ActionNotificationMode.SIMPLE)else item
+        context.getSystemService(NotificationManager::class.java).notify(ChecklistNotificationManager.notificationId(item.id),
+            TaskReminderNotification.build(context,ChecklistNotificationManager.createChannel(context,reminderItem),item.name,"${list.title} · ${ChecklistNotificationManager.scheduledLabel(item)} 예정",
+                ChecklistNotificationManager.openChecklistIntent(context,list.id,item.id),ChecklistNotificationManager.completePendingIntent(context,list.id,item.id)))
     }
 }

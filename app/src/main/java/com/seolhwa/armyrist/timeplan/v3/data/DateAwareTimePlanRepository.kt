@@ -104,6 +104,16 @@ class DateAwareTimePlanRepository(context: Context) {
     }
 
     @Synchronized
+    fun saveAction(planId: String, candidate: TimePlanActionItem): Boolean {
+        val current = getPlan(planId) ?: return false
+        if(candidate.parentPointId !in DateTimePlanRules.nodeIds(current)) return false
+        val previous = current.actions.firstOrNull { it.id == candidate.id }
+        val action = candidate.copy(completionState=previous?.completionState ?: candidate.completionState)
+        val actions = if(previous == null) current.actions+action else current.actions.map { if(it.id == action.id) action else it }
+        return commit(TimePlanExecutionRules.normalizeActionOrder(current.copy(actions=actions,updatedAt=System.currentTimeMillis().toString())))
+    }
+
+    @Synchronized
     fun commit(value: DateAwareTimePlan): Boolean {
         if (value.legacyDateMigrationRequired) return false
         if (DateTimePlanRules.validateForPersistence(value).isNotEmpty()) return false
@@ -527,6 +537,7 @@ object DateAwareTimePlanJson {
         .put("completionState", a.completionState.name)
         .put("notificationEnabled", a.notificationMode != ActionNotificationMode.NONE)
         .put("notificationMode", a.notificationMode.name)
+        .put("markerColor", a.markerColor)
         .put("groupId", a.groupId ?: JSONObject.NULL)
         .put("note", a.note ?: JSONObject.NULL)
         .put("order", a.order)
@@ -537,6 +548,7 @@ object DateAwareTimePlanJson {
         parentPointId = j.getString("parentPointId"),
         content = j.getString("content"),
         scheduledDateTime = LocalDateTime.parse(j.getString("scheduledDateTime")),
+        markerColor = j.optString("markerColor", "#111111").takeIf { it.matches(Regex("#[0-9a-fA-F]{6}")) } ?: "#111111",
         completionState = ActionCompletionState.valueOf(j.optString("completionState", ActionCompletionState.INCOMPLETE.name)),
         notificationEnabled = j.optBoolean("notificationEnabled", false),
         notificationMode = runCatching { ActionNotificationMode.valueOf(j.optString("notificationMode")) }.getOrElse { if (j.optBoolean("notificationEnabled", false)) ActionNotificationMode.SIMPLE else ActionNotificationMode.NONE },

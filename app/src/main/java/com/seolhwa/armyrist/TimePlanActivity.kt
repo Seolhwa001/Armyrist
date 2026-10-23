@@ -32,6 +32,8 @@ class TimePlanActivity : ComponentActivity() {
                 Surface(Modifier.fillMaxSize(), color = ArmyristColors.AppBackground) {
                     DateAwareTimePlanApp(
                         repository = app.dateAwareTimePlanRepository,
+                        initialPlanId = intent.getStringExtra("calendarPlanId"),
+                        initialNodeId = intent.getStringExtra("calendarNodeId"),
                         legacyRepository = app.timePlanV2Repository,
                         coreRepository = app.coreSuiteRepository,
                         trashRepository = app.commonTrashRepository,

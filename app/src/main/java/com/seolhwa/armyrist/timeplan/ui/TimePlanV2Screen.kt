@@ -1,4 +1,5 @@
 package com.seolhwa.armyrist.timeplan.ui
+import com.seolhwa.armyrist.ArmyristDialog
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -503,7 +504,7 @@ private fun TimePlanV2Detail(
     }
 
     pendingSimpleConflict?.let { (heading, conflicts) ->
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { pendingSimpleConflict = null },
             title = { Text("시간 관계를 확인해 주세요") },
             text = {
@@ -547,7 +548,7 @@ private fun TimePlanV2Detail(
     }
 
     pendingOccupiedRangeConflict?.let { (_, conflict) ->
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { pendingOccupiedRangeConflict = null },
             title = { Text("시간이 겹칩니다") },
             text = {
@@ -579,7 +580,7 @@ private fun TimePlanV2Detail(
                 existing = plan,
                 changedEvent = changedEvent
             )
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { pendingEventConflict = null },
             title = {
                 Text(
@@ -647,7 +648,7 @@ private fun TimePlanV2Detail(
     pendingBoundaryEdit?.let { changedEvent ->
         val proposedClock = TimePlanCalculator.arrivalClock(changedEvent.timeSpec)?.time
         val endClock = plan.end.value.time
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { pendingBoundaryEdit = null },
             title = { Text("시간 순서 확인") },
             text = {

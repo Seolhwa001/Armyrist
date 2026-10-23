@@ -64,7 +64,7 @@ class TimePlanHelpAndCompletionUiTest {
 
     @Test @Config(qualifiers = "w320dp-h480dp") fun upperRightHelpOpensCurrentScreenAndOtherToolGuides() {
         compose.setContent { ArmyristTheme {
-            Column { ArmyristTopBar(title = "수행 모드", onLeading = {}) }
+            Column { ArmyristTopBar(title = "실시사항 모드", onLeading = {}) }
         } }
         compose.onNodeWithContentDescription("도움말").assertIsDisplayed().performClick()
         compose.onNodeWithText("시간계획 도움말").assertIsDisplayed()

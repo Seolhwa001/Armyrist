@@ -1,4 +1,5 @@
 package com.seolhwa.armyrist.stage2.domain
+import com.seolhwa.armyrist.timeplan.v3.domain.ActionNotificationMode
 
 import java.util.UUID
 
@@ -47,7 +48,9 @@ data class ChecklistItem(
     val note: String = "",
     val notificationEnabled: Boolean = false,
     val scheduledTimeMinutes: Int? = null,
-    val notificationSoundUri: String? = null
+    val notificationSoundUri: String? = null,
+    val scheduledDate: String? = null,
+    val notificationMode: ActionNotificationMode = if(notificationEnabled) ActionNotificationMode.SIMPLE else ActionNotificationMode.NONE
 )
 
 data class TimePlan(

@@ -276,6 +276,7 @@ private fun DataManagementScreen(
                 DataCount("실셈", summary.countingSheets)
                 DataCount("체크리스트", summary.checklists)
                 DataCount("시간계획", summary.timePlans)
+                DataCount("자료 폴더", summary.folders)
                 DataCount("보고 양식", summary.reportTemplates)
                 DataCountText("내 정보", "포함")
 
@@ -497,7 +498,7 @@ private fun PasswordConfirmDialog(
     var confirm by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
 
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
@@ -567,7 +568,7 @@ private fun PasswordInputDialog(
 ) {
     var password by remember { mutableStateOf("") }
 
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
@@ -602,7 +603,7 @@ private fun RestoreConfirmDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = onDismiss,
         title = { Text("전체 복원") },
         text = {
@@ -618,11 +619,13 @@ private fun RestoreConfirmDialog(
                 DataCount("실셈", current.countingSheets)
                 DataCount("체크리스트", current.checklists)
                 DataCount("시간계획", current.timePlans)
+                DataCount("자료 폴더", current.folders)
                 DataCount("보고 양식", current.reportTemplates)
 
                 HorizontalDivider()
 
                 Text("복원할 백업")
+                DataCount("자료 폴더", backup.summary.folders)
                 DataCount(
                     "실셈",
                     backup.summary.countingSheets

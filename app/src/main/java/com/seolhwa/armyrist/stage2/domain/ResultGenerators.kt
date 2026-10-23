@@ -64,7 +64,7 @@ object ChecklistResultGenerator {
 
         val timeSuffix =
             item.scheduledTimeMinutes?.let {
-                " — ${formatChecklistTime(it)}"
+                " — ${item.scheduledDate?.let { date -> "$date " }.orEmpty()}${formatChecklistTime(it)}"
             } ?: ""
 
         val base =

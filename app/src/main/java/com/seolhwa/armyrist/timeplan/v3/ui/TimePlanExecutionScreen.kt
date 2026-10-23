@@ -1,6 +1,7 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.seolhwa.armyrist.timeplan.v3.ui
+import com.seolhwa.armyrist.ArmyristDialog
 
 import androidx.compose.ui.draw.drawBehind
 
@@ -116,7 +117,7 @@ fun TimePlanExecutionApp(
     Scaffold(
         topBar = {
             ArmyristTopBar(
-                title = if (mode == TimePlanExecutionMode.EXECUTE) "수행 모드" else "실시사항 편집",
+                title = if (mode == TimePlanExecutionMode.EXECUTE) "실시사항 모드" else "실시사항 편집",
                 subtitle = plan.title,
                 leadingLabel = "뒤로",
                 onLeading = onBack,
@@ -140,7 +141,7 @@ fun TimePlanExecutionApp(
                     modifier = Modifier.weight(1f)
                 )
                 ArmyristModeButton(
-                    label = "수행 모드",
+                    label = "실시사항 모드",
                     selected = mode == TimePlanExecutionMode.EXECUTE,
                     onClick = { mode = TimePlanExecutionMode.EXECUTE },
                     modifier = Modifier.weight(1f)
@@ -561,7 +562,7 @@ private fun TimePlanPrepareScreen(
     }
 
     if (confirmDeleteSelected) {
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { confirmDeleteSelected = false },
             title = { Text("실시사항 삭제") },
             text = { Text("선택한 실시사항 ${selectedActions.size}개를 삭제할까요?") },
@@ -585,7 +586,7 @@ private fun TimePlanPrepareScreen(
     }
 
     message?.let {
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { message = null },
             title = { Text("확인") },
             text = { Text(it) },
@@ -1027,7 +1028,7 @@ private fun TimePlanExecuteScreen(
     }
 
     message?.let {
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { message = null },
             title = { Text("확인") },
             text = { Text(it) },
@@ -1037,7 +1038,7 @@ private fun TimePlanExecuteScreen(
 
     noteTarget?.let { action ->
         var note by remember(action.id) { mutableStateOf(action.note.orEmpty()) }
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { noteTarget = null },
             title = { Text("실시사항 비고") },
             text = { OutlinedTextField(note, { note = it }, modifier = Modifier.fillMaxWidth(), label = { Text("비고 / 미실시 사유") }) },
@@ -1165,7 +1166,7 @@ private fun formatActionDateTime(
 }
 
 @Composable
-private fun ActionEditDialog(
+internal fun ActionEditDialog(
     title: String,
     initial: TimePlanActionItem?,
     baseDateTime: LocalDateTime,
@@ -1185,7 +1186,7 @@ private fun ActionEditDialog(
     var groupMenu by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
             dismissOnBackPress = true,
@@ -1253,6 +1254,7 @@ private fun ActionEditDialog(
                     content.isBlank() -> error = "내용을 입력해주세요."
                     else -> onConfirm(
                         TimePlanActionItem(
+                            markerColor = initial?.markerColor ?: "#111111",
                             id = initial?.id ?: UUID.randomUUID().toString(),
                             parentPointId = initial?.parentPointId ?: "TEMP",
                             content = content.trim(),
@@ -1295,7 +1297,7 @@ private fun ActionMoveDialog(
     val pointIds = DateTimePlanRules.nodeIds(plan)
     var target by remember(action.id) { mutableStateOf(action.parentPointId) }
 
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = false),
         title = { Text("실시사항 이동", fontWeight = FontWeight.Bold) },
@@ -1355,7 +1357,7 @@ private fun BatchActionMoveDialog(
     val pointIds = DateTimePlanRules.nodeIds(plan)
     var target by remember { mutableStateOf<String?>(null) }
 
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
             dismissOnBackPress = true,
@@ -1460,7 +1462,7 @@ private fun BatchAddDialog(
     var groupId by remember { mutableStateOf<String?>(null) }
     var notify by remember { mutableStateOf(false) }
     var groupMenu by remember { mutableStateOf(false) }
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
             dismissOnBackPress = true,
@@ -1508,7 +1510,7 @@ private fun NumberInputDialog(
     onConfirm: (Long) -> Unit
 ) {
     var value by remember { mutableStateOf(initial) }
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { Column { Text(description); Spacer(Modifier.height(8.dp)); OutlinedTextField(value, { value = it }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth()) } },
@@ -1524,7 +1526,7 @@ private fun GroupPickerDialog(
     onDismiss: () -> Unit,
     onSelect: (String?) -> Unit
 ) {
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = onDismiss,
         shape = ArmyristPanelShape,
         containerColor = ArmyristColors.WorkSurface,
@@ -1595,7 +1597,7 @@ private fun ActionGroupManagerDialog(
     var create by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<TimePlanActionGroup?>(null) }
 
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = onDismiss,
         shape = ArmyristPanelShape,
         containerColor = ArmyristColors.WorkSurface,
@@ -1691,7 +1693,7 @@ private fun ActionGroupManagerDialog(
     }
 
     deleteTarget?.let { group ->
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { deleteTarget = null },
             containerColor = ArmyristColors.WorkSurface,
             title = { Text("그룹 삭제") },
@@ -1732,7 +1734,7 @@ private fun ActionGroupEditDialog(
     var name by remember(initialName) { mutableStateOf(initialName) }
     var color by remember(initialColor) { mutableStateOf(initialColor) }
 
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = onDismiss,
         shape = ArmyristPanelShape,
         containerColor = ArmyristColors.WorkSurface,

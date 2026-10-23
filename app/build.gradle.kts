@@ -24,8 +24,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 164
-        versionName = "0.6.76"
+        versionCode = 169
+        versionName = "0.6.81"
         manifestPlaceholders["appLabel"] = "낄롬리스"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -55,9 +55,9 @@ android {
         debug {
             // The delivered workspace APK is used for performance checks, not debugger attachment.
             isDebuggable = false
-            applicationIdSuffix = ".preview076"
+            applicationIdSuffix = ".preview079"
             versionNameSuffix = "-preview"
-            manifestPlaceholders["appLabel"] = "낄롬리스 미리보기"
+            manifestPlaceholders["appLabel"] = "낄롬리스 검수"
         }
         release {
             isMinifyEnabled = false

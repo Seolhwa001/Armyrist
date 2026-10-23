@@ -11,7 +11,9 @@ data class HomeBannerConfig(
     val currentHeading: String = "현재 진행중인 시간계획",
     val nextHeading: String = "다음 실시사항",
     val noticeTitle: String = "오늘의 안내",
-    val noticeBody: String = "설정에서 자유롭게 작성해보세요."
+    val noticeBody: String = "설정에서 자유롭게 작성해보세요.",
+    val calendarEnabled: Boolean = true,
+    val compactHome: Boolean = false
 ) {
     fun normalized() = copy(
         planId = planId?.trim()?.takeIf { it.isNotEmpty() },
@@ -27,7 +29,7 @@ object HomeBannerCodec {
         val c = config.normalized()
         return JSONObject().put("mode", c.mode.name).put("planId", c.planId ?: JSONObject.NULL)
             .put("currentHeading", c.currentHeading).put("nextHeading", c.nextHeading)
-            .put("noticeTitle", c.noticeTitle).put("noticeBody", c.noticeBody).toString()
+            .put("compactHome",c.compactHome).put("calendarEnabled", c.calendarEnabled).put("noticeTitle", c.noticeTitle).put("noticeBody", c.noticeBody).toString()
     }
     fun decode(raw: String?): HomeBannerConfig = runCatching {
         val j = JSONObject(raw ?: return HomeBannerConfig())
@@ -38,7 +40,9 @@ object HomeBannerCodec {
             currentHeading = j.optString("currentHeading", defaults.currentHeading),
             nextHeading = j.optString("nextHeading", defaults.nextHeading),
             noticeTitle = j.optString("noticeTitle", defaults.noticeTitle),
-            noticeBody = j.optString("noticeBody", defaults.noticeBody)
+            noticeBody = j.optString("noticeBody", defaults.noticeBody),
+            calendarEnabled = j.optBoolean("calendarEnabled", true),
+            compactHome = j.optBoolean("compactHome",false)
         ).normalized()
     }.getOrDefault(HomeBannerConfig())
 }

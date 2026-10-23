@@ -2,6 +2,7 @@ package com.seolhwa.armyrist
 
 import android.content.Context
 import android.util.Base64
+import com.seolhwa.armyrist.collection.CollectionBackup
 import com.seolhwa.armyrist.timeplan.portable.TimePlanPortableV1Migrator
 import com.seolhwa.armyrist.timeplan.portable.TimePlanPortableV2Codec
 import com.seolhwa.armyrist.timeplan.v3.data.DateAwareTimePlanRepository
@@ -35,7 +36,8 @@ data class BackupSummary(
     val reportTemplates: Int,
     val userProfileIncluded: Boolean,
     val createdAt: String,
-    val encrypted: Boolean
+    val encrypted: Boolean,
+    val folders: Int = 0
 )
 
 data class ValidatedBackup(
@@ -44,7 +46,8 @@ data class ValidatedBackup(
     val coreSnapshot: String,
     val timePlanV2Snapshot: String,
     val timePlanV3Snapshot: String,
-    val intervalLabels: Map<String, String>
+    val intervalLabels: Map<String, String>,
+    val collectionSnapshot: String? = null
 )
 
 data class ContainerInspection(
@@ -130,6 +133,7 @@ object ArmyristPortableDataManager {
                 TIMEPLAN_V3_KEY,
                 old.optStringOrNull("timePlanV3")
             )
+            if(old.has("collections")) restoreStringPreference(context,CollectionBackup.PREFS,CollectionBackup.KEY,old.optStringOrNull("collections"))
             restoreStringMap(
                 context,
                 TIMEPLAN_LABEL_PREFS,
@@ -163,7 +167,8 @@ object ArmyristPortableDataManager {
             userProfileIncluded = true,
             createdAt = OffsetDateTime.now()
                 .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
-            encrypted = false
+            encrypted = false,
+            folders = com.seolhwa.armyrist.collection.CommonCollectionRepository(context).let{repo->com.seolhwa.armyrist.collection.CollectionToolType.entries.sumOf{repo.folders(it).size}}
         )
     }
 
@@ -189,6 +194,7 @@ object ArmyristPortableDataManager {
                     JSONObject()
                         .put("timePlan", TIME_PLAN_SCHEMA_VERSION)
                 )
+                .put("collections", CollectionBackup.export(context))
                 .put("countingSnapshot", countingRoot)
                 .put("coreSnapshot", coreRoot)
                 .put("timePlanV2Snapshot", timePlanV2Snapshot)
@@ -338,6 +344,7 @@ object ArmyristPortableDataManager {
             validateCountingSnapshot(counting)
             validateCoreSnapshot(core)
 
+            val collections=if(payload.has("collections"))payload.getJSONObject("collections").also{CollectionBackup.validate(it)}else null
             val labelMap = linkedMapOf<String, String>()
             labels.keys().forEach { key ->
                 labelMap[key] = labels.optString(key, "")
@@ -359,13 +366,15 @@ object ArmyristPortableDataManager {
                             ?.length() ?: 0,
                     userProfileIncluded = true,
                     createdAt = outer.getString("createdAt"),
-                    encrypted = encrypted
+                    encrypted = encrypted,
+                    folders = collections?.getJSONArray("folders")?.length() ?: 0
                 ),
                 countingSnapshot = counting.toString(),
                 coreSnapshot = core.toString(),
                 timePlanV2Snapshot = timePlanV2Snapshot.toString(),
                 timePlanV3Snapshot = timePlanV3Snapshot.toString(),
-                intervalLabels = labelMap
+                intervalLabels = labelMap,
+                collectionSnapshot = collections?.toString()
             )
         }.fold(
             onSuccess = { PortableResult.Success(it) },
@@ -402,6 +411,7 @@ object ArmyristPortableDataManager {
             validateCoreSnapshot(core)
             validateTimePlanV2Snapshot(timePlanV2)
             TimePlanPortableV3Bridge.validateV3(timePlanV3)
+            val collections=backup.collectionSnapshot?.let(::JSONObject)?.also{CollectionBackup.validate(it)}
 
             val oldCounting = context.getSharedPreferences(
                 COUNTING_PREFS,
@@ -424,7 +434,9 @@ object ArmyristPortableDataManager {
             val oldLabels =
                 readStringMap(context, TIMEPLAN_LABEL_PREFS)
 
+            val oldCollections=context.getSharedPreferences(CollectionBackup.PREFS,0).getString(CollectionBackup.KEY,null)
             val oldObject = JSONObject()
+                .put("collections",oldCollections ?: JSONObject.NULL)
                 .put(
                     "counting",
                     oldCounting ?: JSONObject.NULL
@@ -519,6 +531,7 @@ object ArmyristPortableDataManager {
                     labelsEditor.putString(key, value)
                 }
                 require(labelsEditor.commit())
+                if(collections!=null)require(CollectionBackup.restore(context,collections))
 
                 success = true
             } finally {
@@ -854,6 +867,8 @@ object ArmyristPortableDataManager {
                 )
             }
 
+            if(item.has("notificationMode")) require(item.getString("notificationMode") in setOf("NONE","SIMPLE","MUSIC"))
+            if (!item.isNull("scheduledDate")) java.time.LocalDate.parse(item.getString("scheduledDate"))
             val enabled =
                 item.optBoolean("notificationEnabled", false)
             if (enabled) {

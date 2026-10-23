@@ -48,8 +48,14 @@ object ArmyristColors {
 private val ArmyristLightScheme = lightColorScheme(
     primary = ArmyristColors.PrimaryControl,
     onPrimary = ArmyristColors.OnDark,
+    primaryContainer = ArmyristColors.SecondaryControl,
+    onPrimaryContainer = ArmyristColors.PrimaryText,
+    surfaceContainerHigh = ArmyristColors.RaisedSurface,
+    surfaceContainerHighest = ArmyristColors.SecondaryControl,
     secondary = ArmyristColors.SecondaryControl,
     onSecondary = ArmyristColors.PrimaryText,
+    secondaryContainer = ArmyristColors.SecondaryControl,
+    onSecondaryContainer = ArmyristColors.PrimaryControl,
     background = ArmyristColors.AppBackground,
     onBackground = ArmyristColors.PrimaryText,
     surface = ArmyristColors.WorkSurface,
@@ -64,6 +70,7 @@ private val ArmyristLightScheme = lightColorScheme(
 fun ArmyristTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = ArmyristLightScheme,
+        shapes = Shapes(extraSmall=RoundedCornerShape(8.dp),small=RoundedCornerShape(12.dp),medium=RoundedCornerShape(16.dp),large=RoundedCornerShape(20.dp),extraLarge=RoundedCornerShape(24.dp)),
         content = content
     )
 }

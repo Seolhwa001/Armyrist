@@ -35,6 +35,7 @@
         <activity android:name=".handicap.HandicapActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="false" />
         <activity android:name=".ChecklistActivity" android:exported="false" />
+        <activity android:name=".calendar.CalendarActivity" android:exported="false" />
         <activity android:name=".TimePlanActivity" android:exported="false" />
         <activity android:name=".TimePlanExecutionActivity" android:exported="false" />
         <activity android:name=".UserProfileActivity" android:exported="false" />
@@ -133,6 +134,8 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <service android:name=".notification.ChecklistMusicAlarmService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
+        <receiver android:name=".notification.ChecklistActionReceiver" android:exported="false" />
         <receiver android:name=".notification.ChecklistAlarmReceiver" android:exported="false" />
         <receiver android:name=".notification.TimePlanActionAlarmReceiver" android:exported="false" />
         <receiver android:name=".notification.TimePlanActionCompleteReceiver" android:exported="false" />

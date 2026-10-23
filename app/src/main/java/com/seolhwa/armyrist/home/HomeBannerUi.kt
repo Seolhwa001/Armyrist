@@ -99,10 +99,20 @@ fun HomeBannerSettingsPanel() {
         Text("시간계획을 연결하거나 안내문을 직접 게시할 수 있어요.",
             style = MaterialTheme.typography.bodySmall, color = ArmyristColors.SecondaryText)
         Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) { Text("달력 배너 위젯", fontWeight=FontWeight.SemiBold); Text("홈에서 날짜별 일정 보기 · 접기 상태 유지",style=MaterialTheme.typography.bodySmall) }
+            Switch(checked=draft.calendarEnabled,onCheckedChange={draft=draft.copy(calendarEnabled=it)})
+        }
+        HorizontalDivider(Modifier.padding(vertical=10.dp))
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+            Column(Modifier.weight(1f)){Text("홈 간결 모드",fontWeight=FontWeight.Bold);Text("달력 요약과 업무 도구를 한 화면에 표시",style=MaterialTheme.typography.bodySmall)}
+            Switch(checked=draft.compactHome,onCheckedChange={draft=draft.copy(compactHome=it)})
+        }
+        Text("시간계획·안내 배너",fontWeight=FontWeight.SemiBold)
         HomeBannerMode.entries.forEach { mode ->
             Row(Modifier.fillMaxWidth().clickable { draft = draft.copy(mode = mode) }, verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(selected = draft.mode == mode, onClick = { draft = draft.copy(mode = mode) })
-                Text(when (mode) { HomeBannerMode.TIME_PLAN -> "시간계획 연동"; HomeBannerMode.NOTICE -> "직접 작성한 안내문"; HomeBannerMode.HIDDEN -> "배너 숨김" })
+                Text(when (mode) { HomeBannerMode.TIME_PLAN -> "시간계획 연동"; HomeBannerMode.NOTICE -> "직접 작성한 안내문"; HomeBannerMode.HIDDEN -> "시간계획·안내 배너 숨김" })
             }
         }
         if (draft.mode == HomeBannerMode.TIME_PLAN) {

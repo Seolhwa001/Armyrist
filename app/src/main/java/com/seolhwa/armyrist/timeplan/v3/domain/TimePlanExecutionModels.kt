@@ -31,7 +31,8 @@ data class TimePlanActionItem(
     val note: String? = null,
     val order: Int = 0,
     val createdAt: String = System.currentTimeMillis().toString(),
-    val updatedAt: String = System.currentTimeMillis().toString()
+    val updatedAt: String = System.currentTimeMillis().toString(),
+    val markerColor: String = "#111111"
 ) {
     init {
         require(id.isNotBlank())

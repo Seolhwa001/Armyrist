@@ -247,7 +247,7 @@ class WifiDirectTransferActivity : ComponentActivity() {
             }
 
             incoming?.let { bytes ->
-                AlertDialog(
+                ArmyristDialog(
                     onDismissRequest = { incoming = null },
                     title = { Text("낄롬리스 데이터 수신") },
                     text = {

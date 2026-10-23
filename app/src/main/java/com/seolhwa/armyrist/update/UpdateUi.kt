@@ -1,4 +1,5 @@
 package com.seolhwa.armyrist.update
+import com.seolhwa.armyrist.ArmyristDialog
 
 import android.content.Intent
 import android.widget.Toast
@@ -50,7 +51,7 @@ fun AutoUpdateCheckHost(
     }
 
     available?.let { release ->
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { available = null },
             shape = ArmyristPanelShape,
             containerColor = ArmyristColors.RaisedSurface,

@@ -106,7 +106,7 @@ class NearbyTransferActivity : ComponentActivity() {
             }
 
             incoming?.let { bytes ->
-                AlertDialog(
+                ArmyristDialog(
                     onDismissRequest = { incoming = null },
                     title = { Text("낄롬리스 데이터 수신") },
                     text = { Text("${incomingFrom.ifBlank { "주변 기기" }}에서 ${bytes.size} bytes의 데이터를 받았습니다. 내용을 확인하시겠습니까?") },

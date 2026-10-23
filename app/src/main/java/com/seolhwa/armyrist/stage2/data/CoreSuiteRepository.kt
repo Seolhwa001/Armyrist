@@ -1,4 +1,5 @@
 package com.seolhwa.armyrist.stage2.data
+import com.seolhwa.armyrist.timeplan.v3.domain.ActionNotificationMode
 
 import android.content.Context
 import com.seolhwa.armyrist.stage2.domain.*
@@ -8,6 +9,23 @@ import java.util.UUID
 import com.seolhwa.armyrist.ui.reorderedByIds
 
 class CoreSuiteRepository(context: Context) {
+    private val appContext=context.applicationContext
+    private val notificationChanges=kotlinx.coroutines.flow.MutableStateFlow(0L)
+    val notificationCompletionRevision:kotlinx.coroutines.flow.StateFlow<Long> = notificationChanges
+
+    @Synchronized
+    fun completeItemFromNotification(listId:String,itemId:String):Boolean {
+        val raw=prefs.getString(snapshotKey,null) ?: return false
+        val persisted=runCatching{val root=JSONObject(raw);val array=root.getJSONArray("checklists");List(array.length()){checklistFromJson(array.getJSONObject(it))}}.getOrNull() ?: return false
+        if(persisted.firstOrNull{it.id==listId}?.items?.none{it.id==itemId}!=false)return false
+        reloadFromPersistence()
+        val item=getChecklist(listId)?.items?.find{it.id==itemId} ?: return false
+        if(item.status!=ChecklistStatus.COMPLETE && !setChecklistStatus(listId,itemId,ChecklistStatus.COMPLETE))return false
+        com.seolhwa.armyrist.notification.ChecklistNotificationManager.cancel(appContext,itemId)
+        notificationChanges.value++
+        return true
+    }
+
     private val prefs = context.getSharedPreferences(
         "armyrist_stage2_core",
         Context.MODE_PRIVATE
@@ -73,10 +91,9 @@ class CoreSuiteRepository(context: Context) {
             it.groupId == null || it.groupId in groupIds
         })
 
-        checklists = checklists.map {
-            if (it.id == id) next else it
-        }
-        persist()
+        val previous = checklists
+        checklists = checklists.map { if (it.id == id) next else it }
+        if (!persistChecked()) { checklists = previous; return null }
         return next
     }
 
@@ -139,6 +156,19 @@ class CoreSuiteRepository(context: Context) {
     }
 
     @Synchronized
+    fun saveCalendarItem(listId: String?, title: String, name: String, note: String, enabled: Boolean, minutes: Int, date: String, mode: ActionNotificationMode = if(enabled) ActionNotificationMode.SIMPLE else ActionNotificationMode.NONE): Boolean {
+        if (name.isBlank() || minutes !in 0..1439 || runCatching { java.time.LocalDate.parse(date) }.isFailure) return false
+        val current = listId?.let(::getChecklist)
+        if (listId != null && current == null) return false
+        val list = current ?: Checklist(title = title.trim().ifBlank { "새 체크리스트" })
+        val item = ChecklistItem(checklistId=list.id, order=(list.items.maxOfOrNull { it.order } ?: -1)+1, name=name.trim(), note=note.trim(), notificationEnabled=enabled, scheduledTimeMinutes=minutes, scheduledDate=date, notificationMode=if(enabled)mode else ActionNotificationMode.NONE)
+        val next = list.copy(items=list.items+item,updatedAt=System.currentTimeMillis())
+        val previous = checklists
+        checklists = if(current == null) checklists+next else checklists.map { if(it.id == list.id) next else it }
+        if(!persistChecked()) { checklists=previous; return false }; return true
+    }
+
+    @Synchronized
     fun addChecklistItem(
         checklistId: String,
         name: String,
@@ -146,7 +176,9 @@ class CoreSuiteRepository(context: Context) {
         groupId: String? = null,
         notificationEnabled: Boolean = false,
         scheduledTimeMinutes: Int? = null,
-        notificationSoundUri: String? = null
+        notificationSoundUri: String? = null,
+        scheduledDate: String? = null,
+        notificationMode: ActionNotificationMode = if(notificationEnabled) ActionNotificationMode.SIMPLE else ActionNotificationMode.NONE
     ): Boolean {
         val normalized = name.trim().takeIf { it.isNotEmpty() } ?: return false
         val checklist = getChecklist(checklistId) ?: return false
@@ -164,7 +196,9 @@ class CoreSuiteRepository(context: Context) {
             note = note.trim(),
             notificationEnabled = notificationEnabled,
             scheduledTimeMinutes = scheduledTimeMinutes,
-            notificationSoundUri = notificationSoundUri
+            notificationSoundUri = notificationSoundUri,
+            scheduledDate = scheduledDate,
+            notificationMode = if(notificationEnabled)notificationMode else ActionNotificationMode.NONE
         )
 
         return updateChecklist(checklistId) {
@@ -181,7 +215,9 @@ class CoreSuiteRepository(context: Context) {
         groupId: String?,
         notificationEnabled: Boolean = false,
         scheduledTimeMinutes: Int? = null,
-        notificationSoundUri: String? = null
+        notificationSoundUri: String? = null,
+        scheduledDate: String? = null,
+        notificationMode: ActionNotificationMode = if(notificationEnabled) ActionNotificationMode.SIMPLE else ActionNotificationMode.NONE
     ): Boolean {
         val normalized = name.trim().takeIf { it.isNotEmpty() } ?: return false
         val checklist = getChecklist(checklistId) ?: return false
@@ -200,7 +236,9 @@ class CoreSuiteRepository(context: Context) {
                             groupId = groupId,
                             notificationEnabled = notificationEnabled,
                             scheduledTimeMinutes = scheduledTimeMinutes,
-                            notificationSoundUri = notificationSoundUri
+                            notificationSoundUri = notificationSoundUri,
+            scheduledDate = scheduledDate,
+            notificationMode = if(notificationEnabled)notificationMode else ActionNotificationMode.NONE
                         )
                     } else it
                 }
@@ -677,8 +715,10 @@ class CoreSuiteRepository(context: Context) {
                             .put("status", item.status.name)
                             .put("note", item.note)
                             .put("notificationEnabled", item.notificationEnabled)
+                            .put("notificationMode", item.notificationMode.name)
                             .put("scheduledTimeMinutes", item.scheduledTimeMinutes ?: JSONObject.NULL)
                             .put("notificationSoundUri", item.notificationSoundUri ?: JSONObject.NULL)
+                            .put("scheduledDate", item.scheduledDate ?: JSONObject.NULL)
                     )
                 }
             })
@@ -694,8 +734,10 @@ class CoreSuiteRepository(context: Context) {
                             .put("status", item.status.name)
                             .put("note", item.note)
                             .put("notificationEnabled", item.notificationEnabled)
+                            .put("notificationMode", item.notificationMode.name)
                             .put("scheduledTimeMinutes", item.scheduledTimeMinutes ?: JSONObject.NULL)
                             .put("notificationSoundUri", item.notificationSoundUri ?: JSONObject.NULL)
+                            .put("scheduledDate", item.scheduledDate ?: JSONObject.NULL)
                     )
                 }
             })
@@ -733,10 +775,12 @@ class CoreSuiteRepository(context: Context) {
                     ),
                     note = item.optString("note", ""),
                     notificationEnabled = item.optBoolean("notificationEnabled", false),
+                    notificationMode = runCatching { ActionNotificationMode.valueOf(item.getString("notificationMode")) }.getOrDefault(if(item.optBoolean("notificationEnabled", false)) ActionNotificationMode.SIMPLE else ActionNotificationMode.NONE),
                     scheduledTimeMinutes = if (item.isNull("scheduledTimeMinutes")) null
                     else item.optInt("scheduledTimeMinutes"),
                     notificationSoundUri = if (item.isNull("notificationSoundUri")) null
-                    else item.optString("notificationSoundUri")
+                    else item.optString("notificationSoundUri"),
+                    scheduledDate = item.optString("scheduledDate").takeIf { runCatching { java.time.LocalDate.parse(it) }.isSuccess }
                 )
             },
             deletedItems = List(deletedItems.length()) { index ->
@@ -753,10 +797,12 @@ class CoreSuiteRepository(context: Context) {
                     ),
                     note = item.optString("note", ""),
                     notificationEnabled = item.optBoolean("notificationEnabled", false),
+                    notificationMode = runCatching { ActionNotificationMode.valueOf(item.getString("notificationMode")) }.getOrDefault(if(item.optBoolean("notificationEnabled", false)) ActionNotificationMode.SIMPLE else ActionNotificationMode.NONE),
                     scheduledTimeMinutes = if (item.isNull("scheduledTimeMinutes")) null
                     else item.optInt("scheduledTimeMinutes"),
                     notificationSoundUri = if (item.isNull("notificationSoundUri")) null
-                    else item.optString("notificationSoundUri")
+                    else item.optString("notificationSoundUri"),
+                    scheduledDate = item.optString("scheduledDate").takeIf { runCatching { java.time.LocalDate.parse(it) }.isSuccess }
                 )
             },
             createdAt = value.getLong("createdAt"),

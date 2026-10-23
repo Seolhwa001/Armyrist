@@ -1,4 +1,5 @@
 package com.seolhwa.armyrist.handicap
+import com.seolhwa.armyrist.ArmyristDialog
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -133,28 +134,28 @@ internal fun HandicapRoot(onClose: () -> Unit) {
             }
         }
     }
-    if (issuerPicker) AlertDialog(onDismissRequest = { issuerPicker = false }, title = { Text("상황부여 제대 선택") }, text = {
+    if (issuerPicker) ArmyristDialog(onDismissRequest = { issuerPicker = false }, title = { Text("상황부여 제대 선택") }, text = {
         val choices = (listOf(config.issuer) + config.upper + config.lower).filter { it.name.isNotBlank() }.distinctBy { it.name to it.phone }
         Column(Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState())) {
             choices.forEach { unit -> TextButton(onClick = { update(draft.copy(issuer = unit)); issuerPicker = false }, modifier = Modifier.fillMaxWidth()) { Text(unit.name) } }
             OutlinedButton(onClick = { issuerName = draft.issuer.name; issuerPhone = draft.issuer.phone; issuerPicker = false; issuerOpen = true }, modifier = Modifier.fillMaxWidth()) { Text("직접 입력") }
         }
     }, confirmButton = { TextButton(onClick = { issuerPicker = false }) { Text("닫기") } })
-    if (timePicker) AlertDialog(onDismissRequest = { timePicker = false }, title = { Text("등록된 시각") }, text = {
+    if (timePicker) ArmyristDialog(onDismissRequest = { timePicker = false }, title = { Text("등록된 시각") }, text = {
         Column(Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState())) {
             config.words[WordCategory.WHEN].orEmpty().forEach { word -> TextButton(onClick = { update(draft.copy(whenText = word.text)); timePicker = false }, modifier = Modifier.fillMaxWidth()) { Text(word.text) } }
         }
     }, confirmButton = { TextButton(onClick = { timePicker = false }) { Text("닫기") } })
-    if (timeOpen) AlertDialog(onDismissRequest = { timeOpen = false }, title = { Text("발생 시각 직접입력") }, text = {
+    if (timeOpen) ArmyristDialog(onDismissRequest = { timeOpen = false }, title = { Text("발생 시각 직접입력") }, text = {
         OutlinedTextField(manualTime, { manualTime = it.take(120) }, label = { Text("예: 오늘 18시 30분 / 10월 21일 09:00") }, modifier = Modifier.fillMaxWidth())
     }, confirmButton = { TextButton(enabled = manualTime.isNotBlank(), onClick = { update(draft.copy(whenText = manualTime.trim())); timeOpen = false }) { Text("적용") } }, dismissButton = { TextButton(onClick = { timeOpen = false }) { Text("취소") } })
-    if (issuerOpen) AlertDialog(onDismissRequest = { issuerOpen = false }, title = { Text("상황부여 제대") }, text = {
+    if (issuerOpen) ArmyristDialog(onDismissRequest = { issuerOpen = false }, title = { Text("상황부여 제대") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(issuerName, { issuerName = it.take(60) }, label = { Text("제대명") }, singleLine = true)
             OutlinedTextField(issuerPhone, { issuerPhone = it.take(40) }, label = { Text("전화번호 (선택)") }, singleLine = true)
         }
     }, confirmButton = { TextButton(enabled = issuerName.isNotBlank(), onClick = { update(draft.copy(issuer = UnitContact(issuerName.trim(), issuerPhone.trim()))); issuerOpen = false }) { Text("적용") } }, dismissButton = { TextButton(onClick = { issuerOpen = false }) { Text("취소") } })
-    if (clearOpen) AlertDialog(onDismissRequest = { clearOpen = false }, title = { Text("새 상황을 입력할까요?") }, text = { Text("선택한 단어와 발생 시각을 지웁니다. 제대 설정과 단어 버튼은 유지합니다.") },
+    if (clearOpen) ArmyristDialog(onDismissRequest = { clearOpen = false }, title = { Text("새 상황을 입력할까요?") }, text = { Text("선택한 단어와 발생 시각을 지웁니다. 제대 설정과 단어 버튼은 유지합니다.") },
         confirmButton = { TextButton(onClick = { update(SituationDraft()); resultOpen = false; clearOpen = false }) { Text("초기화") } }, dismissButton = { TextButton(onClick = { clearOpen = false }) { Text("취소") } })
     if (resultOpen) SituationResultDialog(
         kind = draft.kind ?: HandicapKind.BLACK,
@@ -236,7 +237,7 @@ private fun HandicapSettings(initial: HandicapConfig, onSave: (HandicapConfig) -
     }
     editingCategory?.let { category ->
         val duplicate = config.words[category].orEmpty().any { it.id != editingId && it.text == wordText.trim() }
-        AlertDialog(onDismissRequest = { editingCategory = null }, title = { Text("${category.title} 항목 ${if (editingId == null) "추가" else "수정"}") }, text = {
+        ArmyristDialog(onDismissRequest = { editingCategory = null }, title = { Text("${category.title} 항목 ${if (editingId == null) "추가" else "수정"}") }, text = {
             OutlinedTextField(wordText, { wordText = it.take(80) }, label = { Text("버튼에 표시할 단어") }, isError = duplicate, supportingText = { if (duplicate) Text("같은 이름의 항목이 있습니다.") })
         }, confirmButton = { TextButton(enabled = wordText.isNotBlank() && !duplicate, onClick = {
             val words = config.words[category].orEmpty().toMutableList()
@@ -246,10 +247,10 @@ private fun HandicapSettings(initial: HandicapConfig, onSave: (HandicapConfig) -
             change(config.copy(words = config.words + (category to words))); editingCategory = null
         }) { Text("적용") } }, dismissButton = { TextButton(onClick = { editingCategory = null }) { Text("취소") } })
     }
-    deleteWord?.let { (category, word) -> AlertDialog(onDismissRequest = { deleteWord = null }, title = { Text("버튼을 삭제할까요?") }, text = { Text(word.text) }, confirmButton = {
+    deleteWord?.let { (category, word) -> ArmyristDialog(onDismissRequest = { deleteWord = null }, title = { Text("버튼을 삭제할까요?") }, text = { Text(word.text) }, confirmButton = {
         TextButton(onClick = { change(config.copy(words = config.words + (category to config.words[category].orEmpty().filter { it.id != word.id }))); deleteWord = null }) { Text("삭제") }
     }, dismissButton = { TextButton(onClick = { deleteWord = null }) { Text("취소") } }) }
-    if (discard) AlertDialog(onDismissRequest = { discard = false }, title = { Text("저장하지 않고 나갈까요?") }, text = { Text("수정한 설정은 저장되지 않습니다.") }, confirmButton = { TextButton(onClick = onBack) { Text("나가기") } }, dismissButton = { TextButton(onClick = { discard = false }) { Text("계속 편집") } })
+    if (discard) ArmyristDialog(onDismissRequest = { discard = false }, title = { Text("저장하지 않고 나갈까요?") }, text = { Text("수정한 설정은 저장되지 않습니다.") }, confirmButton = { TextButton(onClick = onBack) { Text("나가기") } }, dismissButton = { TextButton(onClick = { discard = false }) { Text("계속 편집") } })
 }
 @Composable
 private fun UnitFields(value: UnitContact, onChange: (UnitContact) -> Unit) {
@@ -330,7 +331,7 @@ private fun CompactWords(category: WordCategory, words: List<SituationWord>, sel
             }
         }
     }
-    if (expanded) AlertDialog(onDismissRequest = { expanded = false }, title = { Text("${category.title} · 여러 개 선택") }, text = {
+    if (expanded) ArmyristDialog(onDismissRequest = { expanded = false }, title = { Text("${category.title} · 여러 개 선택") }, text = {
         Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
             all.forEach { text -> FilterChip(selected = text in selected, onClick = { onSelect(text) }, label = { Text(text) }) }
             if (all.isEmpty()) Text("설정에서 항목을 추가해주세요.")

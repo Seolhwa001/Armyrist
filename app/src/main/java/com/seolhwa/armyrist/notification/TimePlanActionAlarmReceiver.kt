@@ -41,37 +41,8 @@ class TimePlanActionAlarmReceiver : BroadcastReceiver() {
             action.scheduledDateTime.format(DateTimeFormatter.ofPattern("HH:mm"))
         val secondaryText = "${plan.title} · ${scheduledText} 예정"
 
-        val notification = NotificationCompat.Builder(
-            context,
-            TimePlanActionNotificationManager.channelId(action)
-        )
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle(action.content)
-            .setContentText(secondaryText)
-            .setStyle(
-                NotificationCompat.BigTextStyle()
-                    .setBigContentTitle(action.content)
-                    .bigText(secondaryText)
-            )
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_REMINDER)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setWhen(System.currentTimeMillis())
-            .setShowWhen(true)
-            .setAutoCancel(true)
-            .setContentIntent(
-                TimePlanActionNotificationManager.openActionPendingIntent(
-                    context,
-                    plan.id,
-                    action.id
-                )
-            )
-            .addAction(
-                android.R.drawable.checkbox_on_background,
-                "할 일 완료",
-                TimePlanActionNotificationManager.completeActionPendingIntent(context, plan.id, action.id)
-            )
-            .build()
+        val notification = TaskReminderNotification.build(context,TimePlanActionNotificationManager.channelId(action),action.content,secondaryText,
+            TimePlanActionNotificationManager.openActionPendingIntent(context,plan.id,action.id),TimePlanActionNotificationManager.completeActionPendingIntent(context,plan.id,action.id))
 
         context.getSystemService(NotificationManager::class.java)
             .notify(("${plan.id}|${action.id}".hashCode() and 0x7fffffff), notification)

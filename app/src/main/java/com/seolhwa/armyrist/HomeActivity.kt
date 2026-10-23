@@ -1,5 +1,8 @@
 package com.seolhwa.armyrist
 
+import com.seolhwa.armyrist.calendar.CalendarActivity
+import com.seolhwa.armyrist.calendar.HomeCalendarCard
+import androidx.compose.material.icons.outlined.CalendarMonth
 import android.content.Intent
 import android.content.BroadcastReceiver
 import android.content.IntentFilter
@@ -127,6 +130,12 @@ private fun HomeScreen(
     val context = LocalContext.current
     val bannerPreferences = remember(context) { HomeBannerPreferences(context) }
     val bannerConfig = remember(revision) { bannerPreferences.load() }
+    if(bannerConfig.compactHome) {
+        com.seolhwa.armyrist.home.CompactHome(revision,bannerConfig,onTool={id->when(id){
+            "counting"->onCounting();"checklist"->onChecklist();"timeplan"->onTimePlan();"report"->onReportTemplate();"handicap"->onHandicap();else->context.startActivity(Intent(context,CalendarActivity::class.java))
+        }},onSettings=onUserProfile,onData=onDataManagement)
+        return
+    }
     val homeListState = rememberLazyListState()
     var homeViewport by remember { mutableStateOf(Rect.Zero) }
 
@@ -150,8 +159,17 @@ private fun HomeScreen(
                 ArmyristHelpButton(ArmyristHelpTopic.HOME)
             }
         }
+        if (bannerConfig.calendarEnabled) {
+            item { HomeCalendarCard(revision) { date -> context.startActivity(Intent(context, CalendarActivity::class.java).putExtra("calendarDate", date.toString())) } }
+        }
         if (bannerConfig.mode != HomeBannerMode.HIDDEN) {
-            item { HomeBannerCard(bannerConfig, onTimePlan, onUserProfile) }
+            item {
+                var expanded by remember { mutableStateOf(bannerConfig.mode == HomeBannerMode.NOTICE) }
+                Column {
+                    TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "계획 배너 접기 ∧" else "현재 계획·다음 실시사항 보기 ∨") }
+                    if (expanded) HomeBannerCard(bannerConfig, onTimePlan, onUserProfile)
+                }
+            }
         }
         item { ArmyristSectionLabel("업무 도구 · 길게 눌러 배치 변경") }
         item {
@@ -160,12 +178,13 @@ private fun HomeScreen(
                     "counting" -> onCounting
                     "checklist" -> onChecklist
                     "timeplan" -> onTimePlan
+                    "calendar" -> { { context.startActivity(Intent(context, CalendarActivity::class.java)) } }
                     "report" -> onReportTemplate
                     else -> onHandicap
                 }
-                val title = when (id) { "counting" -> "실셈"; "checklist" -> "체크리스트"; "timeplan" -> "시간계획"; "report" -> "보고 양식"; else -> "핸디캡 상황" }
-                val subtitle = when (id) { "counting" -> "수량 기록과 집계"; "checklist" -> "점검과 진행 현황"; "timeplan" -> "일정과 실시사항"; "report" -> "결과 작성과 공유"; else -> "단어 선택과 연락 안내" }
-                val icon = when (id) { "counting" -> Icons.Outlined.FormatListNumbered; "checklist" -> Icons.Outlined.FactCheck; "timeplan" -> Icons.Outlined.Schedule; "report" -> Icons.Outlined.Description; else -> Icons.Outlined.PhoneInTalk }
+                val title = when (id) { "counting" -> "실셈"; "checklist" -> "체크리스트"; "timeplan" -> "시간계획"; "calendar" -> "달력"; "report" -> "보고 양식"; else -> "핸디캡 상황" }
+                val subtitle = when (id) { "counting" -> "수량 기록과 집계"; "checklist" -> "점검과 진행 현황"; "timeplan" -> "일정과 실시사항"; "calendar" -> "모든 일정 한눈에 보기"; "report" -> "결과 작성과 공유"; else -> "단어 선택과 연락 안내" }
+                val icon = when (id) { "counting" -> Icons.Outlined.FormatListNumbered; "checklist" -> Icons.Outlined.FactCheck; "timeplan" -> Icons.Outlined.Schedule; "calendar" -> Icons.Outlined.CalendarMonth; "report" -> Icons.Outlined.Description; else -> Icons.Outlined.PhoneInTalk }
                 HomeToolPanel(title, subtitle, icon, { if (!dragging) action() }, modifier)
             }
         }

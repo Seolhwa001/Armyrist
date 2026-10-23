@@ -1,6 +1,7 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.seolhwa.armyrist.timeplan.v3.ui
+import com.seolhwa.armyrist.ArmyristDialog
 
 import android.view.HapticFeedbackConstants
 import androidx.activity.compose.BackHandler
@@ -22,6 +23,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.DragIndicator
 import androidx.compose.material.icons.outlined.Edit
@@ -36,6 +39,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -47,6 +54,11 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.font.FontWeight
@@ -90,9 +102,15 @@ fun DateAwareTimePlanApp(
     coreRepository: CoreSuiteRepository,
     trashRepository: CommonTrashRepository,
     onHome: () -> Unit,
+    initialPlanId: String? = null,
+    initialNodeId: String? = null,
     onOpenExecution: (String, String, Set<String>) -> Unit
 ) {
-    var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
+    val notificationContext = LocalContext.current
+    val notificationPermission = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) {
+        com.seolhwa.armyrist.notification.TimePlanActionNotificationManager.reconcile(notificationContext, repository)
+    }
+    var selectedId by rememberSaveable { mutableStateOf(initialPlanId) }
     var selectedLegacyId by rememberSaveable { mutableStateOf<String?>(null) }
     var sharingId by rememberSaveable { mutableStateOf<String?>(null) }
     var trashOpen by rememberSaveable { mutableStateOf(false) }
@@ -122,6 +140,11 @@ fun DateAwareTimePlanApp(
             },
             onRestore = { item ->
                 when (item.payloadVersion) {
+                    com.seolhwa.armyrist.timeplan.v3.data.TimelineTrash.VERSION -> {
+                        if(com.seolhwa.armyrist.timeplan.v3.data.TimelineTrash.restore(repository,item.payload)) {
+                            trashRepository.permanentlyDelete(item.id);revision++
+                        } else trashMessage="선택 항목을 복원하지 못했습니다. 원래 시간계획이 있는지 확인해주세요."
+                    }
                     LEGACY_TRASH_PAYLOAD_VERSION -> {
                         if (legacyRepository.restoreTrashPayload(item.payload)) {
                             trashRepository.permanentlyDelete(item.id)
@@ -164,7 +187,7 @@ fun DateAwareTimePlanApp(
         )
 
         trashMessage?.let { message ->
-            AlertDialog(
+            ArmyristDialog(
                 onDismissRequest = { trashMessage = null },
                 shape = ArmyristPanelShape,
                 containerColor = ArmyristColors.RaisedSurface,
@@ -332,6 +355,15 @@ fun DateAwareTimePlanApp(
             plan = selected,
             onHome = onHome,
             onBack = { selectedId = null },
+            onSaveAction = { action -> repository.saveAction(selected.id, action).also { saved ->
+                if(saved) {
+                    revision++
+                    if(action.notificationMode != ActionNotificationMode.NONE && android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(notificationContext, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                        notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                }
+            } },
+            onTrashSelection = { keys -> com.seolhwa.armyrist.timeplan.v3.data.TimelineTrash.move(repository,trashRepository,selected.id,keys).also{if(it)revision++} },
+            initialNodeId = initialNodeId,
             onResult = { sharingId = selected.id },
             onOpenExecution = { mode, pointIds -> onOpenExecution(selected.id, mode, pointIds) },
             onDeleteEvent = { eventId ->
@@ -418,6 +450,7 @@ private fun DateAwarePlanList(
     var openedFolderId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedPlanIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
     val selectionMode = selectedPlanIds.isNotEmpty()
+    var batchDeleteOpen by remember { mutableStateOf(false) }
     var createFolderDialog by remember { mutableStateOf(false) }
     var moveFolderDialog by remember { mutableStateOf(false) }
     var folderMenuTarget by remember { mutableStateOf<ArmyristCollectionFolder?>(null) }
@@ -521,6 +554,36 @@ private fun DateAwarePlanList(
                 else currentFolder.memberIds
             order.mapNotNull(byId::get)
         }
+    }
+
+    var selectionViewport by remember { mutableStateOf(Rect.Zero) }
+    var painting by remember { mutableStateOf(false) }
+    var paintRootY by remember { mutableFloatStateOf(0f) }
+    var paintAnchor by remember { mutableStateOf<String?>(null) }
+    var paintBefore by remember { mutableStateOf(emptySet<String>()) }
+    var paintVisited by remember { mutableStateOf(emptySet<String>()) }
+    var paintSelecting by remember { mutableStateOf(true) }
+    val currentSelected by rememberUpdatedState(selectedPlanIds)
+    val currentVisible by rememberUpdatedState(visiblePlansForFolder().map { it.id })
+    fun paintPlans() {
+        val y=paintRootY-selectionViewport.top
+        val rows=listState.layoutInfo.visibleItemsInfo.filter { (it.key as? String)?.startsWith("v3-")==true }
+        val target=rows.minByOrNull { info ->
+            when { y<info.offset -> info.offset-y; y>info.offset+info.size -> y-info.offset-info.size; else -> 0f }
+        }?.key?.toString()?.removePrefix("v3-") ?: return
+        val from=currentVisible.indexOf(paintAnchor);val to=currentVisible.indexOf(target)
+        if(from<0 || to<0)return
+        val crossed=currentVisible.subList(minOf(from,to),maxOf(from,to)+1).toSet()
+        paintVisited=paintVisited+crossed
+        selectedPlanIds=(if(paintSelecting)paintBefore+paintVisited else paintBefore-paintVisited).toList()
+    }
+    LaunchedEffect(painting) {
+        if(painting) { var previous=withFrameNanos{it};while(painting) {
+            val frame=withFrameNanos{it};val seconds=((frame-previous)/1_000_000_000f).coerceAtMost(.05f);previous=frame
+            val edge=with(density){56.dp.toPx()};val y=paintRootY-selectionViewport.top
+            val speed=when{y<edge -> -((edge-y)/edge).coerceIn(0f,1f); y>selectionViewport.height-edge -> ((y-selectionViewport.height+edge)/edge).coerceIn(0f,1f);else -> 0f}
+            if(speed!=0f){listState.scrollBy(speed*with(density){600.dp.toPx()}*seconds);paintPlans()}
+        }}
     }
 
     fun reorderPlanAtFinger(planId: String): Boolean {
@@ -688,6 +751,7 @@ private fun DateAwarePlanList(
                         }
                         Button(
                             onClick = { createFolderDialog = true },
+                            contentPadding = PaddingValues(horizontal = 8.dp),
                             modifier = Modifier.weight(1f).heightIn(min = 52.dp),
                             shape = ArmyristPanelShape,
                             colors = ButtonDefaults.buttonColors(
@@ -697,7 +761,7 @@ private fun DateAwarePlanList(
                         ) {
                             Icon(Icons.Outlined.Folder, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
-                            Text("폴더로 묶기", fontWeight = FontWeight.Bold)
+                            Text("폴더", fontWeight = FontWeight.Bold, maxLines = 1)
                         }
                         OutlinedButton(
                             onClick = { moveFolderDialog = true },
@@ -706,6 +770,9 @@ private fun DateAwarePlanList(
                             border = BorderStroke(1.dp, ArmyristColors.SoftBorder)
                         ) {
                             Icon(Icons.Outlined.DriveFileMove, contentDescription = "이동")
+                        }
+                        FilledTonalIconButton(onClick={batchDeleteOpen=true},modifier=Modifier.size(52.dp)) {
+                            Icon(Icons.Outlined.DeleteOutline,contentDescription="선택한 시간계획 휴지통으로 이동",tint=ArmyristColors.Danger)
                         }
                     }
                 } else {
@@ -780,7 +847,7 @@ private fun DateAwarePlanList(
         } else {
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize().padding(padding).onGloballyPositioned{selectionViewport=it.boundsInRoot()}.semantics{contentDescription="시간계획 목록"},
                 contentPadding = PaddingValues(14.dp, 10.dp, 14.dp, 24.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
@@ -1062,6 +1129,7 @@ private fun DateAwarePlanList(
                     val autoScrollThresholdPx = with(density) { 112.dp.toPx() }
                     val maxAutoScrollPx = with(density) { 46.dp.toPx() }
 
+                    var titleBounds by remember(plan.id){mutableStateOf(Rect.Zero)}
                     val isSelected = plan.id in selectedPlanIds
                     val isRunning = TimePlanLiveStatus.isActive(plan, liveNow)
 
@@ -1101,8 +1169,8 @@ private fun DateAwarePlanList(
                         ),
                         colors = CardDefaults.cardColors(
                             containerColor =
-                                if (isRunning) ArmyristColors.LiveSurface
-                                else if (isSelected) ArmyristColors.SecondaryControl
+                                if (isSelected) ArmyristColors.SecondaryControl
+                                else if (isRunning) ArmyristColors.LiveSurface
                                 else ArmyristColors.RaisedSurface
                         )
                     ) {
@@ -1196,9 +1264,9 @@ private fun DateAwarePlanList(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    Icons.Outlined.DragIndicator,
-                                    contentDescription = "순서 변경 핸들",
-                                    tint = if (isDragging) {
+                                    if(selectionMode) { if(isSelected)Icons.Outlined.CheckCircle else Icons.Outlined.RadioButtonUnchecked } else Icons.Outlined.DragIndicator,
+                                    contentDescription = if(selectionMode) { if(isSelected)"선택됨" else "선택 안 됨" } else "순서 변경 핸들",
+                                    tint = if (isDragging || isSelected) {
                                         ArmyristColors.PrimaryControl
                                     } else {
                                         ArmyristColors.MutedText
@@ -1210,20 +1278,23 @@ private fun DateAwarePlanList(
                                 modifier = Modifier
                                     .weight(1f)
                                     .padding(start = 6.dp)
-                                    .pointerInput(plan.id, selectionMode) {
-                                        detectTapGestures(
-                                            onTap = {
-                                                if (selectionMode) togglePlanSelection(plan.id)
-                                                else if (draggingPlanId == null) onOpen(plan.id)
+                                    .onGloballyPositioned{titleBounds=it.boundsInRoot()}
+                                    .semantics{contentDescription="시간계획 선택 ${plan.title}";selected=isSelected}
+                                    .pointerInput(plan.id) {
+                                        detectTapGestures(onTap={
+                                            if(currentSelected.isNotEmpty())togglePlanSelection(plan.id)
+                                            else if(draggingPlanId==null)onOpen(plan.id)
+                                        })
+                                    }
+                                    .pointerInput(plan.id,openedFolderId) {
+                                        detectDragGesturesAfterLongPress(
+                                            onDragStart={point ->
+                                                paintBefore=currentSelected.toSet();paintVisited=emptySet();paintAnchor=plan.id
+                                                paintSelecting=plan.id !in paintBefore;paintRootY=titleBounds.top+point.y
+                                                painting=true;paintPlans();view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                                             },
-                                            onLongPress = {
-                                                if (draggingPlanId == null) {
-                                                    togglePlanSelection(plan.id)
-                                                    view.performHapticFeedback(
-                                                        HapticFeedbackConstants.LONG_PRESS
-                                                    )
-                                                }
-                                            }
+                                            onDrag={change,delta -> change.consume();paintRootY+=delta.y;paintPlans()},
+                                            onDragEnd={painting=false},onDragCancel={painting=false}
                                         )
                                     },
                                 verticalArrangement = Arrangement.Center
@@ -1353,7 +1424,7 @@ private fun DateAwarePlanList(
     }
 
     if (moveFolderDialog) {
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { moveFolderDialog = false },
             shape = ArmyristPanelShape,
             containerColor = ArmyristColors.RaisedSurface,
@@ -1413,7 +1484,7 @@ private fun DateAwarePlanList(
     }
 
     folderMenuTarget?.let { folder ->
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { folderMenuTarget = null },
             shape = ArmyristPanelShape,
             containerColor = ArmyristColors.RaisedSurface,
@@ -1493,7 +1564,7 @@ private fun DateAwarePlanList(
     }
 
     deleteFolderTarget?.let { folder ->
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { deleteFolderTarget = null },
             shape = ArmyristPanelShape,
             containerColor = ArmyristColors.RaisedSurface,
@@ -1542,7 +1613,7 @@ private fun DateAwarePlanList(
     }
 
     legacyDeleteTarget?.let { (id, title) ->
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { legacyDeleteTarget = null },
             shape = ArmyristPanelShape,
             containerColor = ArmyristColors.RaisedSurface,
@@ -1587,8 +1658,20 @@ private fun DateAwarePlanList(
         )
     }
 
+    if(batchDeleteOpen)ArmyristDialog(
+        onDismissRequest={batchDeleteOpen=false},
+        title={Text("시간계획 ${selectedPlanIds.size}개 삭제")},
+        text={Text("선택한 시간계획과 그 안의 일정·실시사항을 휴지통으로 이동합니다. 휴지통에서 복구할 수 있습니다.")},
+        confirmButton={Button(onClick={
+            batchDeleteOpen=false
+            val ids=selectedPlanIds.toList();selectedPlanIds=emptyList()
+            ids.forEach(onDelete)
+        }){Text("휴지통으로 이동")}},
+        dismissButton={TextButton(onClick={batchDeleteOpen=false}){Text("취소")}}
+    )
+
     deleteTarget?.let { target ->
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { deleteTarget = null },
             shape = ArmyristPanelShape,
             containerColor = ArmyristColors.RaisedSurface,
@@ -1668,16 +1751,20 @@ private fun DateAwarePlanDetail(
     onResult: () -> Unit,
     onOpenExecution: (String, Set<String>) -> Unit,
     onDeleteEvent: (String) -> Boolean,
-    onCommit: (DateAwareTimePlan) -> Unit
+    onCommit: (DateAwareTimePlan) -> Unit,
+    onSaveAction: (TimePlanActionItem) -> Boolean,
+    onTrashSelection: (Set<String>) -> Boolean,
+    initialNodeId: String? = null
 ) {
-    var editStart by rememberSaveable(plan.id) { mutableStateOf(false) }
-    var editEnd by rememberSaveable(plan.id) { mutableStateOf(false) }
-    var editEvent by remember { mutableStateOf<DateTimeEvent?>(null) }
+    var editStart by rememberSaveable(plan.id) { mutableStateOf(initialNodeId == "START" && !plan.start.dateTimeLocked) }
+    var editEnd by rememberSaveable(plan.id) { mutableStateOf(initialNodeId == "END" && !plan.end.dateTimeLocked) }
+    var editEvent by remember { mutableStateOf(plan.orderedEvents().firstOrNull { it.id == initialNodeId && !it.dateTimeLocked }) }
     var editLink by remember { mutableStateOf<DateTimeLink?>(null) }
     var editTitle by rememberSaveable(plan.id) { mutableStateOf(false) }
     var editMemo by rememberSaveable(plan.id) { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var voiceDrafts by remember { mutableStateOf<List<TimePlanVoiceDraft>?>(null) }
+    var selectionTrashOpen by remember{mutableStateOf(false)}
     var selectionMode by rememberSaveable(plan.id) { mutableStateOf(false) }
     var selectedKeyList by rememberSaveable(plan.id) { mutableStateOf(emptyList<String>()) }
     val selectedKeys = selectedKeyList.toSet()
@@ -1736,10 +1823,24 @@ private fun DateAwarePlanDetail(
         view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
     }
 
-    BackHandler { requestNavigation("BACK") }
+    BackHandler { if(selectionMode){selectionMode=false;selectedKeyList=emptyList()}else requestNavigation("BACK") }
+    if(selectionTrashOpen) ArmyristDialog(onDismissRequest={selectionTrashOpen=false},title={Text("선택 항목을 휴지통으로 이동")},text={
+        val next=runCatching{TimelineSelection.remove(plan,selectedKeys)}.getOrNull()
+        val eventNames=plan.orderedEvents().filter{e->next?.orderedEvents()?.none{it.id==e.id}==true}.map{it.name}
+        val actionNames=plan.actions.filter{a->next?.actions?.none{it.id==a.id}==true}.map{it.content}
+        Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)){
+            Text("일정 ${eventNames.size}개 · 실시사항 ${actionNames.size}개")
+            (eventNames.map{"일정 · $it"}+actionNames.map{"실시사항 · $it"}).take(8).forEach{Text(it,style=MaterialTheme.typography.bodySmall)}
+            if(eventNames.size+actionNames.size>8)Text("외 ${eventNames.size+actionNames.size-8}개")
+            Text("시작·종료 지점은 유지합니다. 시간계획 목록의 휴지통에서 복원할 수 있습니다.")
+        }
+    },confirmButton={Button(onClick={
+        if(onTrashSelection(selectedKeys)){selectionMode=false;selectedKeyList=emptyList()}else message="휴지통 이동에 실패했습니다. 원본은 유지됩니다."
+        selectionTrashOpen=false
+    }){Text("휴지통으로")}},dismissButton={TextButton(onClick={selectionTrashOpen=false}){Text("취소")}})
 
     pendingDeleteEventId?.let { eventId ->
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = {
                 if (!deleteEventInProgress) pendingDeleteEventId = null
             },
@@ -1874,7 +1975,7 @@ private fun DateAwarePlanDetail(
                 }
             } else {
                 val allNodeSelectionKeys =
-                    DateTimePlanRules.nodeIds(plan).map(::nodeSelectionKey).toSet()
+                    DateTimePlanRules.nodeIds(plan).map(::nodeSelectionKey).toSet()+plan.actions.map{"A:${it.id}"}
                 SelectionActionPanel(
                     selectedKeys = selectedKeys,
                     allNodeSelectionKeys = allNodeSelectionKeys,
@@ -1888,7 +1989,7 @@ private fun DateAwarePlanDetail(
                     onLock = { applyLock(true) },
                     onUnlock = { applyLock(false) },
                     onActionEdit = {
-                        val nodeIds = selectedKeys.filter { it.startsWith("N:") }.map { it.removePrefix("N:") }.toSet()
+                        val nodeIds = selectedKeys.filter { it.startsWith("N:") }.map { it.removePrefix("N:") }.toSet()+plan.actions.filter{"A:${it.id}" in selectedKeys}.map{it.parentPointId}
                         if (nodeIds.isEmpty()) message = "실시사항을 편집할 지점을 선택해주세요."
                         else onOpenExecution(TimePlanExecutionActivity.MODE_PREPARE, nodeIds)
                     },
@@ -1896,7 +1997,11 @@ private fun DateAwarePlanDetail(
                         selectedKeyList = allNodeSelectionKeys.toList()
                     },
                     onClearNodes = {
-                        selectedKeyList = selectedKeys.filterNot { it.startsWith("N:") }
+                        selectedKeyList = emptyList()
+                    },
+                    onDelete = {
+                        val result=runCatching{TimelineSelection.remove(plan,selectedKeys)}
+                        if(result.isSuccess)selectionTrashOpen=true else message=result.exceptionOrNull()?.message ?: "삭제할 항목을 선택해주세요."
                     },
                     onDone = { selectionMode = false; selectedKeyList = emptyList() }
                 )
@@ -1944,6 +2049,8 @@ private fun DateAwarePlanDetail(
                     if (it.durationLocked) message = "고정된 경과시간입니다. 편집 모드에서 고정을 해제한 뒤 수정해주세요."
                     else editLink = it
                 },
+                onSaveAction = onSaveAction,
+                onSelectionKeys = { keys -> selectedKeyList=keys.toList();selectionMode=keys.isNotEmpty() },
                 onMemo = { editMemo = true },
                 onAddMid = {
                     val mids=plan.midwayEvents.sortedBy{it.order}
@@ -2031,7 +2138,7 @@ private fun DateAwarePlanDetail(
 
     pendingActionShift?.let { pending ->
         val (candidate, deltas) = pending
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { pendingActionShift = null },
             title = { Text("실시사항 시간 영향") },
             text = {
@@ -2072,7 +2179,7 @@ private fun DateAwarePlanDetail(
     }
 
     conflictDetail?.let { conflict ->
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { conflictDetail = null },
             title = { Text(conflictTitle(conflict.type)) },
             text = { Text(TimePlanConstraintEngine.messageFor(conflict)) },
@@ -2081,7 +2188,7 @@ private fun DateAwarePlanDetail(
     }
 
     pendingNavigation?.let { action ->
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { pendingNavigation = null },
             shape = ArmyristPanelShape,
             containerColor = ArmyristColors.RaisedSurface,
@@ -2133,7 +2240,7 @@ private fun DateAwarePlanDetail(
     }
 
     message?.let {
-        AlertDialog(
+        ArmyristDialog(
             onDismissRequest = { message = null },
             shape = ArmyristPanelShape,
             containerColor = ArmyristColors.RaisedSurface,
@@ -2201,6 +2308,7 @@ private fun SelectionActionPanel(
     onActionEdit: () -> Unit,
     onSelectAllNodes: () -> Unit,
     onClearNodes: () -> Unit,
+    onDelete: () -> Unit,
     onDone: () -> Unit
 ) {
     Surface(
@@ -2216,7 +2324,7 @@ private fun SelectionActionPanel(
             val selectedNodeKeys = selectedKeys.filter { it.startsWith("N:") }.toSet()
             val allNodesSelected =
                 allNodeSelectionKeys.isNotEmpty() &&
-                    selectedNodeKeys.containsAll(allNodeSelectionKeys)
+                    selectedKeys.containsAll(allNodeSelectionKeys)
             Row(
                 Modifier.fillMaxWidth().heightIn(min = 40.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -2225,8 +2333,9 @@ private fun SelectionActionPanel(
                 TextButton(
                     onClick = if (allNodesSelected) onClearNodes else onSelectAllNodes
                 ) {
-                    Text(if (allNodesSelected) "지점 전체 해제" else "전체 지점 선택")
+                    Text(if (allNodesSelected) "전체 해제" else "전체 선택")
                 }
+                TextButton(onClick=onDelete,enabled=selectedKeys.isNotEmpty()){Text("휴지통",color=ArmyristColors.Danger)}
                 TextButton(onClick = onDone) { Text("완료") }
             }
             Row(
@@ -2235,7 +2344,7 @@ private fun SelectionActionPanel(
             ) {
                 OutlinedButton(
                     onClick = onActionEdit,
-                    enabled = selectedKeys.any { it.startsWith("N:") },
+                    enabled = selectedKeys.isNotEmpty(),
                     modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
                 ) { Text("실시사항 편집") }
@@ -2248,13 +2357,13 @@ private fun SelectionActionPanel(
                 }
                 OutlinedButton(
                     onClick = onLock,
-                    enabled = selectedKeys.isNotEmpty(),
+                    enabled = selectedKeys.any{it.startsWith("N:")},
                     modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
                 ) { Text("고정") }
                 OutlinedButton(
                     onClick = onUnlock,
-                    enabled = selectedKeys.isNotEmpty(),
+                    enabled = selectedKeys.any{it.startsWith("N:")},
                     modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
                 ) { Text("고정 해제") }
@@ -2304,7 +2413,7 @@ private fun TimePlanBaseDateDialog(
         )
     }
 
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = onDismiss,
         shape = ArmyristPanelShape,
         containerColor = ArmyristColors.RaisedSurface,
@@ -2427,7 +2536,7 @@ private fun BatchDateDialog(
 ) {
     var date by remember(initialDate) { mutableStateOf(initialDate) }
     var calendar by remember { mutableStateOf(false) }
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest=onDismiss,
         title={Text("날짜 변경")},
         text={
@@ -2476,14 +2585,31 @@ private fun TimelineList(
     onToggleLink:(String,String)->Unit,
     onWarning:(TimePlanConflict)->Unit,
     onStart:()->Unit,onEnd:()->Unit,onEvent:(DateTimeEvent)->Unit,onLink:(DateTimeLink)->Unit,
+    onSaveAction: (TimePlanActionItem) -> Boolean,
+    onSelectionKeys: (Set<String>) -> Unit,
     onMemo:()->Unit,onAddMid:()->Unit,onAddFinal:()->Unit
 ){
+    var listView by rememberSaveable(plan.id){mutableStateOf(false)}
+    val axis=remember(plan.start,plan.end){TimelineScale.from(plan)}
+    if(axis!=null && !listView) {
+        ScheduleActionWorkspace(plan,selectionMode,onSaveAction){open->
+            ContinuousTimeline(plan,axis,selectionMode,selectedKeys,onSelectionKeys,open,onSaveAction,onStart,onEnd,onEvent,onAddMid,onAddFinal,onMemo,{listView=true})
+        }
+        return
+    }
     val liveNow = rememberLiveTime()
     val isRunning = TimePlanLiveStatus.isActive(plan, liveNow)
     val nodes=DateTimePlanRules.nodeIds(plan)
     val events=plan.orderedEvents().associateBy{it.id}
     var lastDate: LocalDate? = null
+    ScheduleActionWorkspace(plan,selectionMode,onSaveAction) { openActions ->
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(8.dp,4.dp,8.dp,24.dp),verticalArrangement=Arrangement.spacedBy(2.dp)){
+        item {
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+                if(axis!=null)TextButton(onClick={listView=false},modifier=Modifier.weight(1f)){Text("시간축으로 보기")}
+                if(!selectionMode)TextButton(onClick={openActions("ALL")},modifier=Modifier.semantics{contentDescription="실시사항 요약 열기"}){Column(horizontalAlignment=Alignment.CenterHorizontally){Text("실시사항 ‹");Text("← 왼쪽으로 밀기",style=MaterialTheme.typography.labelSmall)}}
+            }
+        }
         if (isRunning) item {
             Surface(Modifier.fillMaxWidth(), color = ArmyristColors.LiveSurface, shape = ArmyristPanelShape,
                 border = BorderStroke(1.dp, ArmyristColors.LiveBorder)) {
@@ -2497,6 +2623,7 @@ private fun TimelineList(
             if(date!=null && date!=lastDate){ item(key="day-$date") { DayHeader(date, plan.start.value.value?.toLocalDate(), plan.dateDisplayMode) }; lastDate=date }
             item(key="node-$id") {
                 val nodeConflict = conflicts.firstOrNull { id in it.affectedNodeIds }
+                Box(Modifier.fillMaxWidth()) {
                 when(id){
                     DateTimePlanRules.START_ID->DatePointCard(
                         label="시작", dt=plan.start.value.value, emphasized=true,
@@ -2523,6 +2650,7 @@ private fun TimelineList(
                             onClick={onEvent(event)}
                         )
                     }
+                }
                 }
             }
             if(index<nodes.lastIndex){
@@ -2602,6 +2730,7 @@ private fun TimelineList(
             }
         }
     }
+    }
 }
 
 @Composable
@@ -2666,12 +2795,12 @@ private fun DatePointCard(
     ) {
         Row(Modifier.padding(horizontal = 10.dp, vertical = 7.dp),verticalAlignment = Alignment.CenterVertically) {
             if(selectionMode) Checkbox(checked=selected,onCheckedChange={onToggle()})
-            Column(Modifier.width(112.dp)) {
+            Column(Modifier.widthIn(max=112.dp).weight(1f)) {
                 Text(label, style=MaterialTheme.typography.labelSmall, color=ArmyristColors.SecondaryText)
                 Text(dt?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: "--:--",fontWeight = FontWeight.Bold)
             }
-            Spacer(Modifier.weight(1f))
-            if(locked) LockBadge()
+            Spacer(Modifier.width(4.dp))
+            if(locked) CompactLockBadge()
             conflict?.let { WarningButton { onWarning(it) } }
         }
     }
@@ -2704,7 +2833,11 @@ private fun EventCard(
     ) {
         Row(Modifier.padding(horizontal = 10.dp, vertical = 7.dp),verticalAlignment = Alignment.CenterVertically) {
             if(selectionMode) Checkbox(checked=selected,onCheckedChange={onToggle()})
-            Column(Modifier.width(112.dp)) {
+            if(LocalTimelineCompact.current) Column(Modifier.weight(1f)) {
+                Text(e.name,fontWeight=FontWeight.Bold,style=MaterialTheme.typography.labelMedium)
+                Text(time.replace(" ~ ","\n~ "),style=MaterialTheme.typography.labelSmall,fontWeight=FontWeight.SemiBold)
+            } else {
+            Column(Modifier.widthIn(max=112.dp).weight(1f)) {
                 Text(if (e.kind == TimeEventKind.FINAL) "종료지점" else "중도지점 ${e.order + 1}",style = MaterialTheme.typography.labelSmall,color = ArmyristColors.SecondaryText)
                 Text(time, fontWeight = FontWeight.Bold)
             }
@@ -2712,10 +2845,16 @@ private fun EventCard(
                 Text(e.name, fontWeight = FontWeight.Bold, maxLines = 1)
                 e.note?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = ArmyristColors.SecondaryText, maxLines = 1) }
             }
-            if(e.dateTimeLocked) LockBadge()
+            }
+            if(e.dateTimeLocked) CompactLockBadge()
             conflict?.let { WarningButton { onWarning(it) } }
         }
     }
+}
+
+@Composable private fun CompactLockBadge() {
+    if(LocalTimelineCompact.current) Icon(androidx.compose.material.icons.Icons.Outlined.Lock,contentDescription="고정",modifier=Modifier.size(12.dp),tint=ArmyristColors.PrimaryControl)
+    else LockBadge()
 }
 
 @Composable private fun LockBadge() {
@@ -3388,7 +3527,7 @@ private fun DateTimeEventEditDialog(
     }
 }
 
-@Composable private fun LegacyDateMigrationDialog(title:String,onDismiss:()->Unit,onApply:(LocalDate)->Unit){var date by remember{mutableStateOf(LocalDate.now())};var calendar by remember{mutableStateOf(false)};AlertDialog(onDismissRequest=onDismiss,title={Text("기준 날짜 지정")},text={Column(verticalArrangement=Arrangement.spacedBy(10.dp)){Text("‘$title’은 날짜 기능이 추가되기 전에 작성되었습니다.\n계획의 시작 기준 날짜를 선택해주세요.");Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){OutlinedButton(onClick={date=date.minusDays(1)}){Text("-1일")};Text(date.format(DateTimeFormatter.ISO_DATE),fontWeight=FontWeight.Bold);OutlinedButton(onClick={date=date.plusDays(1)}){Text("+1일")}};TextButton(onClick={calendar=true},modifier=Modifier.fillMaxWidth()){Text("달력")};Text("적용 전에는 기존 데이터가 변경되지 않습니다.",style=MaterialTheme.typography.bodySmall,color=ArmyristColors.SecondaryText)}},dismissButton={TextButton(onClick=onDismiss){Text("취소")}},confirmButton={Button(onClick={onApply(date)},colors=ButtonDefaults.buttonColors(containerColor=ArmyristColors.PrimaryControl)){Text("적용")}});if(calendar){val state=rememberDatePickerState(initialSelectedDateMillis=date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli());DatePickerDialog(onDismissRequest={calendar=false},confirmButton={TextButton(onClick={state.selectedDateMillis?.let{date=Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()};calendar=false}){Text("확인")}}){DatePicker(state=state)}}}
+@Composable private fun LegacyDateMigrationDialog(title:String,onDismiss:()->Unit,onApply:(LocalDate)->Unit){var date by remember{mutableStateOf(LocalDate.now())};var calendar by remember{mutableStateOf(false)};ArmyristDialog(onDismissRequest=onDismiss,title={Text("기준 날짜 지정")},text={Column(verticalArrangement=Arrangement.spacedBy(10.dp)){Text("‘$title’은 날짜 기능이 추가되기 전에 작성되었습니다.\n계획의 시작 기준 날짜를 선택해주세요.");Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){OutlinedButton(onClick={date=date.minusDays(1)}){Text("-1일")};Text(date.format(DateTimeFormatter.ISO_DATE),fontWeight=FontWeight.Bold);OutlinedButton(onClick={date=date.plusDays(1)}){Text("+1일")}};TextButton(onClick={calendar=true},modifier=Modifier.fillMaxWidth()){Text("달력")};Text("적용 전에는 기존 데이터가 변경되지 않습니다.",style=MaterialTheme.typography.bodySmall,color=ArmyristColors.SecondaryText)}},dismissButton={TextButton(onClick=onDismiss){Text("취소")}},confirmButton={Button(onClick={onApply(date)},colors=ButtonDefaults.buttonColors(containerColor=ArmyristColors.PrimaryControl)){Text("적용")}});if(calendar){val state=rememberDatePickerState(initialSelectedDateMillis=date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli());DatePickerDialog(onDismissRequest={calendar=false},confirmButton={TextButton(onClick={state.selectedDateMillis?.let{date=Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()};calendar=false}){Text("확인")}}){DatePicker(state=state)}}}
 
 @Composable
 private fun TimePlanVoiceReviewDialog(
@@ -3570,7 +3709,7 @@ private fun SimpleTextDialog(
 ) {
     var value by rememberSaveable(title, initial) { mutableStateOf(initial) }
 
-    AlertDialog(
+    ArmyristDialog(
         onDismissRequest = onDismiss,
         shape = ArmyristPanelShape,
         containerColor = ArmyristColors.RaisedSurface,
