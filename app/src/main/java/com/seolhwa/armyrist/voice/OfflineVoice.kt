@@ -315,7 +315,8 @@ fun OfflineVoiceButton(
     toolContext: VoiceToolContext = VoiceToolContext.GENERIC,
     onTranscript: (String) -> Unit,
     onStateChanged: (VoiceUiState) -> Unit = {},
-    onMessage: (String) -> Unit = {}
+    onMessage: (String) -> Unit = {},
+    readingPrompt: String? = null
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
@@ -402,6 +403,7 @@ fun OfflineVoiceButton(
     if (recordingScreenVisible) {
         VoiceRecordingScreen(
             toolContext = toolContext,
+            readingPrompt = readingPrompt,
             state = state,
             onFinish = {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -415,11 +417,12 @@ fun OfflineVoiceButton(
 @Composable
 private fun VoiceRecordingScreen(
     toolContext: VoiceToolContext,
+    readingPrompt: String?,
     state: VoiceUiState,
     onFinish: () -> Unit,
     onCancel: () -> Unit
 ) {
-    val guide = remember(toolContext) { guideFor(toolContext) }
+    val guide = remember(toolContext,readingPrompt) { readingPrompt?.let { VoiceContextGuide(it,"읽은 뒤 아래 완료 버튼을 누르세요.") } ?: guideFor(toolContext) }
 
     BackHandler(onBack = onCancel)
 
@@ -506,7 +509,7 @@ private fun VoiceRecordingScreen(
                                 verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Text(
-                                    "말할 수 있어요 (예시)",
+                                    if(readingPrompt==null)"말할 수 있어요 (예시)"else"이 문장을 읽어주세요",
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(

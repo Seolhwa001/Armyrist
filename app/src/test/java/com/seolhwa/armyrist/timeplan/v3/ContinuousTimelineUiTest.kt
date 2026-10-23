@@ -88,6 +88,11 @@ class ContinuousTimelineUiTest {
         compose.onNodeWithContentDescription("실시사항 요약 패널").performTouchInput{swipeRight()}
         compose.onNodeWithText("전체 일정").assertDoesNotExist()
     }
+    @Test fun spanningScheduleShowsItsNameOnlyAtTheStart(){
+        val p=plan();show(p)
+        compose.onAllNodesWithText("오전 근무",useUnmergedTree=true).assertCountEquals(1)
+        compose.onNodeWithText("08:30–09:30",useUnmergedTree=true).assertIsDisplayed()
+    }
     @Test fun longPressPaintAndTrashCanRestoreOriginalItems(){
         val p=plan();show(p)
         compose.onAllNodesWithContentDescription("일정 오전 근무").onFirst().performTouchInput{

@@ -24,8 +24,8 @@ android {
         applicationId = "com.seolhwa.armyrist"
         minSdk = 23
         targetSdk = 36
-        versionCode = 169
-        versionName = "0.6.81"
+        versionCode = 170
+        versionName = "0.6.82"
         manifestPlaceholders["appLabel"] = "낄롬리스"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

@@ -57,10 +57,16 @@ private fun UserProfileScreen(
     val updateManager = remember { ArmyristUpdateManager(context) }
     val scope = rememberCoroutineScope()
 
+    var voiceTestOpen by remember { mutableStateOf(false) }
     var developerUnlocked by remember { mutableStateOf(developerPrefs.unlocked) }
     var developerCode by remember { mutableStateOf("") }
     var developerMessage by remember { mutableStateOf<String?>(null) }
     var developerChecking by remember { mutableStateOf(false) }
+
+    if(voiceTestOpen && developerUnlocked) {
+        com.seolhwa.armyrist.developer.VoiceAccuracyScreen(onBack={voiceTestOpen=false})
+        return
+    }
 
     fun saveIfNeeded() {
         if (displayName != savedName) {
@@ -206,6 +212,8 @@ private fun UserProfileScreen(
                             Text("코드 확인", fontWeight = FontWeight.Bold)
                         }
                     } else {
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedButton(onClick={voiceTestOpen=true},modifier=Modifier.fillMaxWidth().heightIn(min=52.dp)) { Text("음성 정확도 개선 테스트") }
                         Spacer(Modifier.height(12.dp))
                         InfoRowForDeveloper(
                             label = "현재 버전",

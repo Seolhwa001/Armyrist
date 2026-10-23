@@ -125,9 +125,9 @@ internal fun ContinuousTimeline(plan:DateAwareTimePlan,axis:TimelineScale,select
                                 color=if(selected)ArmyristColors.PrimaryControl else Color(0xFFEDF2FF),
                                 shape=RoundedCornerShape(topStart=if(a>=slice.start)10.dp else 0.dp,topEnd=if(a>=slice.start)10.dp else 0.dp,bottomStart=if(b<=slice.end)10.dp else 0.dp,bottomEnd=if(b<=slice.end)10.dp else 0.dp),border=BorderStroke(if(selected)2.dp else 0.dp,Color.Transparent)){
                                 Row(Modifier.fillMaxSize()){Box(Modifier.width(3.dp).fillMaxHeight().background(ArmyristColors.PrimaryControl));
-                                if(h>=24f)Column(Modifier.padding(horizontal=7.dp,vertical=5.dp)){
-                                    Text(event.name,color=if(selected)Color.White else ArmyristColors.PrimaryText,fontSize=14.sp,fontWeight=FontWeight.Bold,maxLines=2,overflow=TextOverflow.Ellipsis)
-                                    if(h>=48f)Text("${a.format(DateTimeFormatter.ofPattern("HH:mm"))}–${b.format(DateTimeFormatter.ofPattern("HH:mm"))}",fontSize=11.sp,color=if(selected)Color.White else ArmyristColors.SecondaryText,maxLines=1,overflow=TextOverflow.Ellipsis)
+                                if(h>=24f && a>=slice.start && a<slice.end)Column(Modifier.padding(horizontal=7.dp,vertical=5.dp)){
+                                    Text(event.name,color=if(selected)Color.White else ArmyristColors.PrimaryText,fontSize=14.sp,lineHeight=18.sp,fontWeight=FontWeight.Bold,maxLines=1,overflow=TextOverflow.Ellipsis)
+                                    if(h>=40f)Text("${a.format(DateTimeFormatter.ofPattern("HH:mm"))}–${b.format(DateTimeFormatter.ofPattern("HH:mm"))}",fontSize=11.sp,lineHeight=14.sp,color=if(selected)Color.White else ArmyristColors.SecondaryText,maxLines=1,overflow=TextOverflow.Ellipsis)
                                 }
                             }}
                         }
