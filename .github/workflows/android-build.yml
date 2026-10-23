@@ -2,7 +2,7 @@ name: Android Build
 
 on:
   push:
-    branches: [ "main", "release/0.6.76" ]
+    branches: [ "main", "release/0.6.81" ]
   workflow_dispatch:
 
 permissions:
@@ -18,34 +18,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Apply approved 0.6.76 notification completion and help
-        if: hashFiles('Killomris-0.6.76-source-changes.json') != ''
+      - name: Apply tested 0.6.81 source changes
+        if: hashFiles('Killomris-0.6.81-source-changes.zip') != ''
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PYTHON'
-          import hashlib, json, base64
+          import hashlib, zipfile
           from pathlib import Path
-          patch = Path('Killomris-0.6.76-source-changes.json')
-          assert hashlib.sha256(patch.read_bytes()).hexdigest() == '01eac908af50bdffc238d997aeec93a65af6515ef5e5ae914cbc1246fee60d39'
-          for entry in json.loads(patch.read_text()):
-              name = entry['path']
-              target = Path(name)
-              assert not target.is_absolute() and '..' not in target.parts
-              assert name.startswith(('app/', 'design/')) or name == 'release/release-notes.txt'
-              assert target.suffix not in {'.keystore', '.jks', '.p12', '.pem', '.key'}
-              target.parent.mkdir(parents=True, exist_ok=True)
-              if entry['encoding'] == 'base64':
-                  target.write_bytes(base64.b64decode(entry['content'], validate=True))
-              else:
-                  target.write_text(entry['content'])
+          patch=Path('Killomris-0.6.81-source-changes.zip')
+          assert hashlib.sha256(patch.read_bytes()).hexdigest() == 'd1788ffb0d94e8ac2a85db8f2adcb631d560a591e97ddef4c40db926d29e193f'
+          with zipfile.ZipFile(patch) as archive:
+              for name in archive.namelist():
+                  target=Path(name)
+                  assert not target.is_absolute() and '..' not in target.parts
+                  assert name.startswith(('app/', 'release/', 'docs/'))
+                  assert target.suffix not in {'.keystore','.jks','.p12','.pem','.key'}
+                  target.parent.mkdir(parents=True,exist_ok=True)
+                  target.write_bytes(archive.read(name))
           patch.unlink()
           PYTHON
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'Add approved notification completion and contextual help [skip ci]'
-          git push origin HEAD:refs/heads/release/0.6.76
+          git commit -m 'Apply tested 0.6.81 plan list selection and reviewed improvements [skip ci]'
+          git push origin HEAD:refs/heads/release/0.6.81
 
       - name: Set up Java 17
         uses: actions/setup-java@v5
@@ -96,7 +93,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run unit tests
-        run: ./gradlew --no-parallel --max-workers=2 test --stacktrace
+        run: ./gradlew --no-parallel --max-workers=1 -Pkotlin.incremental=false test --stacktrace
 
       - name: Record unit test results
         shell: bash
@@ -105,7 +102,7 @@ jobs:
           import os, json, xml.etree.ElementTree as E
           from pathlib import Path
           results = {}
-          for variant, minimum in [('Debug', 279), ('Release', 262)]:
+          for variant, minimum in [('Debug', 321), ('Release', 273)]:
               files = list(Path(f'app/build/test-results/test{variant}UnitTest').glob('TEST-*.xml'))
               stats = {key: sum(int(E.parse(f).getroot().get(key, 0)) for f in files) for key in ['tests', 'failures', 'errors', 'skipped']}
               assert stats['tests'] >= minimum and stats['failures'] == stats['errors'] == stats['skipped'] == 0, (variant, stats)
@@ -115,7 +112,7 @@ jobs:
           PYTHON
 
       - name: Build debug APK
-        run: ./gradlew --no-parallel --max-workers=2 assembleDebug --stacktrace
+        run: ./gradlew --no-parallel --max-workers=1 -Pkotlin.incremental=false assembleDebug --stacktrace
 
       - name: Validate stable signing secrets
         shell: bash
@@ -158,7 +155,7 @@ jobs:
           echo "ARMYRIST_SIGNING_KEY_PASSWORD=$SIGNING_KEY_PASSWORD" >> "$GITHUB_ENV"
 
       - name: Build stable distribution APK
-        run: ./gradlew --no-parallel --max-workers=2 assembleRelease --stacktrace
+        run: ./gradlew --no-parallel --max-workers=1 -Pkotlin.incremental=false assembleRelease --stacktrace
 
       - name: Verify distribution APK signature
         shell: bash
@@ -201,6 +198,8 @@ jobs:
 
           test -n "$VERSION_NAME"
           test -n "$VERSION_CODE"
+          test "$VERSION_NAME" = "0.6.81"
+          test "$VERSION_CODE" = "169"
 
           DIST="$RUNNER_TEMP/armyrist-distribution"
           mkdir -p "$DIST"
@@ -243,18 +242,18 @@ jobs:
           path: ${{ runner.temp }}/armyrist-signing-certificate.txt
           if-no-files-found: error
 
-      - name: Prepare draft release for review
-        if: github.ref == 'refs/heads/release/0.6.76'
+      - name: Publish approved stable release
+        if: github.ref == 'refs/heads/release/0.6.81'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="v0.6.76"
+          TAG="v0.6.81"
           DIST="$RUNNER_TEMP/armyrist-distribution"
-          RELEASE_ID="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.tag_name == "v0.6.76") | .id')"
+          RELEASE_ID="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.tag_name == "v0.6.81") | .id')"
           test -z "$RELEASE_ID"
-          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" --title "낄롬리스 0.6.76" --notes-file "$DIST/RELEASE_NOTES.txt" --draft "$DIST/Armyrist-0.6.76.apk" "$DIST/release.json"
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" --title "낄롬리스 0.6.81" --notes-file "$DIST/RELEASE_NOTES.txt" --latest "$DIST/Armyrist-0.6.81.apk" "$DIST/release.json"
 
       - name: Remove temporary signing material
         if: always()
