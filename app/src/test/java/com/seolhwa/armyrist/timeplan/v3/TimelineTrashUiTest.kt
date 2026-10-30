@@ -20,7 +20,7 @@ class TimelineTrashUiTest {
         val action=TimePlanActionItem(id="a",parentPointId=event.id,content="점검",scheduledDateTime=base.start.value.value!!.plusMinutes(20),markerColor="#16845D")
         assertTrue(repo.commit(DateTimePlanRules.normalizeTopology(base.copy(midwayEvents=listOf(event),actions=listOf(action)))))
         assertTrue(TimelineTrash.move(repo,trash,base.id,setOf("N:event")))
-        assertTrue(repo.getPlan(base.id)!!.actions.isEmpty())
+        assertEquals(listOf(action),repo.getPlan(base.id)!!.actions)
         val after=repo.getPlan(base.id)!!;assertTrue(repo.commit(after.copy(title="수정한 계획 제목",memo="삭제 후 작성한 메모")))
         val entry=trash.getItems(TrashToolType.TIME_PLAN).single();assertEquals(TimelineTrash.VERSION,entry.payloadVersion)
         assertTrue(TimelineTrash.restore(repo,entry.payload));val restored=repo.getPlan(base.id)!!

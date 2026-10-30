@@ -46,7 +46,7 @@ internal fun ScheduleActionWorkspace(plan: DateAwareTimePlan,selectionMode: Bool
     Row(Modifier.fillMaxSize().clipToBounds().pointerInput(selectionMode,node,paneEditing) {
         if(!selectionMode && !paneEditing) { var distance=0f;detectHorizontalDragGestures(onDragStart={distance=0f},onDragEnd={if(distance < -threshold)nodeId="ALL";if(distance > threshold)nodeId=null},onHorizontalDrag={change,dx->distance+=dx;change.consume()}) }
     }) {
-        Box(Modifier.fillMaxWidth(fraction).fillMaxHeight()){CompositionLocalProvider(LocalTimelineCompact provides (node!=null)){content { nodeId=if(nodeId==it)null else it }}}
+        Box(Modifier.fillMaxWidth(fraction).fillMaxHeight()){CompositionLocalProvider(LocalTimelineCompact provides (node!=null)){content { nodeId=if(nodeId!=null)null else "ALL" }}}
         if(node!=null && fraction<.99f) ActionPane(plan,node,onSave,{nodeId=null},{paneEditing=it},Modifier.weight(1f).fillMaxHeight())
     }
 }
@@ -63,7 +63,7 @@ internal fun ScheduleActionTab(plan: DateAwareTimePlan,nodeId: String,selectionM
         ) {
             if(compact)Icon(Icons.Outlined.FactCheck,null,Modifier.size(18.dp),tint=ArmyristColors.PrimaryControl)
             else Text("실시사항",color=ArmyristColors.PrimaryControl,fontWeight=FontWeight.SemiBold,style=MaterialTheme.typography.labelSmall,maxLines=1)
-            Text("${plan.actions.count { it.parentPointId==nodeId }}개  ›",color=ArmyristColors.SecondaryText,style=MaterialTheme.typography.labelSmall)
+            Text("${plan.actions.size}개  ›",color=ArmyristColors.SecondaryText,style=MaterialTheme.typography.labelSmall)
         }
     }
 }
@@ -75,18 +75,17 @@ private fun ActionPane(plan: DateAwareTimePlan,nodeId: String,onSave: (TimePlanA
         Column(Modifier.padding(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
             TextButton(onClick=onClose,modifier=Modifier.fillMaxWidth()){Text("닫기 ›")}
             if(!editing)Text("오른쪽으로 밀어 닫기 →",style=MaterialTheme.typography.labelSmall,color=ArmyristColors.PrimaryControl)
-            Text("실시사항",fontWeight=FontWeight.Bold);Text(if(nodeId=="ALL")"전체 일정"else TimePlanExecutionRules.pointName(plan,nodeId),style=MaterialTheme.typography.labelSmall)
+            Text("실시사항",fontWeight=FontWeight.Bold);Text("시각순 · 일정과 독립",style=MaterialTheme.typography.labelSmall)
             HorizontalDivider(color=ArmyristColors.SoftBorder)
             if(editing) InlineActionEditor(plan,nodeId,actionId,onSave,{editing=false},Modifier.weight(1f))
             else {
-                val actions=if(nodeId=="ALL")plan.actions.sortedBy{it.scheduledDateTime}else TimePlanExecutionRules.actionsForPoint(plan,nodeId)
+                val actions=plan.actions.sortedBy{it.scheduledDateTime}
                 LazyColumn(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     if(actions.isEmpty())item { Text("등록된 항목이 없어요",style=MaterialTheme.typography.bodySmall) }
                     items(actions,key={it.id}) { a -> Surface(Modifier.fillMaxWidth().clickable { actionId=a.id;editing=true },shape=ArmyristControlShape,color=ArmyristColors.RaisedSurface) {
                         Column(Modifier.padding(10.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
                             Text((if(a.completionState==ActionCompletionState.COMPLETE)"✓ " else "○ ")+a.scheduledDateTime.format(DateTimeFormatter.ofPattern("HH:mm")),style=MaterialTheme.typography.labelMedium,color=ArmyristColors.PrimaryControl)
                             Text(a.content,fontWeight=FontWeight.SemiBold,style=MaterialTheme.typography.bodyMedium)
-                            if(nodeId=="ALL")Text(TimePlanExecutionRules.pointName(plan,a.parentPointId),style=MaterialTheme.typography.labelSmall,color=ArmyristColors.SecondaryText)
                         }
                     } }
                 }
@@ -106,10 +105,6 @@ private fun InlineActionEditor(plan: DateAwareTimePlan,nodeId: String,actionId: 
     var error by remember{mutableStateOf(false)}
     Column(modifier,verticalArrangement=Arrangement.spacedBy(8.dp)) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)) {
-            if(nodeId=="ALL" && initial==null) {
-                Text("연결할 일정",style=MaterialTheme.typography.labelMedium)
-                DateTimePlanRules.nodeIds(plan).forEach{id->FilterChip(selected=parent==id,onClick={parent=id},label={Text(TimePlanExecutionRules.pointName(plan,id))},modifier=Modifier.fillMaxWidth())}
-            }
             OutlinedTextField(name,{name=it},label={Text("내용")},modifier=Modifier.fillMaxWidth())
             ScheduleDateTimeFields(date,{date=it},compact=true)
             OutlinedTextField(note,{note=it},label={Text("비고")},modifier=Modifier.fillMaxWidth())
@@ -121,7 +116,7 @@ private fun InlineActionEditor(plan: DateAwareTimePlan,nodeId: String,actionId: 
         }
         Button(enabled=name.isNotBlank(),onClick={
             val candidate=initial?.copy(content=name.trim(),note=note.trim().ifBlank{null},scheduledDateTime=date,notificationMode=mode,notificationEnabled=mode!=ActionNotificationMode.NONE)
-                ?: TimePlanActionItem(parentPointId=parent,content=name.trim(),note=note.trim().ifBlank{null},scheduledDateTime=date,notificationMode=mode,notificationEnabled=mode!=ActionNotificationMode.NONE)
+                ?: TimePlanActionItem(content=name.trim(),note=note.trim().ifBlank{null},scheduledDateTime=date,notificationMode=mode,notificationEnabled=mode!=ActionNotificationMode.NONE)
             if(onSave(candidate))onCancel() else error=true
         },modifier=Modifier.fillMaxWidth()){Text("저장")}
         TextButton(onClick=onCancel,modifier=Modifier.fillMaxWidth()){Text("취소")}

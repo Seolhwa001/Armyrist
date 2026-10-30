@@ -25,7 +25,7 @@ object TimePlanLiveStatus {
 
     fun nextAction(plans: List<DateAwareTimePlan>, now: LocalDateTime): UpcomingAction? =
         plans.asSequence().filter { interval(it) != null }.flatMap { plan ->
-            plan.actions.asSequence()
+            UnifiedTimePlan.actions(plan).asSequence()
                 .filter { it.completionState == ActionCompletionState.INCOMPLETE && !it.scheduledDateTime.isBefore(now) }
                 .map { UpcomingAction(plan, it) }
         }.minWithOrNull(compareBy<UpcomingAction> { it.action.scheduledDateTime }

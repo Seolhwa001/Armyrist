@@ -74,6 +74,7 @@ fun OfflineVoiceButton(
     onStateChanged: (VoiceUiState) -> Unit = {},
     onMessage: (String) -> Unit = {},
     readingPrompt: String? = null,
+    label: String = "음성 입력",
     onNotice: (String) -> Unit = onMessage
 ) {
     val context = LocalContext.current
@@ -155,8 +156,8 @@ fun OfflineVoiceButton(
             when (state) {
                 VoiceUiState.RECOGNIZING -> "인식 중..."
                 VoiceUiState.STRUCTURING -> "정리 중..."
-                VoiceUiState.UNAVAILABLE -> "음성 입력 사용 불가"
-                else -> "음성 입력"
+                VoiceUiState.UNAVAILABLE -> if(label=="음성 입력")"음성 입력 사용 불가"else label
+                else -> label
             },
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.labelLarge

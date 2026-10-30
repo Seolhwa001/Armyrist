@@ -226,7 +226,7 @@ class ChecklistActivity : ComponentActivity() {
 private enum class ChecklistViewMode { DETAIL, COMPACT }
 
 @Composable
-private fun ChecklistApp(
+internal fun ChecklistApp(
     repo: CoreSuiteRepository,
     trashRepo: CommonTrashRepository,
     initialChecklistId: String?,
@@ -731,7 +731,8 @@ private fun ChecklistDetailScreen(
     var deleteTarget by remember { mutableStateOf<ChecklistItem?>(null) }
     var trashOpen by rememberSaveable { mutableStateOf(false) }
     var permanentDeleteTarget by remember { mutableStateOf<ChecklistItem?>(null) }
-    var viewMode by remember { mutableStateOf(ChecklistViewMode.DETAIL) }
+    val viewPreferences = remember(context) { ChecklistViewPreferences(context) }
+    var viewMode by remember(checklist.id) { mutableStateOf(ChecklistViewMode.valueOf(viewPreferences.mode(checklist.id))) }
     var voiceDrafts by remember { mutableStateOf<List<ChecklistVoiceDraft>?>(null) }
     var voiceMessage by remember { mutableStateOf<String?>(null) }
     var headerMenuOpen by remember { mutableStateOf(false) }
@@ -905,7 +906,7 @@ private fun ChecklistDetailScreen(
 
                         OutlinedButton(
                             onClick = {
-                                viewMode = ChecklistViewMode.DETAIL
+                                if (viewPreferences.setMode(checklist.id, "DETAIL")) viewMode = ChecklistViewMode.DETAIL
                             },
                             shape = ArmyristPanelShape,
                             border = BorderStroke(
@@ -935,7 +936,7 @@ private fun ChecklistDetailScreen(
 
                         OutlinedButton(
                             onClick = {
-                                viewMode = ChecklistViewMode.COMPACT
+                                if (viewPreferences.setMode(checklist.id, "COMPACT")) viewMode = ChecklistViewMode.COMPACT
                             },
                             shape = ArmyristPanelShape,
                             border = BorderStroke(

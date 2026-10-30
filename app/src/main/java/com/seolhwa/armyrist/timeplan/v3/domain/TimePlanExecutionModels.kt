@@ -21,7 +21,8 @@ data class TimePlanActionGroup(
 
 data class TimePlanActionItem(
     val id: String = UUID.randomUUID().toString(),
-    val parentPointId: String,
+    /** Legacy backup field only. Scheduling, editing and deletion ignore point membership. */
+    val parentPointId: String = "UNASSIGNED",
     val content: String,
     val scheduledDateTime: LocalDateTime,
     val completionState: ActionCompletionState = ActionCompletionState.INCOMPLETE,
@@ -32,12 +33,15 @@ data class TimePlanActionItem(
     val order: Int = 0,
     val createdAt: String = System.currentTimeMillis().toString(),
     val updatedAt: String = System.currentTimeMillis().toString(),
-    val markerColor: String = "#111111"
+    val markerColor: String = "#111111",
+    val durationMinutes: Long? = null,
+    val timeLocked: Boolean = false
 ) {
     init {
         require(id.isNotBlank())
-        require(parentPointId.isNotBlank())
+
         require(content.isNotBlank())
+        require(durationMinutes == null || durationMinutes >= 0)
         require(order >= 0)
     }
 }
@@ -226,12 +230,7 @@ object TimePlanExecutionRules {
         normalizeActionOrder(plan.copy(actions = plan.actions.filterNot { it.parentPointId == parentPointId }))
 
     fun normalizeActionOrder(plan: DateAwareTimePlan): DateAwareTimePlan {
-        val byParent = plan.actions.groupBy { it.parentPointId }
-        val normalized = byParent.values.flatMap { actions ->
-            actions.sortedWith(compareBy<TimePlanActionItem> { it.scheduledDateTime }.thenBy { it.order })
-                .mapIndexed { index, action -> action.copy(order = index) }
-        }
-        return plan.copy(actions = normalized)
+        return plan.copy(actions = plan.actions.sortedWith(compareBy<TimePlanActionItem> { it.scheduledDateTime }.thenBy { it.order }).mapIndexed { index, action -> action.copy(order = index) })
     }
 
     fun validate(plan: DateAwareTimePlan): List<String> {
@@ -240,7 +239,7 @@ object TimePlanExecutionRules {
         val groupIds = plan.actionGroups.map { it.id }.toSet()
         if (plan.actionGroups.map { it.id }.distinct().size != plan.actionGroups.size) problems += "duplicate action group id"
         if (plan.actions.map { it.id }.distinct().size != plan.actions.size) problems += "duplicate action id"
-        if (plan.actions.any { it.parentPointId !in nodeIds }) problems += "orphan action parent"
+
         if (plan.actions.any { it.groupId != null && it.groupId !in groupIds }) problems += "orphan action group"
         if (plan.actions.any { it.content.isBlank() }) problems += "blank action content"
         return problems

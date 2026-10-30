@@ -30,9 +30,9 @@ class TimelineScaleTest {
         assertEquals(TimelineSelection.keysInRange(p,a,b),TimelineSelection.keysInRange(p,b,a))
     }
     @Test fun overlappingSchedulesUseSeparateLanes(){assertNotEquals(TimelineSelection.lanes(plan())["a"],TimelineSelection.lanes(plan())["b"])}
-    @Test fun deletingEventAlsoRemovesOnlyItsOwnChildrenAndRebuildsLinks(){
+    @Test fun deletingScheduleKeepsIndependentActionsAndRebuildsLinks(){
         val p=plan();val next=TimelineSelection.remove(p,setOf("N:a","N:START"))
-        assertEquals(listOf("b"),next.midwayEvents.map{it.id});assertTrue(next.actions.isEmpty());assertEquals(p.start,next.start)
+        assertEquals(listOf("b"),next.midwayEvents.map{it.id});assertEquals(p.actions,next.actions);assertEquals(p.start,next.start)
         assertEquals(listOf("START" to "b","b" to "END"),next.links.map{it.fromNodeId to it.toNodeId})
     }
     @Test fun directActionDeletionPreservesParent(){val next=TimelineSelection.remove(plan(),setOf("A:action"));assertEquals(2,next.midwayEvents.size);assertTrue(next.actions.isEmpty())}

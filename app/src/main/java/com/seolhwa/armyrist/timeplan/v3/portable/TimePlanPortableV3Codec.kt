@@ -39,8 +39,8 @@ object TimePlanPortableV3Codec {
         }
         return source.copy(
             id = UUID.randomUUID().toString(),
-            midwayEvents = mid,
-            finalPoint = final,
+            midwayEvents = mid.map{it.copy(groupId=it.groupId?.let{g->groupMap[g]})},
+            finalPoint = final?.let{it.copy(groupId=it.groupId?.let{g->groupMap[g]})},
             links = links,
             actionGroups = groups,
             actions = actions,

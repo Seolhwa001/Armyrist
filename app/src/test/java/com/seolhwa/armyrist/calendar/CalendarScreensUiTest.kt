@@ -67,17 +67,19 @@ class CalendarScreensUiTest {
         compose.runOnIdle{assertEquals(ActionCompletionState.COMPLETE,repo.getPlan(p.id)!!.actions.single().completionState)}
         screenshot("schedule-action-panel.png")
     }
-    @Test fun actualTimelineOpensHalfScreenPanel() {
+    @Test fun actualTimelineUsesUnifiedEditableEntries() {
         val repo=app.dateAwareTimePlanRepository;val base=repo.createPlan(date.atTime(9,0))!!
         val plan=DateTimePlanRules.normalizeTopology(base.copy(start=base.start.copy(dateTimeLocked=true),end=base.end.copy(dateTimeLocked=true),midwayEvents=listOf(DateTimeEvent("mid",TimeEventKind.MIDWAY,0,"오후 일정",EventDateTimeSpec.Range(DateTimeValue.explicit(date.atTime(9,20)),DateTimeValue.explicit(date.atTime(9,40))),dateTimeLocked=true))))
         assertTrue(repo.commit(plan))
         compose.setContent{ArmyristTheme{com.seolhwa.armyrist.timeplan.v3.ui.DateAwareTimePlanApp(repo,app.timePlanV2Repository,app.coreSuiteRepository,app.commonTrashRepository,{},initialPlanId=plan.id,onOpenExecution={_,_,_->})}}
         screenshot("actual-timeline-full.png")
-        compose.onNodeWithContentDescription("실시사항 요약 열기").performClick()
-        compose.onNodeWithText("+ 추가").assertIsDisplayed()
-        screenshot("actual-timeline-panel.png")
-        compose.onNodeWithText("닫기 ›").performClick()
-        compose.onNodeWithText("+ 추가").assertDoesNotExist()
+        compose.onNodeWithTag("timeplan-view-timeline").performClick().assertIsSelected()
+        compose.onNodeWithText("오후 일정").performClick()
+        compose.onNodeWithText("실시사항 편집").assertIsDisplayed()
+        compose.onNodeWithText("내용").performTextReplacement("통합 편집")
+        compose.onNodeWithText("저장").performClick()
+        compose.runOnIdle { assertEquals("통합 편집",repo.getPlan(plan.id)!!.midwayEvents.single().name) }
+        screenshot("actual-timeline-unified.png")
     }
     @Test @Config(qualifiers="w320dp-h480dp") fun clockAndDatePickersWorkOnSmallScreen() {
         var value=date.atTime(9,0)

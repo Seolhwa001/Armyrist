@@ -51,7 +51,11 @@ data class DateTimeEvent(
     val name: String,
     val timeSpec: EventDateTimeSpec = EventDateTimeSpec.Unspecified,
     val note: String? = null,
-    val dateTimeLocked: Boolean = false
+    val dateTimeLocked: Boolean = false,
+    val color: String = "#7543A3",
+    val completionState: ActionCompletionState = ActionCompletionState.INCOMPLETE,
+    val notificationMode: ActionNotificationMode = ActionNotificationMode.NONE,
+    val groupId: String? = null
 ) {
     init {
         require(id.isNotBlank())

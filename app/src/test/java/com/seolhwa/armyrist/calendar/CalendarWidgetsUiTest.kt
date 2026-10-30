@@ -52,7 +52,7 @@ class CalendarWidgetsUiTest {
         assertEquals(2,prefs.dayImages(java.time.YearMonth.from(day)).size)
         assertTrue(prefs.clearDayImage(day));assertFalse(File(first).exists());assertTrue(File(second).exists());assertEquals(second,CalendarPreferences(app).dayImage(day.plusDays(1)))
     }
-    @Test fun hierarchyShowsParentPlanAndScheduleForActionOutsidePlanDates(){
+    @Test fun outsideScheduleActionsRemainVisibleWithoutLegacyAttachment(){
         val date=LocalDate.of(2030,1,2);val repo=app.dateAwareTimePlanRepository;val base=repo.createPlan(date.minusDays(1).atTime(9,0))!!
         val event=DateTimeEvent("evening",TimeEventKind.MIDWAY,0,"오후 당직",EventDateTimeSpec.Single(DateTimeValue.explicit(date.minusDays(1).atTime(10,0))))
         val action=TimePlanActionItem(parentPointId=event.id,content="장비 상태 확인",scheduledDateTime=date.atTime(9,30))
@@ -60,7 +60,7 @@ class CalendarWidgetsUiTest {
         val entries=CalendarAgenda.entriesOn(date,listOf(plan),emptyList());assertEquals(1,entries.size)
         var opened:AgendaEntry?=null
         compose.setContent{ArmyristTheme{CalendarPlanBranch(plan,entries,{opened=it})}}
-        compose.onNodeWithText("수요일 당직").assertIsDisplayed();compose.onNodeWithText("오후 당직").assertIsDisplayed();compose.onNodeWithText("장비 상태 확인").assertIsDisplayed().performClick()
+        compose.onNodeWithText("수요일 당직").assertIsDisplayed();compose.onNodeWithText("오후 당직").assertDoesNotExist();compose.onNodeWithText("일정 외 실시사항").assertIsDisplayed();compose.onNodeWithText("장비 상태 확인").assertIsDisplayed().performClick()
         assertEquals(action.id,opened?.itemId);assertEquals(AgendaKind.ACTION,opened?.kind)
         compose.runOnIdle{val view=android.view.inspector.WindowInspector.getGlobalWindowViews().last();val bitmap=Bitmap.createBitmap(view.width,view.height,Bitmap.Config.ARGB_8888);view.draw(Canvas(bitmap));val file=File("build/preview-screens/calendar-hierarchy.png").also{it.parentFile!!.mkdirs()};file.outputStream().use{bitmap.compress(Bitmap.CompressFormat.PNG,100,it)};bitmap.recycle()}
     }

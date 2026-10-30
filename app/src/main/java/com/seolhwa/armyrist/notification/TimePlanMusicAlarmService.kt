@@ -49,7 +49,7 @@ class TimePlanMusicAlarmService : Service() {
 
                 val repository = DateAwareTimePlanRepository(applicationContext)
                 val plan = repository.getPlan(planId) ?: return START_NOT_STICKY
-                val action = plan.actions.firstOrNull { it.id == actionId }
+                val action = com.seolhwa.armyrist.timeplan.v3.domain.UnifiedTimePlan.actions(plan).firstOrNull { it.id == actionId }
                     ?: return START_NOT_STICKY
 
                 if (

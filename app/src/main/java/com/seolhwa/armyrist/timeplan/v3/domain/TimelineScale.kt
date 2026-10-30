@@ -37,7 +37,8 @@ object TimelineSelection {
     fun remove(plan:DateAwareTimePlan,keys:Set<String>):DateAwareTimePlan{
         val nodes=plan.orderedEvents().filter{"N:${it.id}" in keys}.map{it.id}.toSet()
         require(plan.orderedEvents().none{it.id in nodes&&it.dateTimeLocked}){"고정된 일정은 고정을 해제한 뒤 삭제해주세요."}
-        val actions=plan.actions.filter{"A:${it.id}" in keys||it.parentPointId in nodes}.map{it.id}.toSet()
+        val actions=plan.actions.filter{"A:${it.id}" in keys}.map{it.id}.toSet()
+        require(plan.actions.none{it.id in actions && it.timeLocked}){"고정된 항목은 고정을 해제한 뒤 삭제해주세요."}
         require(nodes.isNotEmpty()||actions.isNotEmpty()){"시작·종료 지점은 삭제하지 않습니다. 일정 또는 실시사항을 선택해주세요."}
         return DateTimePlanRules.normalizeTopology(TimePlanExecutionRules.normalizeActionOrder(plan.copy(
             midwayEvents=plan.midwayEvents.filterNot{it.id in nodes}.sortedBy{it.order}.mapIndexed{i,e->e.copy(order=i)},

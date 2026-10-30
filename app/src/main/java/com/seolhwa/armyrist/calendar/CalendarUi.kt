@@ -117,9 +117,9 @@ private fun MonthGrid(month:YearMonth,selected:LocalDate,plans:List<DateAwareTim
 internal fun AgendaRow(entry: AgendaEntry,onClick: ()->Unit) {
     Surface(Modifier.fillMaxWidth().clickable(onClick=onClick),shape=ArmyristControlShape,color=ArmyristColors.RaisedSurface) {
         Row(Modifier.heightIn(min=76.dp),verticalAlignment=Alignment.CenterVertically) {
-            Box(Modifier.width(4.dp).height(48.dp).background(entry.kind.color()))
+            Box(Modifier.width(4.dp).height(48.dp).background(entry.color?.let(::scheduleColor) ?: entry.kind.color()))
             Column(Modifier.weight(1f).padding(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                Text("${entry.kind.label} · ${entry.start.format(DateTimeFormatter.ofPattern("HH:mm"))}${if(entry.complete) " · 완료" else ""}",style=MaterialTheme.typography.labelSmall,color=entry.kind.color())
+                Text("${entry.kind.label} · ${entry.start.format(DateTimeFormatter.ofPattern("HH:mm"))}${entry.end?.takeIf{it>entry.start}?.let{"–"+it.format(DateTimeFormatter.ofPattern("HH:mm"))}.orEmpty()}${if(entry.complete) " · 완료" else ""}",style=MaterialTheme.typography.labelSmall,color=entry.color?.let(::scheduleColor) ?: entry.kind.color())
                 Text(entry.title,fontWeight=FontWeight.SemiBold)
                 if(entry.ownerTitle.isNotBlank())Text(entry.ownerTitle,style=MaterialTheme.typography.bodySmall,color=ArmyristColors.SecondaryText)
             }
@@ -172,28 +172,44 @@ internal fun CalendarPlanBranch(plan: DateAwareTimePlan, entries: List<AgendaEnt
                 }
                 Text("편집 ›",color=ArmyristColors.PrimaryControl,style=MaterialTheme.typography.labelMedium)
             }
-            val events=entries.filter{it.kind==AgendaKind.EVENT}.associateBy{it.itemId}
-            val actions=entries.filter{it.kind==AgendaKind.ACTION}.groupBy{entry->plan.actions.firstOrNull{it.id==entry.itemId}?.parentPointId}
-            com.seolhwa.armyrist.timeplan.v3.domain.DateTimePlanRules.nodeIds(plan).forEach{node->
-                val event=events[node];val children=actions[node].orEmpty()
-                if(event!=null||children.isNotEmpty())Surface(Modifier.fillMaxWidth().padding(start=10.dp),shape=ArmyristControlShape,color=ArmyristColors.RaisedSurface){
-                    Column(Modifier.padding(10.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
-                        val nodeEntry=event ?: AgendaEntry(AgendaKind.EVENT,plan.id,node,com.seolhwa.armyrist.timeplan.v3.domain.TimePlanExecutionRules.pointName(plan,node),plan.title,com.seolhwa.armyrist.timeplan.v3.domain.DateTimePlanRules.nodeArrival(plan,node)?:planEntry.start)
+            val headers=entries.filter{it.kind==AgendaKind.EVENT||(it.kind==AgendaKind.ACTION&&it.end!=null&&it.end>it.start)}
+            val headerKeys=headers.map{it.kind to it.itemId}.toSet()
+            val actions=entries.filter{it.kind==AgendaKind.ACTION&&(it.kind to it.itemId) !in headerKeys}.groupBy{it.displayEventId}
+            headers.forEach{nodeEntry->
+                val groupId=if(nodeEntry.kind==AgendaKind.EVENT)nodeEntry.itemId else "A:${nodeEntry.itemId}"
+                val children=actions[groupId].orEmpty()
+                val tint=nodeEntry.color?.let(::scheduleColor)?:AgendaKind.EVENT.color()
+                Surface(Modifier.fillMaxWidth().padding(start=8.dp),shape=ArmyristControlShape,color=tint.copy(alpha=.07f)){
+                    Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
                         Row(Modifier.fillMaxWidth().clickable{onOpen(nodeEntry)},verticalAlignment=Alignment.CenterVertically){
-                            Column(Modifier.weight(1f)){Text("일정 · ${nodeEntry.start.format(DateTimeFormatter.ofPattern("MM.dd HH:mm"))}${nodeEntry.end?.takeUnless{it==nodeEntry.start}?.let{ " – "+it.format(DateTimeFormatter.ofPattern("MM.dd HH:mm")) }.orEmpty()} · ${children.size}개 실시사항",style=MaterialTheme.typography.labelSmall,color=AgendaKind.EVENT.color());Text(nodeEntry.title,fontWeight=FontWeight.SemiBold)}
-                            Text("›",color=ArmyristColors.SecondaryText)
+                            Column(Modifier.weight(1f)){
+                                Text("실시사항 · ${nodeEntry.start.format(DateTimeFormatter.ofPattern("MM.dd HH:mm"))}${nodeEntry.end?.takeUnless{it==nodeEntry.start}?.let{" – "+it.format(DateTimeFormatter.ofPattern("MM.dd HH:mm"))}.orEmpty()}${if(nodeEntry.complete)" · 완료"else""}${if(children.isNotEmpty())" · ${children.size}개 항목"else""}",style=MaterialTheme.typography.labelSmall,color=tint)
+                                Text(nodeEntry.title,fontWeight=FontWeight.Bold,color=tint)
+                            };Text("편집 ›",style=MaterialTheme.typography.labelSmall,color=tint)
                         }
-                        children.forEach{child->
-                            Row(Modifier.fillMaxWidth().padding(start=12.dp).clickable{onOpen(child)}.padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically){
-                                Text(if(child.complete)"✓"else"○",Modifier.padding(end=8.dp),color=AgendaKind.ACTION.color())
-                                Column(Modifier.weight(1f)){Text("실시사항 · ${child.start.format(DateTimeFormatter.ofPattern("HH:mm"))}",style=MaterialTheme.typography.labelSmall,color=AgendaKind.ACTION.color());Text(child.title)}
-                                Text("›",color=ArmyristColors.SecondaryText)
-                            }
-                        }
+                        children.forEach{child->CalendarActionChild(child,tint,onOpen)}
                     }
+                }
+            }
+            actions[null].orEmpty().takeIf{it.isNotEmpty()}?.let{items->
+                Column(Modifier.padding(start=16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                    Text("일정 외 실시사항",style=MaterialTheme.typography.labelMedium,color=ArmyristColors.SecondaryText)
+                    items.forEach{child->CalendarActionChild(child,child.color?.let(::scheduleColor)?:AgendaKind.ACTION.color(),onOpen)}
                 }
             }
             if(entries.none{it.kind==AgendaKind.EVENT||it.kind==AgendaKind.ACTION})Text("이 날짜에 지정된 하위 일정·실시사항이 없습니다.",style=MaterialTheme.typography.bodySmall,color=ArmyristColors.SecondaryText)
         }
+    }
+}
+
+@Composable
+private fun CalendarActionChild(child:AgendaEntry,tint:Color,onOpen:(AgendaEntry)->Unit) {
+    Row(Modifier.fillMaxWidth().clickable{onOpen(child)}.padding(start=8.dp,top=8.dp,bottom=8.dp),verticalAlignment=Alignment.CenterVertically) {
+        Text(if(child.complete)"✓" else "○",Modifier.padding(end=10.dp),color=tint)
+        Column(Modifier.weight(1f)) {
+            Text("실시사항 · ${child.start.format(DateTimeFormatter.ofPattern("HH:mm"))}",style=MaterialTheme.typography.labelSmall,color=tint)
+            Text(child.title,color=tint,fontWeight=FontWeight.Medium)
+        }
+        Text("›",color=tint)
     }
 }

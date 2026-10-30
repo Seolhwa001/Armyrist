@@ -172,427 +172,28 @@ private fun TimePlanPrepareScreen(
     onSelectedPointIdsChange: (Set<String>) -> Unit,
     onCommit: (DateAwareTimePlan) -> Boolean
 ) {
-    val context = LocalContext.current
-    val allPointIds = remember(plan) { DateTimePlanRules.nodeIds(plan) }
-    var selectedPoints by rememberSaveable(plan.id) {
-        mutableStateOf(initiallySelectedPointIds.intersect(allPointIds.toSet()).toList())
-    }
-    var selectedActions by rememberSaveable(plan.id) { mutableStateOf(emptyList<String>()) }
-    var editAction by remember { mutableStateOf<TimePlanActionItem?>(null) }
-    var addForPoint by remember { mutableStateOf<String?>(null) }
-    var batchAdd by remember { mutableStateOf(false) }
-    var batchPointMove by remember { mutableStateOf(false) }
-    var groupManager by remember { mutableStateOf(false) }
-    var moveAction by remember { mutableStateOf<TimePlanActionItem?>(null) }
-    var batchGroup by remember { mutableStateOf(false) }
-    var confirmDeleteSelected by remember { mutableStateOf(false) }
-    var message by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(selectedPoints) { onSelectedPointIdsChange(selectedPoints.toSet()) }
-
-    val notificationPermission = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        message = if (granted) "알림 권한을 허용했습니다." else "알림 권한이 없어 예정 알림은 표시되지 않습니다."
-    }
-
-    fun togglePoint(id: String) {
-        selectedPoints = (if (id in selectedPoints) selectedPoints - id else selectedPoints + id)
-    }
-    fun toggleAction(id: String) {
-        selectedActions = (if (id in selectedActions) selectedActions - id else selectedActions + id)
-    }
-
+    var adding by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf(false) }
+    var groupsOpen by remember { mutableStateOf(false) }
+    val context=LocalContext.current
+    val permission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){}
+    if(groupsOpen)ActionGroupManagerDialog(plan,{groupsOpen=false},onCommit)
     Column(Modifier.fillMaxSize()) {
-        ArmyristPanel(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("실시사항 준비", fontWeight = FontWeight.Bold)
-                Text(
-                    "지점 ${selectedPoints.size}개 · 실시사항 ${selectedActions.size}개 선택",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ArmyristColors.SecondaryText
-                )
-
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = { groupManager = true },
-                        modifier = Modifier.weight(1f).heightIn(min = 38.dp),
-                        shape = ArmyristPanelShape,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                    ) { Text("그룹 관리") }
-
-                    OutlinedButton(
-                        onClick = {
-                            selectedPoints =
-                                if (
-                                    selectedPoints.toSet()
-                                        .containsAll(allPointIds.toSet()) &&
-                                    allPointIds.isNotEmpty()
-                                ) {
-                                    emptyList()
-                                } else {
-                                    allPointIds
-                                }
-                        },
-                        modifier = Modifier.weight(1f).heightIn(min = 38.dp),
-                        shape = ArmyristPanelShape,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            if (
-                                selectedPoints.toSet()
-                                    .containsAll(allPointIds.toSet()) &&
-                                allPointIds.isNotEmpty()
-                            ) "지점 해제" else "지점 전체"
-                        )
-                    }
-
-                    OutlinedButton(
-                        enabled = plan.actions.isNotEmpty(),
-                        onClick = {
-                            val allActionIds = plan.actions.map { it.id }
-                            selectedActions =
-                                if (
-                                    selectedActions.toSet()
-                                        .containsAll(allActionIds.toSet()) &&
-                                    allActionIds.isNotEmpty()
-                                ) {
-                                    emptyList()
-                                } else {
-                                    allActionIds
-                                }
-                        },
-                        modifier = Modifier.weight(1f).heightIn(min = 38.dp),
-                        shape = ArmyristPanelShape,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        val allActionIds = plan.actions.map { it.id }
-                        Text(
-                            if (
-                                selectedActions.toSet()
-                                    .containsAll(allActionIds.toSet()) &&
-                                allActionIds.isNotEmpty()
-                            ) "실시사항 해제" else "실시사항 전체"
-                        )
-                    }
-                }
-
-                if (selectedPoints.isNotEmpty()) {
-                    Button(
-                        onClick = { batchAdd = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = ArmyristPanelShape,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = ArmyristColors.SecondaryControl,
-                            contentColor = ArmyristColors.PrimaryText
-                        ),
-                        border = BorderStroke(1.dp, ArmyristColors.PrimaryControl)
-                    ) { Text("선택 지점에 실시사항 일괄 추가") }
-                }
-
-                if (selectedActions.isNotEmpty()) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = { batchPointMove = true },
-                            modifier = Modifier.weight(1f),
-                            shape = ArmyristPanelShape
-                        ) { Text("지점 이동") }
-                        OutlinedButton(
-                            onClick = { batchGroup = true },
-                            modifier = Modifier.weight(1f),
-                            shape = ArmyristPanelShape
-                        ) { Text("그룹 지정") }
-                        OutlinedButton(
-                            onClick = { confirmDeleteSelected = true },
-                            modifier = Modifier.weight(1f),
-                            shape = ArmyristPanelShape
-                        ) { Text("삭제") }
-                    }
-                }
-            }
+        Row(Modifier.fillMaxWidth().padding(horizontal=12.dp),verticalAlignment=Alignment.CenterVertically) {
+            Text("실시사항 시각은 일정과 독립적으로 유지됩니다.",Modifier.weight(1f),style=MaterialTheme.typography.labelSmall)
+            TextButton(onClick={groupsOpen=true}){Text("그룹")}
+            TextButton(onClick={adding=true}){Text("+ 추가")}
         }
-
-        LazyColumn(
-            Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            contentPadding = PaddingValues(8.dp, 4.dp, 8.dp, 88.dp),
-            verticalArrangement = Arrangement.spacedBy(0.dp)
-        ) {
-            items(allPointIds, key = { "point-$it" }) { pointId ->
-                val pointActions = TimePlanExecutionRules.actionsForPoint(plan, pointId)
-                val pointTime = TimePlanExecutionRules.pointDateTime(plan, pointId)
-                val pointSelected = pointId in selectedPoints
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = ArmyristPanelShape,
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (pointSelected) ArmyristColors.SecondaryControl else ArmyristColors.RaisedSurface
-                    ),
-                    border = BorderStroke(1.dp, if (pointSelected) ArmyristColors.PrimaryControl else ArmyristColors.Border)
-                ) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = pointSelected, onCheckedChange = { togglePoint(pointId) })
-                            Column(Modifier.weight(1f)) {
-                                Text(TimePlanExecutionRules.pointName(plan, pointId), fontWeight = FontWeight.Bold)
-                                Text(pointTime?.format(dateClock) ?: "시간 미설정", style = MaterialTheme.typography.bodySmall)
-                            }
-                            TextButton(
-                                onClick = {
-                                    if (pointTime == null) message = "지점 시간이 설정되어 있어야 실시사항을 추가할 수 있습니다."
-                                    else addForPoint = pointId
-                                }
-                            ) { Text("+ 추가") }
-                        }
-
-                        if (pointActions.isEmpty()) {
-                            Text("실시사항 없음", style = MaterialTheme.typography.bodySmall, color = ArmyristColors.SecondaryText)
-                        } else {
-                            pointActions.forEach { action ->
-                                val selected = action.id in selectedActions
-                                Surface(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = ArmyristPanelShape,
-                                    color = if (selected) ArmyristColors.SecondaryControl else ArmyristColors.WorkSurface,
-                                    border = BorderStroke(1.dp, ArmyristColors.Border)
-                                ) {
-                                    Row(
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .clickable { editAction = action }
-                                            .padding(horizontal = 8.dp, vertical = 6.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Checkbox(
-                                            checked = selected,
-                                            onCheckedChange = { toggleAction(action.id) }
-                                        )
-                                        Column(Modifier.weight(1f)) {
-                                            Text(action.content, fontWeight = FontWeight.SemiBold)
-                                            Text(
-                                                buildString {
-                                                    append(formatActionDateTime(plan, action.scheduledDateTime))
-                                                    action.groupId?.let { gid ->
-                                                        plan.actionGroups.firstOrNull { it.id == gid }?.let { append(" · ${it.name}") }
-                                                    }
-                                                    if (action.notificationMode == ActionNotificationMode.SIMPLE) append(" · 간단한 알림")
-                                                    if (action.notificationMode == ActionNotificationMode.MUSIC) append(" · 음악 알림")
-                                                },
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = ArmyristColors.SecondaryText
-                                            )
-                                            action.note?.takeIf { it.isNotBlank() }?.let {
-                                                Text("비고: $it", style = MaterialTheme.typography.bodySmall)
-                                            }
-                                        }
-                                        Text(
-                                            "편집",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = ArmyristColors.PrimaryControl,
-                                            modifier = Modifier.padding(start = 6.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        if(error)Text("저장하지 못했습니다.",color=ArmyristColors.Danger)
+        Box(Modifier.weight(1f)){TimePlanExecuteScreen(plan,onCommit)}
     }
-
-    addForPoint?.let { pointId ->
-        val pointTime = TimePlanExecutionRules.pointDateTime(plan, pointId)
-        if (pointTime != null) {
-            ActionEditDialog(
-                title = "실시사항 추가",
-                initial = null,
-                baseDateTime = pointTime,
-                groups = plan.actionGroups,
-                onDismiss = { addForPoint = null },
-                onConfirm = { draft ->
-                    if (draft.notificationEnabled && Build.VERSION.SDK_INT >= 33 && !TimePlanActionNotificationManager.notificationPermissionGranted(context)) {
-                        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    }
-                    val action = draft.copy(
-                        id = UUID.randomUUID().toString(),
-                        parentPointId = pointId,
-                        order = TimePlanExecutionRules.actionsForPoint(plan, pointId).size,
-                        createdAt = System.currentTimeMillis().toString(),
-                        updatedAt = System.currentTimeMillis().toString()
-                    )
-                    if (!onCommit(plan.copy(actions = plan.actions + action))) message = "실시사항을 저장하지 못했습니다."
-                    addForPoint = null
-                }
-            )
-        }
-    }
-
-    editAction?.let { action ->
-        ActionEditDialog(
-            title = "실시사항 편집",
-            initial = action,
-            baseDateTime = action.scheduledDateTime,
-            groups = plan.actionGroups,
-            onDismiss = { editAction = null },
-            onMove = {
-                moveAction = action
-                editAction = null
-            },
-            onDelete = {
-                onCommit(TimePlanExecutionRules.batchDelete(plan, setOf(action.id)))
-                editAction = null
-            },
-            onConfirm = { changed ->
-                if (changed.notificationEnabled && Build.VERSION.SDK_INT >= 33 && !TimePlanActionNotificationManager.notificationPermissionGranted(context)) {
-                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                }
-                val candidate = plan.copy(
-                    actions = plan.actions.map {
-                        if (it.id == action.id) changed.copy(
-                            completionState = it.completionState,
-                            id = action.id,
-                            parentPointId = action.parentPointId,
-                            order = action.order,
-                            createdAt = action.createdAt,
-                            updatedAt = System.currentTimeMillis().toString()
-                        ) else it
-                    }
-                )
-                if (!onCommit(candidate)) message = "실시사항을 저장하지 못했습니다."
-                editAction = null
-            }
-        )
-    }
-
-    moveAction?.let { action ->
-        ActionMoveDialog(
-            plan = plan,
-            action = action,
-            onDismiss = { moveAction = null },
-            onMove = { targetPointId ->
-                val candidate = TimePlanExecutionRules.moveActionToParentPreservingTime(
-                    plan = plan,
-                    actionId = action.id,
-                    targetParentPointId = targetPointId
-                )
-                if (!onCommit(candidate)) message = "실시사항을 이동하지 못했습니다."
-                moveAction = null
-            }
-        )
-    }
-
-    if (batchAdd) {
-        BatchAddDialog(
-            count = selectedPoints.size,
-            groups = plan.actionGroups,
-            onDismiss = { batchAdd = false },
-            onConfirm = { content, offset, note, groupId, notify ->
-                val now = System.currentTimeMillis().toString()
-                val additions = selectedPoints.mapNotNull { pointId ->
-                    TimePlanExecutionRules.pointDateTime(plan, pointId)?.let { parentTime ->
-                        TimePlanActionItem(
-                            id = UUID.randomUUID().toString(),
-                            parentPointId = pointId,
-                            content = content,
-                            scheduledDateTime = parentTime.plusMinutes(offset),
-                            notificationEnabled = notify,
-                            groupId = groupId,
-                            note = note,
-                            order = TimePlanExecutionRules.actionsForPoint(plan, pointId).size,
-                            createdAt = now,
-                            updatedAt = now
-                        )
-                    }
-                }
-                if (additions.size != selectedPoints.size) {
-                    message = "시간이 설정되지 않은 지점이 포함되어 일괄 추가하지 않았습니다."
-                } else if (content.isNotBlank()) {
-                    if (notify && Build.VERSION.SDK_INT >= 33 && !TimePlanActionNotificationManager.notificationPermissionGranted(context)) {
-                        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    }
-                    onCommit(plan.copy(actions = plan.actions + additions))
-                    selectedPoints = emptyList()
-                }
-                batchAdd = false
-            }
-        )
-    }
-
-    if (batchPointMove) {
-        BatchActionMoveDialog(
-            plan = plan,
-            selectedActionIds = selectedActions.toSet(),
-            onDismiss = { batchPointMove = false },
-            onMove = { targetPointId ->
-                val candidate =
-                    TimePlanExecutionRules.batchMoveActionsToParentPreservingTime(
-                        plan = plan,
-                        actionIds = selectedActions.toSet(),
-                        targetParentPointId = targetPointId
-                    )
-                if (!onCommit(candidate)) {
-                    message = "선택한 실시사항을 이동하지 못했습니다."
-                } else {
-                    selectedActions = emptyList()
-                }
-                batchPointMove = false
-            }
-        )
-    }
-
-    if (batchGroup) {
-        GroupPickerDialog(
-            title = "그룹 지정",
-            groups = plan.actionGroups,
-            onDismiss = { batchGroup = false },
-            onSelect = { groupId ->
-                onCommit(TimePlanExecutionRules.batchAssignGroup(plan, selectedActions.toSet(), groupId))
-                selectedActions = emptyList()
-                batchGroup = false
-            }
-        )
-    }
-
-    if (confirmDeleteSelected) {
-        ArmyristDialog(
-            onDismissRequest = { confirmDeleteSelected = false },
-            title = { Text("실시사항 삭제") },
-            text = { Text("선택한 실시사항 ${selectedActions.size}개를 삭제할까요?") },
-            dismissButton = { TextButton(onClick = { confirmDeleteSelected = false }) { Text("취소") } },
-            confirmButton = {
-                Button(onClick = {
-                    onCommit(TimePlanExecutionRules.batchDelete(plan, selectedActions.toSet()))
-                    selectedActions = emptyList()
-                    confirmDeleteSelected = false
-                }) { Text("삭제") }
-            }
-        )
-    }
-
-    if (groupManager) {
-        ActionGroupManagerDialog(
-            plan = plan,
-            onDismiss = { groupManager = false },
-            onCommit = onCommit
-        )
-    }
-
-    message?.let {
-        ArmyristDialog(
-            onDismissRequest = { message = null },
-            title = { Text("확인") },
-            text = { Text(it) },
-            confirmButton = { TextButton(onClick = { message = null }) { Text("확인") } }
-        )
-    }
+    if(adding)ActionEditDialog(
+        title="실시사항 추가",initial=null,
+        baseDateTime=plan.start.value.value?:LocalDateTime.now(),groups=plan.actionGroups,
+        onDismiss={adding=false},onConfirm={draft->
+            if(draft.notificationMode!=ActionNotificationMode.NONE && Build.VERSION.SDK_INT>=33 && !TimePlanActionNotificationManager.notificationPermissionGranted(context))permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            if(onCommit(TimePlanExecutionRules.normalizeActionOrder(plan.copy(actions=plan.actions+draft.copy(parentPointId="UNASSIGNED",order=plan.actions.size)))))adding=false else error=true
+        })
 }
 
 @Composable
@@ -600,6 +201,11 @@ private fun TimePlanExecuteScreen(
     plan: DateAwareTimePlan,
     onCommit: (DateAwareTimePlan) -> Boolean
 ) {
+    val context=LocalContext.current
+    val permission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){}
+    var batchShiftOpen by remember { mutableStateOf(false) }
+    var batchGroupOpen by remember { mutableStateOf(false) }
+    var batchDeleteOpen by remember { mutableStateOf(false) }
     var view by rememberSaveable(plan.id) { mutableStateOf(TimePlanExecutionView.TIMELINE) }
     var noteTarget by remember { mutableStateOf<TimePlanActionItem?>(null) }
     var editAction by remember { mutableStateOf<TimePlanActionItem?>(null) }
@@ -742,6 +348,12 @@ private fun TimePlanExecuteScreen(
                     }
                 }
             }
+        }
+
+        if(bulkSelect)Row(Modifier.fillMaxWidth().padding(horizontal=8.dp),horizontalArrangement=Arrangement.SpaceEvenly) {
+            TextButton(enabled=selectedActionIds.isNotEmpty(),onClick={batchShiftOpen=true}){Text("시각 이동")}
+            TextButton(enabled=selectedActionIds.isNotEmpty(),onClick={batchGroupOpen=true}){Text("그룹 지정")}
+            TextButton(enabled=selectedActionIds.isNotEmpty(),onClick={batchDeleteOpen=true}){Text("삭제")}
         }
 
         val sections: List<Pair<String, List<TimePlanActionItem>>> = if (view == TimePlanExecutionView.TIMELINE) {
@@ -950,10 +562,6 @@ private fun TimePlanExecuteScreen(
                                 Text(
                                     buildString {
                                         append(formatActionDateTime(plan, action.scheduledDateTime))
-                                        if (view == TimePlanExecutionView.TIMELINE) {
-                                            append(" · ")
-                                            append(TimePlanExecutionRules.pointName(plan, action.parentPointId))
-                                        }
                                     },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = ArmyristColors.SecondaryText
@@ -976,6 +584,20 @@ private fun TimePlanExecuteScreen(
         }
     }
 
+    if(batchShiftOpen)NumberInputDialog("실시사항 시각 이동","선택한 실시사항만 이동할 분을 입력하세요. 음수도 가능합니다.","0",{batchShiftOpen=false}) { delta ->
+        val candidate=runCatching{TimePlanExecutionRules.batchShift(plan,selectedActionIds.toSet(),delta)}.getOrNull()
+        if(candidate==null || !onCommit(candidate))message="시각을 변경하지 못했습니다."
+        batchShiftOpen=false
+    }
+    if(batchGroupOpen)GroupPickerDialog("그룹 지정",plan.actionGroups,{batchGroupOpen=false}) { group ->
+        if(!onCommit(TimePlanExecutionRules.batchAssignGroup(plan,selectedActionIds.toSet(),group)))message="저장하지 못했습니다."
+        batchGroupOpen=false
+    }
+    if(batchDeleteOpen)ArmyristDialog(onDismissRequest={batchDeleteOpen=false},title={Text("실시사항 삭제")},text={Text("선택한 ${selectedActionIds.size}개 실시사항을 삭제할까요? 일정은 유지됩니다.")},confirmButton={TextButton(onClick={
+        if(onCommit(TimePlanExecutionRules.batchDelete(plan,selectedActionIds.toSet()))){selectedActionIds=emptyList();bulkSelect=false}else message="삭제하지 못했습니다."
+        batchDeleteOpen=false
+    }){Text("삭제")}},dismissButton={TextButton(onClick={batchDeleteOpen=false}){Text("취소")}})
+
     editAction?.let { action ->
         ActionEditDialog(
             title = "실시사항 편집",
@@ -983,15 +605,12 @@ private fun TimePlanExecuteScreen(
             baseDateTime = action.scheduledDateTime,
             groups = plan.actionGroups,
             onDismiss = { editAction = null },
-            onMove = {
-                moveAction = action
-                editAction = null
-            },
             onDelete = {
                 onCommit(TimePlanExecutionRules.batchDelete(plan, setOf(action.id)))
                 editAction = null
             },
             onConfirm = { changed ->
+                if(changed.notificationMode!=ActionNotificationMode.NONE && Build.VERSION.SDK_INT>=33 && !TimePlanActionNotificationManager.notificationPermissionGranted(context))permission.launch(Manifest.permission.POST_NOTIFICATIONS)
                 val candidate = plan.copy(
                     actions = plan.actions.map {
                         if (it.id == action.id) changed.copy(
@@ -1010,22 +629,6 @@ private fun TimePlanExecuteScreen(
         )
     }
 
-    moveAction?.let { action ->
-        ActionMoveDialog(
-            plan = plan,
-            action = action,
-            onDismiss = { moveAction = null },
-            onMove = { targetPointId ->
-                val candidate = TimePlanExecutionRules.moveActionToParentPreservingTime(
-                    plan = plan,
-                    actionId = action.id,
-                    targetParentPointId = targetPointId
-                )
-                if (!onCommit(candidate)) message = "실시사항을 이동하지 못했습니다."
-                moveAction = null
-            }
-        )
-    }
 
     message?.let {
         ArmyristDialog(
@@ -1288,220 +891,6 @@ internal fun ActionEditDialog(
 }
 
 @Composable
-private fun ActionMoveDialog(
-    plan: DateAwareTimePlan,
-    action: TimePlanActionItem,
-    onDismiss: () -> Unit,
-    onMove: (String) -> Unit
-) {
-    val pointIds = DateTimePlanRules.nodeIds(plan)
-    var target by remember(action.id) { mutableStateOf(action.parentPointId) }
-
-    ArmyristDialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = false),
-        title = { Text("실시사항 이동", fontWeight = FontWeight.Bold) },
-        text = {
-            LazyColumn(
-                modifier = Modifier.heightIn(max = 420.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                items(pointIds, key = { it }) { pointId ->
-                    val selected = pointId == target
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { target = pointId },
-                        shape = ArmyristPanelShape,
-                        color = if (selected) ArmyristColors.SecondaryControl else ArmyristColors.WorkSurface,
-                        border = BorderStroke(
-                            1.dp,
-                            if (selected) ArmyristColors.PrimaryControl else ArmyristColors.Border
-                        )
-                    ) {
-                        Row(
-                            Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(selected = selected, onClick = { target = pointId })
-                            Spacer(Modifier.width(8.dp))
-                            Column {
-                                Text(TimePlanExecutionRules.pointName(plan, pointId), fontWeight = FontWeight.SemiBold)
-                                TimePlanExecutionRules.pointDateTime(plan, pointId)?.let {
-                                    Text(it.format(dateClock), style = MaterialTheme.typography.bodySmall, color = ArmyristColors.SecondaryText)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
-        confirmButton = {
-            Button(
-                enabled = target != action.parentPointId,
-                onClick = { onMove(target) },
-                colors = ButtonDefaults.buttonColors(containerColor = ArmyristColors.PrimaryControl)
-            ) { Text("이동") }
-        }
-    )
-}
-
-@Composable
-private fun BatchActionMoveDialog(
-    plan: DateAwareTimePlan,
-    selectedActionIds: Set<String>,
-    onDismiss: () -> Unit,
-    onMove: (String) -> Unit
-) {
-    val pointIds = DateTimePlanRules.nodeIds(plan)
-    var target by remember { mutableStateOf<String?>(null) }
-
-    ArmyristDialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            dismissOnBackPress = true,
-            dismissOnClickOutside = false
-        ),
-        title = {
-            Text(
-                "선택 실시사항 지점 이동",
-                fontWeight = FontWeight.Bold
-            )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "선택한 실시사항 ${selectedActionIds.size}개를 이동할 지점을 선택합니다. " +
-                        "실시사항의 지정 시간은 변경되지 않습니다.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ArmyristColors.SecondaryText
-                )
-                LazyColumn(
-                    modifier = Modifier.heightIn(max = 420.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    items(pointIds, key = { it }) { pointId ->
-                        val selected = pointId == target
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { target = pointId },
-                            shape = ArmyristPanelShape,
-                            color =
-                                if (selected) ArmyristColors.SecondaryControl
-                                else ArmyristColors.WorkSurface,
-                            border = BorderStroke(
-                                1.dp,
-                                if (selected) ArmyristColors.PrimaryControl
-                                else ArmyristColors.Border
-                            )
-                        ) {
-                            Row(
-                                Modifier.padding(
-                                    horizontal = 12.dp,
-                                    vertical = 10.dp
-                                ),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RadioButton(
-                                    selected = selected,
-                                    onClick = { target = pointId }
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Column {
-                                    Text(
-                                        TimePlanExecutionRules.pointName(plan, pointId),
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                    TimePlanExecutionRules
-                                        .pointDateTime(plan, pointId)
-                                        ?.let {
-                                            Text(
-                                                it.format(dateClock),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = ArmyristColors.SecondaryText
-                                            )
-                                        }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("취소")
-            }
-        },
-        confirmButton = {
-            Button(
-                enabled = target != null,
-                onClick = { target?.let(onMove) },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = ArmyristColors.PrimaryControl
-                )
-            ) {
-                Text("이동")
-            }
-        }
-    )
-}
-
-@Composable
-private fun BatchAddDialog(
-    count: Int,
-    groups: List<TimePlanActionGroup>,
-    onDismiss: () -> Unit,
-    onConfirm: (String, Long, String?, String?, Boolean) -> Unit
-) {
-    var content by remember { mutableStateOf("") }
-    var offset by remember { mutableStateOf("10") }
-    var note by remember { mutableStateOf("") }
-    var groupId by remember { mutableStateOf<String?>(null) }
-    var notify by remember { mutableStateOf(false) }
-    var groupMenu by remember { mutableStateOf(false) }
-    ArmyristDialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            dismissOnBackPress = true,
-            dismissOnClickOutside = false
-        ),
-        title = { Text("실시사항 일괄 추가") },
-        containerColor = ArmyristColors.RaisedSurface,
-        tonalElevation = 0.dp,
-        titleContentColor = ArmyristColors.PrimaryText,
-        textContentColor = ArmyristColors.PrimaryText,
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("선택 지점 ${count}개")
-                OutlinedTextField(content, { content = it }, label = { Text("내용") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(offset, { offset = it }, label = { Text("Point 기준 +분") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(note, { note = it }, label = { Text("비고") }, modifier = Modifier.fillMaxWidth())
-                Box {
-                    OutlinedButton(onClick = { groupMenu = true }, modifier = Modifier.fillMaxWidth()) { Text(groups.firstOrNull { it.id == groupId }?.name ?: "그룹 미지정") }
-                    DropdownMenu(expanded = groupMenu, onDismissRequest = { groupMenu = false }) {
-                        DropdownMenuItem(text = { Text("미지정") }, onClick = { groupId = null; groupMenu = false })
-                        groups.sortedBy { it.order }.forEach { group -> DropdownMenuItem(text = { Text(group.name) }, onClick = { groupId = group.id; groupMenu = false }) }
-                    }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) { Switch(notify, { notify = it }); Spacer(Modifier.width(8.dp)); Text("예정 알림") }
-                Text("취소/뒤로가기를 누르면 아직 저장되지 않습니다.", style = MaterialTheme.typography.bodySmall, color = ArmyristColors.SecondaryText)
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
-        confirmButton = {
-            Button(
-                enabled = content.isNotBlank() && offset.toLongOrNull() != null,
-                onClick = { onConfirm(content.trim(), offset.toLong(), note.trim().ifBlank { null }, groupId, notify) },
-                colors = ButtonDefaults.buttonColors(containerColor = ArmyristColors.PrimaryControl)
-            ) { Text("적용") }
-        }
-    )
-}
-
-@Composable
 private fun NumberInputDialog(
     title: String,
     description: String,
@@ -1588,7 +977,7 @@ private fun GroupPickerDialog(
 }
 
 @Composable
-private fun ActionGroupManagerDialog(
+internal fun ActionGroupManagerDialog(
     plan: DateAwareTimePlan,
     onDismiss: () -> Unit,
     onCommit: (DateAwareTimePlan) -> Boolean

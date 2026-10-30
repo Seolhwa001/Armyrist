@@ -101,7 +101,7 @@ internal fun CalendarScreen(externalRevision: Int, initialDate: String?, onBack:
                     }
                 }
             }
-            if(adding)item { Surface(shape=ArmyristPanelShape,color=ArmyristColors.WorkSurface){Column(Modifier.padding(12.dp)){Text("추가할 항목을 선택하세요",fontWeight=FontWeight.Bold);AgendaKind.entries.forEach { type->TextButton(onClick={kind=type;editing=null}){Text("+ ${type.label}")} }}} }
+            if(adding)item { Surface(shape=ArmyristPanelShape,color=ArmyristColors.WorkSurface){Column(Modifier.padding(12.dp)){Text("추가할 항목을 선택하세요",fontWeight=FontWeight.Bold);AgendaKind.entries.filterNot{it==AgendaKind.EVENT}.forEach { type->TextButton(onClick={kind=type;editing=null}){Text("+ ${type.label}")} }}} }
             val entries=CalendarAgenda.entriesOn(date,plans,lists)
             if(entries.isEmpty())item{Text("이 날짜에 예정된 항목이 없습니다.",Modifier.padding(vertical=20.dp),color=ArmyristColors.SecondaryText)}
             fun openEntry(entry: AgendaEntry){if(entry.kind==AgendaKind.PLAN||entry.kind==AgendaKind.EVENT)onPlan(entry.ownerId,entry.itemId)else{editing=entry;kind=entry.kind}}
@@ -132,18 +132,22 @@ internal fun CalendarEntryEditor(kind: AgendaKind,date: LocalDate,entry: AgendaE
     var timeText by rememberSaveable{mutableStateOf((entry?.start?:date.atTime(9,0)).toString())};val time=LocalDateTime.parse(timeText)
     var endText by rememberSaveable{mutableStateOf(time.plusHours(1).toString())};val end=LocalDateTime.parse(endText)
     var mode by rememberSaveable{mutableStateOf(oldAction?.notificationMode?:oldItem?.notificationMode?:ActionNotificationMode.NONE)}
+    var durationText by rememberSaveable{mutableStateOf(oldAction?.durationMinutes?.toString().orEmpty())}
+    var eventColor by rememberSaveable{mutableStateOf("#7543A3")}
     var error by remember{mutableStateOf<String?>(null)}
     BackHandler(onBack=onCancel)
     fun save(){
         if(name.isBlank()){error="이름을 입력해주세요.";return}
+        val duration=durationText.takeIf{it.isNotBlank()}?.toLongOrNull()
+        if(kind==AgendaKind.ACTION&&durationText.isNotBlank()&&(duration==null||duration<0||runCatching{time.plusMinutes(duration)}.isFailure)){error="소요 시간을 확인해주세요.";return}
         val now=System.currentTimeMillis().toString()
         val saved=when(kind){
             AgendaKind.PLAN -> if(end.isBefore(time)){error="종료는 시작 이후로 지정해주세요.";false}else repo.commit(DateTimePlanRules.normalizeTopology(DateAwareTimePlan(UUID.randomUUID().toString(),name.trim(),start=DateTimeAnchor(DateTimeValue.explicit(time)),end=DateTimeAnchor(DateTimeValue.explicit(end)),memo=note.trim().ifBlank{null},createdAt=now,updatedAt=now)))
-            AgendaKind.EVENT -> repo.getPlan(owner)?.let{latest-> val event=DateTimeEvent(UUID.randomUUID().toString(),TimeEventKind.MIDWAY,latest.midwayEvents.size,name.trim(),EventDateTimeSpec.Single(DateTimeValue.explicit(time)),note.trim().ifBlank{null});repo.commit(DateTimePlanRules.normalizeTopology(latest.copy(midwayEvents=latest.midwayEvents+event,updatedAt=now)))}?:false
+            AgendaKind.EVENT -> repo.getPlan(owner)?.let{latest-> val event=DateTimeEvent(UUID.randomUUID().toString(),TimeEventKind.MIDWAY,latest.midwayEvents.size,name.trim(),EventDateTimeSpec.Single(DateTimeValue.explicit(time)),note.trim().ifBlank{null},color=eventColor);repo.commit(DateTimePlanRules.normalizeTopology(latest.copy(midwayEvents=latest.midwayEvents+event,updatedAt=now)))}?:false
             AgendaKind.ACTION -> repo.getPlan(owner)?.let{latest->
                 val existing=oldAction?.let{old->latest.actions.find{it.id==old.id}}
                 if(oldAction!=null&&existing==null)false else {
-                    val item=(existing?:TimePlanActionItem(parentPointId=node,content=name.trim(),scheduledDateTime=time,order=latest.actions.size)).copy(content=name.trim(),scheduledDateTime=time,note=note.trim().ifBlank{null},notificationEnabled=mode!=ActionNotificationMode.NONE,notificationMode=mode,updatedAt=now)
+                    val item=(existing?:TimePlanActionItem(content=name.trim(),scheduledDateTime=time,order=latest.actions.size)).copy(content=name.trim(),scheduledDateTime=time,durationMinutes=duration,note=note.trim().ifBlank{null},notificationEnabled=mode!=ActionNotificationMode.NONE,notificationMode=mode,updatedAt=now)
                     repo.saveAction(owner,item)
                 }
             }?:false
@@ -155,11 +159,12 @@ internal fun CalendarEntryEditor(kind: AgendaKind,date: LocalDate,entry: AgendaE
     }
     Scaffold(modifier=Modifier.imePadding(),containerColor=ArmyristColors.AppBackground,topBar={TopAppBar(title={Text("${kind.label} ${if(entry==null)"추가"else"편집"}")},navigationIcon={TextButton(onClick=onCancel){Text("취소")}})},bottomBar={Surface(color=ArmyristColors.RaisedSurface){Button(onClick={save()},modifier=Modifier.fillMaxWidth().navigationBarsPadding().padding(14.dp)){Text("저장")}}}){padding->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){
+            if(kind==AgendaKind.ACTION)OutlinedTextField(durationText,{durationText=it.filter(Char::isDigit).take(8)},label={Text("소요 시간 · 분 (선택)")},modifier=Modifier.fillMaxWidth())
+            if(kind==AgendaKind.EVENT)ScheduleColorPicker(eventColor){eventColor=it}
             if(kind==AgendaKind.EVENT||kind==AgendaKind.ACTION){
                 Text("연결할 시간계획",fontWeight=FontWeight.Bold)
                 if(plans.isEmpty())Text("먼저 시간계획을 추가해주세요.",color=MaterialTheme.colorScheme.error)
                 plans.forEach{plan->FilterChip(selected=owner==plan.id,enabled=entry==null,onClick={owner=plan.id;node=DateTimePlanRules.START_ID},label={Text(plan.title)})}
-                if(kind==AgendaKind.ACTION&&entry==null)plans.find{it.id==owner}?.let{plan->Text("연결할 일정",fontWeight=FontWeight.Bold);DateTimePlanRules.nodeIds(plan).forEach{id->FilterChip(selected=node==id,onClick={node=id},label={Text(TimePlanExecutionRules.pointName(plan,id))})}}
             }
             if(kind==AgendaKind.CHECKLIST&&entry==null){Text("저장할 체크리스트",fontWeight=FontWeight.Bold);lists.forEach{list->FilterChip(selected=owner==list.id,onClick={owner=list.id},label={Text(list.title)})};FilterChip(selected=owner.isBlank(),onClick={owner=""},label={Text("+ 새 체크리스트")});if(owner.isBlank())OutlinedTextField(value=newList,onValueChange={newList=it},label={Text("체크리스트 이름")},modifier=Modifier.fillMaxWidth(),singleLine=true)}
             OutlinedTextField(value=name,onValueChange={name=it;error=null},label={Text("이름")},modifier=Modifier.fillMaxWidth(),singleLine=true)

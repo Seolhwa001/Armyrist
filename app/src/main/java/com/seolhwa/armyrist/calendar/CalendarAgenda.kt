@@ -5,7 +5,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 
 enum class AgendaKind(val label: String) { PLAN("시간계획"), EVENT("일정"), ACTION("실시사항"), CHECKLIST("체크리스트") }
-data class AgendaEntry(val kind: AgendaKind,val ownerId: String,val itemId: String?,val title: String,val ownerTitle: String,val start: LocalDateTime,val end: LocalDateTime?=null,val complete: Boolean=false)
+data class AgendaEntry(val kind: AgendaKind,val ownerId: String,val itemId: String?,val title: String,val ownerTitle: String,val start: LocalDateTime,val end: LocalDateTime?=null,val complete: Boolean=false,val displayEventId: String?=null,val color: String?=null)
 object CalendarAgenda {
     fun entriesOn(date: LocalDate,plans: List<DateAwareTimePlan>,checklists: List<Checklist>,today: LocalDate=LocalDate.now()): List<AgendaEntry> = buildList {
         fun overlaps(start: LocalDateTime,end: LocalDateTime?) = !date.isBefore(start.toLocalDate()) && !date.isAfter((end?.takeUnless { it.isBefore(start) } ?: start).toLocalDate())
@@ -14,9 +14,14 @@ object CalendarAgenda {
             if(start!=null && overlaps(start,plan.end.value.value)) add(AgendaEntry(AgendaKind.PLAN,plan.id,null,plan.title,"",start,plan.end.value.value))
             plan.orderedEvents().forEach { event ->
                 val a=DateTimePlanRules.arrival(event.timeSpec);val b=DateTimePlanRules.departure(event.timeSpec)
-                if(a!=null && overlaps(a,b)) add(AgendaEntry(AgendaKind.EVENT,plan.id,event.id,event.name,plan.title,a,b))
+                if(a!=null && overlaps(a,b)) add(AgendaEntry(AgendaKind.EVENT,plan.id,event.id,event.name,plan.title,a,b,complete=event.completionState==ActionCompletionState.COMPLETE,color=event.color))
             }
-            plan.actions.filter { it.scheduledDateTime.toLocalDate()==date }.forEach { a -> add(AgendaEntry(AgendaKind.ACTION,plan.id,a.id,a.content,"${plan.title} › ${TimePlanExecutionRules.pointName(plan,a.parentPointId)}",a.scheduledDateTime,complete=a.completionState==ActionCompletionState.COMPLETE)) }
+            plan.actions.forEach { a ->
+                val end=runCatching{a.scheduledDateTime.plusMinutes(a.durationMinutes?:0)}.getOrDefault(a.scheduledDateTime)
+                if(!overlaps(a.scheduledDateTime,end))return@forEach
+                val parent=if(end>a.scheduledDateTime)null else TimePlanScheduleDisplay.rangeAt(plan,a.scheduledDateTime,"A:${a.id}")
+                add(AgendaEntry(AgendaKind.ACTION,plan.id,a.id,a.content,if(parent==null)plan.title else "${plan.title} › ${parent.value.content}",a.scheduledDateTime,end.takeIf{it>a.scheduledDateTime},complete=a.completionState==ActionCompletionState.COMPLETE,displayEventId=parent?.let(TimePlanScheduleDisplay::groupId),color=parent?.value?.markerColor?:a.markerColor))
+            }
         }
         checklists.forEach { list -> list.items.forEach { item ->
             val day=item.scheduledDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: today;val minutes=item.scheduledTimeMinutes

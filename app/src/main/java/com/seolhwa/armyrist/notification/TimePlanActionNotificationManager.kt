@@ -143,7 +143,7 @@ object TimePlanActionNotificationManager {
         val permission = notificationPermissionGranted(context)
 
         repository.getPlans().forEach { plan ->
-            plan.actions.forEach { action ->
+            com.seolhwa.armyrist.timeplan.v3.domain.UnifiedTimePlan.actions(plan).forEach { action ->
                 val storedKey = key(plan.id, action.id)
                 when (TimePlanAlarmPolicy.disposition(plan, action, now, permission)) {
                     AlarmDisposition.SCHEDULE -> {

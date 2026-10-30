@@ -7,8 +7,10 @@ object TimePlanExecutionResultGenerator {
     private val clock = DateTimeFormatter.ofPattern("MM.dd HH:mm")
 
     fun compact(plan: DateAwareTimePlan): ToolResult {
-        val summary = TimePlanExecutionRules.summary(plan)
-        val incomplete = plan.actions
+        val entries=UnifiedTimePlan.entries(plan)
+        val all=entries.map{it.value}
+        val summary=TimePlanExecutionRules.summary(plan.copy(midwayEvents=emptyList(),finalPoint=null,links=emptyList(),actions=all))
+        val incomplete = all
             .filter { it.completionState == ActionCompletionState.INCOMPLETE }
             .sortedBy { it.scheduledDateTime }
 
@@ -20,7 +22,7 @@ object TimePlanExecutionResultGenerator {
             lines += ""
             lines += "[미실시]"
             incomplete.forEach { action ->
-                lines += "- ${action.scheduledDateTime.format(clock)} ${action.content}"
+                lines += "- ${actionLabel(action,entries)} ${action.content}"
                 action.note?.takeIf { it.isNotBlank() }?.let { lines += "  · $it" }
             }
         }
@@ -47,22 +49,16 @@ object TimePlanExecutionResultGenerator {
     }
 
     fun detailed(plan: DateAwareTimePlan): ToolResult {
-        val summary = TimePlanExecutionRules.summary(plan)
+        val entries=UnifiedTimePlan.entries(plan)
+        val all=entries.map{it.value}
+        val summary=TimePlanExecutionRules.summary(plan.copy(midwayEvents=emptyList(),finalPoint=null,links=emptyList(),actions=all))
         val lines = mutableListOf<String>()
-        val nodeIds = DateTimePlanRules.nodeIds(plan)
-
-        nodeIds.forEach { nodeId ->
-            val pointActions = TimePlanExecutionRules.actionsForPoint(plan, nodeId)
-            if (pointActions.isEmpty()) return@forEach
-            val pointTime = pointTimeLabel(plan, nodeId)
-            lines += "■ $pointTime ${TimePlanExecutionRules.pointName(plan, nodeId)}"
-            pointActions.forEach { action ->
-                val status = if (action.completionState == ActionCompletionState.COMPLETE) "완료" else "미실시"
-                lines += "- ${action.scheduledDateTime.format(clock)} ${action.content} : $status"
-                action.note?.takeIf { it.isNotBlank() }?.let { lines += "  · $it" }
-            }
-            lines += ""
+        all.sortedBy { it.scheduledDateTime }.forEach { action ->
+            val status = if(action.completionState==ActionCompletionState.COMPLETE) "완료" else "미실시"
+            lines += "- ${actionLabel(action,entries)} ${action.content} : $status"
+            action.note?.takeIf { it.isNotBlank() }?.let { lines += "  · $it" }
         }
+        lines += ""
 
         lines += "[수행 현황]"
         lines += "전체 ${summary.total}건"
@@ -88,34 +84,17 @@ object TimePlanExecutionResultGenerator {
         )
     }
 
-    private fun pointTimeLabel(plan: DateAwareTimePlan, nodeId: String): String {
-        if (nodeId == DateTimePlanRules.START_ID || nodeId == DateTimePlanRules.END_ID) {
-            return TimePlanExecutionRules.pointDateTime(plan, nodeId)?.format(clock) ?: "--.-- --:--"
-        }
-        val event = plan.orderedEvents().firstOrNull { it.id == nodeId }
-            ?: return "--.-- --:--"
-        return when (val spec = event.timeSpec) {
-            EventDateTimeSpec.Unspecified -> "--.-- --:--"
-            is EventDateTimeSpec.Single -> spec.value.value?.format(clock) ?: "--.-- --:--"
-            is EventDateTimeSpec.Range -> {
-                val start = spec.start.value
-                val end = spec.end.value
-                when {
-                    start != null && end != null ->
-                        "${start.format(clock)}~${end.format(DateTimeFormatter.ofPattern("HH:mm"))}"
-                    start != null -> start.format(clock)
-                    end != null -> end.format(clock)
-                    else -> "--.-- --:--"
-                }
-            }
-        }
+    private fun actionLabel(action:TimePlanActionItem,entries:List<UnifiedTimePlanEntry>):String {
+        if(entries.firstOrNull{it.value.id==action.id}?.untimed==true)return "시각 미설정"
+        val range=action.durationMinutes?.takeIf{it>0}?.let{"~"+action.scheduledDateTime.plusMinutes(it).format(clock)}.orEmpty()
+        return action.scheduledDateTime.format(clock)+range
     }
 
     private fun groupLines(plan: DateAwareTimePlan): List<String>? {
         if (plan.actionGroups.isEmpty()) return null
         val lines = mutableListOf<String>()
         plan.actionGroups.sortedBy { it.order }.forEach { group ->
-            val actions = plan.actions.filter { it.groupId == group.id }
+            val actions = UnifiedTimePlan.actions(plan).filter { it.groupId == group.id }
             if (actions.isEmpty()) return@forEach
             val complete = actions.count { it.completionState == ActionCompletionState.COMPLETE }
             lines += "- ${group.name} $complete / ${actions.size}"

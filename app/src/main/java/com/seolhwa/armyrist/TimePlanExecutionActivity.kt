@@ -6,7 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import com.seolhwa.armyrist.timeplan.v3.ui.TimePlanExecutionApp
+import com.seolhwa.armyrist.timeplan.v3.ui.DateAwareTimePlanApp
 import com.seolhwa.armyrist.notification.TimePlanActionNotificationManager
 
 class TimePlanExecutionActivity : ComponentActivity() {
@@ -38,13 +38,9 @@ class TimePlanExecutionActivity : ComponentActivity() {
         setContent {
             ArmyristTheme {
                 Surface(Modifier.fillMaxSize(), color = ArmyristColors.AppBackground) {
-                    TimePlanExecutionApp(
-                        planId = planId,
-                        initialMode = initialMode,
-                        initialPointIds = pointIds,
-                        repository = app.dateAwareTimePlanRepository,
-                        coreRepository = app.coreSuiteRepository,
-                        onBack = { finish() }
+                    DateAwareTimePlanApp(
+                        repository=app.dateAwareTimePlanRepository,legacyRepository=app.timePlanV2Repository,
+                        coreRepository=app.coreSuiteRepository,trashRepository=app.commonTrashRepository,onHome={finish()},initialPlanId=planId,onOpenExecution={_,_,_->}
                     )
                 }
             }

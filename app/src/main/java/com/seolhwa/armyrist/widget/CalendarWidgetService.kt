@@ -31,7 +31,7 @@ class CalendarWidgetService:RemoteViewsService(){
                 val date=CalendarWidgetModel.openDate(entry,month)
                 val time=entry.start.format(DateTimeFormatter.ofPattern("HH:mm"))
                 setTextViewText(R.id.widget_entry_meta,"${date.monthValue}.${date.dayOfMonth} $time · ${entry.kind.label}${if(entry.complete)" · 완료"else""}")
-                setTextColor(R.id.widget_entry_meta,when(entry.kind){AgendaKind.PLAN->Color.rgb(46,85,204);AgendaKind.EVENT->Color.rgb(110,65,165);AgendaKind.ACTION->Color.rgb(20,120,80);AgendaKind.CHECKLIST->Color.rgb(151,91,15)})
+                setTextColor(R.id.widget_entry_meta,entry.color?.let{runCatching{Color.parseColor(it)}.getOrNull()} ?: when(entry.kind){AgendaKind.PLAN->Color.rgb(46,85,204);AgendaKind.EVENT->Color.rgb(110,65,165);AgendaKind.ACTION->Color.rgb(20,120,80);AgendaKind.CHECKLIST->Color.rgb(151,91,15)})
                 setTextViewText(R.id.widget_entry_title,entry.title)
                 setTextViewText(R.id.widget_entry_parent,entry.ownerTitle)
                 setViewVisibility(R.id.widget_entry_parent,if(entry.ownerTitle.isBlank())View.GONE else View.VISIBLE)

@@ -17,7 +17,7 @@ class TimePlanActionAlarmReceiver : BroadcastReceiver() {
         val actionId = intent.getStringExtra(TimePlanActionNotificationManager.EXTRA_ACTION_ID) ?: return
         val repository = DateAwareTimePlanRepository(context.applicationContext)
         val plan = repository.getPlan(planId) ?: return
-        val action = plan.actions.firstOrNull { it.id == actionId } ?: return
+        val action = com.seolhwa.armyrist.timeplan.v3.domain.UnifiedTimePlan.actions(plan).firstOrNull { it.id == actionId } ?: return
 
         if (
             plan.dateDisplayMode == TimePlanDateDisplayMode.RELATIVE_D_DAY ||

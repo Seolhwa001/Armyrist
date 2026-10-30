@@ -122,9 +122,9 @@ internal fun ContinuousTimeline(plan:DateAwareTimePlan,axis:TimelineScale,select
                             val h=if(a==b)12f else maxOf(3f,bottom-y);val selected="N:${event.id}" in selectedKeys
                             Surface(modifier=Modifier.offset(x=rail+laneWidth*(lanes[event.id]?:0)+2.dp,y=y.dp).width((laneWidth-4.dp).coerceAtLeast(6.dp)).height(h.dp)
                                 .semantics{contentDescription="일정 ${event.name}";this.selected=selected}.clickable{if(selectionMode)toggle("N:${event.id}")else onEvent(event)},
-                                color=if(selected)ArmyristColors.PrimaryControl else Color(0xFFEDF2FF),
+                                color=if(selected)ArmyristColors.PrimaryControl else markerColor(event.color).copy(alpha=.10f),
                                 shape=RoundedCornerShape(topStart=if(a>=slice.start)10.dp else 0.dp,topEnd=if(a>=slice.start)10.dp else 0.dp,bottomStart=if(b<=slice.end)10.dp else 0.dp,bottomEnd=if(b<=slice.end)10.dp else 0.dp),border=BorderStroke(if(selected)2.dp else 0.dp,Color.Transparent)){
-                                Row(Modifier.fillMaxSize()){Box(Modifier.width(3.dp).fillMaxHeight().background(ArmyristColors.PrimaryControl));
+                                Row(Modifier.fillMaxSize()){Box(Modifier.width(3.dp).fillMaxHeight().background(markerColor(event.color)));
                                 if(h>=24f && a>=slice.start && a<slice.end)Column(Modifier.padding(horizontal=7.dp,vertical=5.dp)){
                                     Text(event.name,color=if(selected)Color.White else ArmyristColors.PrimaryText,fontSize=14.sp,lineHeight=18.sp,fontWeight=FontWeight.Bold,maxLines=1,overflow=TextOverflow.Ellipsis)
                                     if(h>=40f)Text("${a.format(DateTimeFormatter.ofPattern("HH:mm"))}–${b.format(DateTimeFormatter.ofPattern("HH:mm"))}",fontSize=11.sp,lineHeight=14.sp,color=if(selected)Color.White else ArmyristColors.SecondaryText,maxLines=1,overflow=TextOverflow.Ellipsis)
@@ -138,7 +138,7 @@ internal fun ContinuousTimeline(plan:DateAwareTimePlan,axis:TimelineScale,select
                         val labelTop=if(labels)(pointY-22f).coerceIn(previousBottom,(height.value-(actionGroups.size-groupIndex)*52f).coerceAtLeast(previousBottom)) else pointY-22f
                         previousBottom=labelTop+52f
                         val chosen=actions.any{"A:${it.id}" in selectedKeys}
-                        val dotColor=if(chosen)ArmyristColors.PrimaryControl else markerColor(actions.first().markerColor)
+                        val dotColor=if(chosen)ArmyristColors.PrimaryControl else markerColor(TimePlanScheduleDisplay.colorForAction(plan,actions.first()))
                         val click={if(selectionMode)onSelection(if(actions.all{"A:${it.id}" in selectedKeys})selectedKeys-actions.map{"A:${it.id}"}.toSet()else selectedKeys+actions.map{"A:${it.id}"})else if(actions.size==1)markerId=actions.single().id else group=actions.map{it.id}}
                         if(labels)Canvas(Modifier.align(Alignment.TopEnd).width(dotWidth).fillMaxHeight()){
                             drawLine(dotColor.copy(alpha=.55f),Offset(10.dp.toPx(),pointY.dp.toPx()),Offset(24.dp.toPx(),(labelTop+22f).dp.toPx()),1.5.dp.toPx())
@@ -151,7 +151,7 @@ internal fun ContinuousTimeline(plan:DateAwareTimePlan,axis:TimelineScale,select
                             .clickable(onClick=click).padding(start=if(labels)24.dp else 0.dp,end=2.dp),verticalAlignment=Alignment.CenterVertically){
                             if(labels)Surface(shape=RoundedCornerShape(8.dp),color=if(chosen)Color(0xFFDBE5FF)else Color.White,border=BorderStroke(1.dp,Color(0xFFD8E0EB)),modifier=Modifier.fillMaxWidth()){
                                 Column(Modifier.padding(horizontal=6.dp,vertical=3.dp)){
-                                    Text(time.format(DateTimeFormatter.ofPattern("HH:mm"))+(if(actions.size>1)" · ${actions.size}개"else if(actions.first().completionState==ActionCompletionState.COMPLETE)" · 완료"else ""),fontSize=11.sp,lineHeight=14.sp,fontWeight=FontWeight.Bold,color=ArmyristColors.PrimaryControl)
+                                    Text(time.format(DateTimeFormatter.ofPattern("HH:mm"))+(if(actions.size>1)" · ${actions.size}개"else if(actions.first().completionState==ActionCompletionState.COMPLETE)" · 완료"else ""),fontSize=11.sp,lineHeight=14.sp,fontWeight=FontWeight.Bold,color=dotColor)
                                     Text(actions.first().content,fontSize=12.sp,lineHeight=16.sp,fontWeight=FontWeight.SemiBold,color=ArmyristColors.PrimaryText,maxLines=1,overflow=TextOverflow.Ellipsis)
                                 }
                             } else if(actions.size>1)Box(Modifier.fillMaxWidth(),contentAlignment=Alignment.Center){Text(actions.size.toString(),color=Color.White,fontSize=8.sp,fontWeight=FontWeight.Bold)}
@@ -168,7 +168,7 @@ internal fun ContinuousTimeline(plan:DateAwareTimePlan,axis:TimelineScale,select
         }
     }
     val groupItems=group.mapNotNull{id->plan.actions.find{it.id==id}}
-    if(groupItems.isNotEmpty()&&markerId==null)ArmyristDialog(onDismissRequest={group=emptyList()},title={Text("실시사항")},text={Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)){groupItems.forEach{a->Surface(Modifier.fillMaxWidth().clickable{markerId=a.id},shape=ArmyristControlShape,color=ArmyristColors.WorkSurface){Column(Modifier.padding(12.dp)){Text(a.content,fontWeight=FontWeight.Bold);Text("${a.scheduledDateTime.format(DateTimeFormatter.ofPattern("MM.dd HH:mm"))} · ${TimePlanExecutionRules.pointName(plan,a.parentPointId)}",style=MaterialTheme.typography.bodySmall)}}}}},confirmButton={TextButton(onClick={group=emptyList()}){Text("닫기")}})
+    if(groupItems.isNotEmpty()&&markerId==null)ArmyristDialog(onDismissRequest={group=emptyList()},title={Text("실시사항")},text={Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)){groupItems.forEach{a->Surface(Modifier.fillMaxWidth().clickable{markerId=a.id},shape=ArmyristControlShape,color=ArmyristColors.WorkSurface){Column(Modifier.padding(12.dp)){Text(a.content,fontWeight=FontWeight.Bold);Text("${a.scheduledDateTime.format(DateTimeFormatter.ofPattern("MM.dd HH:mm"))} · ${"시각 기준"}",style=MaterialTheme.typography.bodySmall)}}}}},confirmButton={TextButton(onClick={group=emptyList()}){Text("닫기")}})
     markerId?.let { id ->
         plan.actions.find { it.id == id }?.let { action ->
             ArmyristDialog(
@@ -176,9 +176,14 @@ internal fun ContinuousTimeline(plan:DateAwareTimePlan,axis:TimelineScale,select
                 title = { Text(action.content) },
                 text = {
                     Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                        Text("${action.scheduledDateTime.format(DateTimeFormatter.ofPattern("MM.dd HH:mm"))} · ${TimePlanExecutionRules.pointName(plan,action.parentPointId)}")
+                        Text("${action.scheduledDateTime.format(DateTimeFormatter.ofPattern("MM.dd HH:mm"))} · ${"시각 기준"}")
                         action.note?.takeIf { it.isNotBlank() }?.let { Text(it) }
                         Text(if(action.completionState==ActionCompletionState.COMPLETE) "완료" else "미완료")
+                        val displayEvent=TimePlanScheduleDisplay.eventAt(plan,action.scheduledDateTime)
+                        if(displayEvent!=null) {
+                            Text("${displayEvent.name} 일정과 같은 색으로 표시합니다.")
+                            TextButton(onClick={onEvent(displayEvent);markerId=null;group=emptyList()}){Text("일정 색상 변경")}
+                        } else {
                         Text("점 색상",fontWeight=FontWeight.Bold)
                         Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
                             markerPalette.chunked(3).forEach { row ->
@@ -192,9 +197,11 @@ internal fun ContinuousTimeline(plan:DateAwareTimePlan,axis:TimelineScale,select
                                 }
                             }
                         }
+                        }
+
                     }
                 },
-                confirmButton = { TextButton(onClick={onSummary(action.parentPointId);markerId=null;group=emptyList()}) { Text("요약에서 편집") } },
+                confirmButton = { TextButton(onClick={onSummary("ALL");markerId=null;group=emptyList()}) { Text("요약에서 편집") } },
                 dismissButton = { TextButton(onClick={markerId=null;group=emptyList()}) { Text("닫기") } }
             )
         }

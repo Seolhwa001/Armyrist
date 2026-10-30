@@ -351,68 +351,22 @@ fun DateAwareTimePlanApp(
             onOpenLegacy = { selectedLegacyId = it }
         )
     } else {
-        DateAwarePlanDetail(
-            plan = selected,
-            onHome = onHome,
-            onBack = { selectedId = null },
-            onSaveAction = { action -> repository.saveAction(selected.id, action).also { saved ->
-                if(saved) {
-                    revision++
-                    if(action.notificationMode != ActionNotificationMode.NONE && android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(notificationContext, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
-                        notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-                }
-            } },
-            onTrashSelection = { keys -> com.seolhwa.armyrist.timeplan.v3.data.TimelineTrash.move(repository,trashRepository,selected.id,keys).also{if(it)revision++} },
-            initialNodeId = initialNodeId,
-            onResult = { sharingId = selected.id },
-            onOpenExecution = { mode, pointIds -> onOpenExecution(selected.id, mode, pointIds) },
-            onDeleteEvent = { eventId ->
-                // Emergency safety boundary: point deletion must never be allowed to
-                // tear down the whole TimePlan screen if an unexpected runtime error
-                // occurs inside persistence/topology code.
-                val selectedPlanId = selected.id
-                val result = runCatching {
-                    repository.deleteEvent(selectedPlanId, eventId)
-                }.getOrElse {
-                    android.util.Log.e(
-                        "Armyrist-TimePlan",
-                        "MIDWAY delete failed plan=$selectedPlanId event=$eventId",
-                        it
-                    )
-                    false
-                }
-                if (result) {
-                    // Keep the same document selected explicitly across recomposition.
-                    selectedId = selectedPlanId
-                    revision++
-                }
-                result
-            },
-            onCommit = { changed ->
-                // Re-read the repository before a detail-screen commit. Action edits
-                // and moves are performed in TimePlanExecutionActivity and may have
-                // changed since this detail composable acquired its plan snapshot.
-                //
-                // Never let an older detail snapshot overwrite a newly moved Action
-                // back to its previous parent/time. Intentional "함께 이동" time deltas
-                // are replayed by rebaseDetailActions().
-                val latest = repository.getPlan(changed.id)
-                val safeCandidate =
-                    if (latest != null) {
-                        TimePlanExecutionRules.rebaseDetailActions(
-                            base = selected,
-                            candidate = changed,
-                            current = latest
-                        )
-                    } else {
-                        changed
-                    }
-
-                if (
-                    repository.commit(
-                        safeCandidate.copy(updatedAt = System.currentTimeMillis().toString())
-                    )
-                ) revision++
+        UnifiedDateAwarePlanDetail(
+            plan=selected,onHome=onHome,onBack={selectedId=null},onResult={sharingId=selected.id},initialNodeId=initialNodeId,
+            onSaveEntry={key,draft->repository.saveUnifiedEntry(selected.id,key,draft).also{saved->
+                if(saved){revision++;if(draft.notificationMode!=ActionNotificationMode.NONE && android.os.Build.VERSION.SDK_INT>=33 && !com.seolhwa.armyrist.notification.TimePlanActionNotificationManager.notificationPermissionGranted(notificationContext))notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)}
+            }},
+            onComplete={key,state->repository.setUnifiedCompletion(selected.id,key,state).also{if(it)revision++}},
+            onTrashSelection={keys->com.seolhwa.armyrist.timeplan.v3.data.TimelineTrash.move(repository,trashRepository,selected.id,keys).also{if(it)revision++}},
+            onAddEntries={drafts->repository.addUnifiedEntries(selected.id,drafts).also{if(it)revision++}},
+            onCommit={changed->
+                val latest=repository.getPlan(selected.id)
+                val groupIds=changed.actionGroups.map{it.id}.toSet()
+                val safe=if(latest==null)changed else changed.copy(
+                    actions=latest.actions.map{if(it.groupId!=null&&it.groupId !in groupIds)it.copy(groupId=null)else it},
+                    midwayEvents=latest.midwayEvents.map{if(it.groupId!=null&&it.groupId !in groupIds)it.copy(groupId=null)else it},
+                    finalPoint=latest.finalPoint?.let{if(it.groupId!=null&&it.groupId !in groupIds)it.copy(groupId=null)else it})
+                repository.commit(safe.copy(updatedAt=System.currentTimeMillis().toString())).also{if(it)revision++}
             }
         )
     }
@@ -1773,7 +1727,6 @@ private fun DateAwarePlanDetail(
     var pendingNavigation by remember { mutableStateOf<String?>(null) }
     var headerMenuOpen by remember { mutableStateOf(false) }
     var baseDateDialogOpen by rememberSaveable(plan.id) { mutableStateOf(false) }
-    var pendingActionShift by remember { mutableStateOf<Pair<DateAwareTimePlan, Map<String, Long>>?>(null) }
     var pendingDeleteEventId by remember { mutableStateOf<String?>(null) }
     var deleteEventInProgress by remember { mutableStateOf(false) }
     val view = LocalView.current
@@ -1796,15 +1749,7 @@ private fun DateAwarePlanDetail(
     }
 
     fun commitWithActionTimeImpact(candidate: DateAwareTimePlan) {
-        val deltas = DateTimePlanRules.nodeIds(plan).mapNotNull { nodeId ->
-            if (plan.actions.none { it.parentPointId == nodeId }) return@mapNotNull null
-            val oldTime = DateTimePlanRules.nodeArrival(plan, nodeId) ?: return@mapNotNull null
-            val newTime = DateTimePlanRules.nodeArrival(candidate, nodeId) ?: return@mapNotNull null
-            val delta = java.time.Duration.between(oldTime, newTime).toMinutes()
-            if (delta == 0L) null else nodeId to delta
-        }.toMap()
-        if (deltas.isEmpty()) onCommit(candidate)
-        else pendingActionShift = candidate to deltas
+        onCommit(candidate)
     }
 
     fun applyLock(locked: Boolean) {
@@ -1850,7 +1795,7 @@ private fun DateAwarePlanDetail(
             titleContentColor = ArmyristColors.PrimaryText,
             textContentColor = ArmyristColors.PrimaryText,
             title = { Text("중도지점 삭제", fontWeight = FontWeight.Bold) },
-            text = { Text("이 지점과 연결된 실시사항도 함께 삭제됩니다.") },
+            text = { Text("이 일정만 삭제합니다. 실시사항과 해당 시각은 유지됩니다.") },
             dismissButton = {
                 OutlinedButton(
                     onClick = { pendingDeleteEventId = null },
@@ -1874,7 +1819,6 @@ private fun DateAwarePlanDetail(
                             }
                             editLink = null
                             conflictDetail = null
-                            pendingActionShift = null
                             pendingDeleteEventId = null
                         } else {
                             pendingDeleteEventId = null
@@ -1989,9 +1933,8 @@ private fun DateAwarePlanDetail(
                     onLock = { applyLock(true) },
                     onUnlock = { applyLock(false) },
                     onActionEdit = {
-                        val nodeIds = selectedKeys.filter { it.startsWith("N:") }.map { it.removePrefix("N:") }.toSet()+plan.actions.filter{"A:${it.id}" in selectedKeys}.map{it.parentPointId}
-                        if (nodeIds.isEmpty()) message = "실시사항을 편집할 지점을 선택해주세요."
-                        else onOpenExecution(TimePlanExecutionActivity.MODE_PREPARE, nodeIds)
+                        val nodeIds = selectedKeys.filter { it.startsWith("N:") }.map { it.removePrefix("N:") }.toSet()
+                        onOpenExecution(TimePlanExecutionActivity.MODE_PREPARE, emptySet())
                     },
                     onSelectAllNodes = {
                         selectedKeyList = allNodeSelectionKeys.toList()
@@ -2133,48 +2076,6 @@ private fun DateAwarePlanDetail(
                 }
                 batchDateOpen = false
             }
-        )
-    }
-
-    pendingActionShift?.let { pending ->
-        val (candidate, deltas) = pending
-        ArmyristDialog(
-            onDismissRequest = { pendingActionShift = null },
-            title = { Text("실시사항 시간 영향") },
-            text = {
-                val summary = deltas.entries.joinToString("\n") { (nodeId, delta) ->
-                    "${TimePlanExecutionRules.pointName(plan, nodeId)}: ${if (delta >= 0) "+" else ""}${delta}분"
-                }
-                Text(
-                    "시간 변경의 영향을 받는 실시사항이 있습니다.\n\n$summary\n\n‘Action 시간 유지’를 선택하면 실시사항의 기존 절대 시각을 유지합니다."
-                )
-            },
-            dismissButton = {
-                Row {
-                    TextButton(onClick = { pendingActionShift = null }) {
-                        Text("취소")
-                    }
-                    TextButton(onClick = {
-                        onCommit(candidate)
-                        pendingActionShift = null
-                    }) { Text("실시사항 시간 유지") }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        var shifted = candidate
-                        deltas.forEach { (nodeId, delta) ->
-                            shifted = TimePlanExecutionRules.shiftActionsForParent(shifted, nodeId, delta)
-                        }
-                        onCommit(shifted)
-                        pendingActionShift = null
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor=ArmyristColors.PrimaryControl)
-                ) { Text("함께 이동") }
-            },
-            containerColor = ArmyristColors.RaisedSurface,
-            tonalElevation = 0.dp
         )
     }
 
@@ -3328,6 +3229,7 @@ private fun DateTimeEventEditDialog(
     onDelete: () -> Unit,
     onConfirm: (DateTimeEvent) -> Unit
 ) {
+    var eventColor by remember(event.id) { mutableStateOf(event.color) }
     var name by remember(event.id) { mutableStateOf(event.name) }
     var note by remember(event.id) { mutableStateOf(event.note.orEmpty()) }
     var isRange by remember(event.id) { mutableStateOf(event.timeSpec is EventDateTimeSpec.Range) }
@@ -3350,11 +3252,13 @@ private fun DateTimeEventEditDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
             dismissOnBackPress = true,
-            dismissOnClickOutside = false
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false
         )
     ) {
+        BoxWithConstraints(Modifier.fillMaxSize().imePadding().padding(16.dp),contentAlignment=Alignment.Center) {
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.widthIn(max=560.dp).fillMaxWidth().height(maxHeight*.92f),
             shape = ArmyristPanelShape,
             border = BorderStroke(1.dp, ArmyristColors.Border),
             colors = CardDefaults.cardColors(
@@ -3362,7 +3266,7 @@ private fun DateTimeEventEditDialog(
             )
         ) {
             Column(
-                Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
@@ -3376,6 +3280,7 @@ private fun DateTimeEventEditDialog(
                     color = ArmyristColors.PrimaryText
                 )
 
+                ScheduleColorPicker(eventColor) { eventColor = it }
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -3486,6 +3391,7 @@ private fun DateTimeEventEditDialog(
                                 event.copy(
                                     name = name.trim().ifBlank { event.name },
                                     note = note.trim().ifBlank { null },
+                                    color = eventColor,
                                     timeSpec = spec
                                 )
                             )
@@ -3502,6 +3408,7 @@ private fun DateTimeEventEditDialog(
                 }
             }
         }
+    }
     }
 
     if (editA) {
@@ -3530,7 +3437,7 @@ private fun DateTimeEventEditDialog(
 @Composable private fun LegacyDateMigrationDialog(title:String,onDismiss:()->Unit,onApply:(LocalDate)->Unit){var date by remember{mutableStateOf(LocalDate.now())};var calendar by remember{mutableStateOf(false)};ArmyristDialog(onDismissRequest=onDismiss,title={Text("기준 날짜 지정")},text={Column(verticalArrangement=Arrangement.spacedBy(10.dp)){Text("‘$title’은 날짜 기능이 추가되기 전에 작성되었습니다.\n계획의 시작 기준 날짜를 선택해주세요.");Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){OutlinedButton(onClick={date=date.minusDays(1)}){Text("-1일")};Text(date.format(DateTimeFormatter.ISO_DATE),fontWeight=FontWeight.Bold);OutlinedButton(onClick={date=date.plusDays(1)}){Text("+1일")}};TextButton(onClick={calendar=true},modifier=Modifier.fillMaxWidth()){Text("달력")};Text("적용 전에는 기존 데이터가 변경되지 않습니다.",style=MaterialTheme.typography.bodySmall,color=ArmyristColors.SecondaryText)}},dismissButton={TextButton(onClick=onDismiss){Text("취소")}},confirmButton={Button(onClick={onApply(date)},colors=ButtonDefaults.buttonColors(containerColor=ArmyristColors.PrimaryControl)){Text("적용")}});if(calendar){val state=rememberDatePickerState(initialSelectedDateMillis=date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli());DatePickerDialog(onDismissRequest={calendar=false},confirmButton={TextButton(onClick={state.selectedDateMillis?.let{date=Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()};calendar=false}){Text("확인")}}){DatePicker(state=state)}}}
 
 @Composable
-private fun TimePlanVoiceReviewDialog(
+internal fun TimePlanVoiceReviewDialog(
     initial: List<TimePlanVoiceDraft>,
     onDismiss: () -> Unit,
     onApply: (List<TimePlanVoiceDraft>) -> Unit

@@ -106,11 +106,48 @@ class DateAwareTimePlanRepository(context: Context) {
     @Synchronized
     fun saveAction(planId: String, candidate: TimePlanActionItem): Boolean {
         val current = getPlan(planId) ?: return false
-        if(candidate.parentPointId !in DateTimePlanRules.nodeIds(current)) return false
         val previous = current.actions.firstOrNull { it.id == candidate.id }
         val action = candidate.copy(completionState=previous?.completionState ?: candidate.completionState)
         val actions = if(previous == null) current.actions+action else current.actions.map { if(it.id == action.id) action else it }
         return commit(TimePlanExecutionRules.normalizeActionOrder(current.copy(actions=actions,updatedAt=System.currentTimeMillis().toString())))
+    }
+
+    @Synchronized
+    fun saveUnifiedEntry(planId:String,key:String?,draft:UnifiedTimePlanDraft):Boolean {
+        if(!UnifiedTimePlan.validateDraft(draft))return false
+        val current=getPlan(planId)?:return false
+        val old=key?.let{k->UnifiedTimePlan.entries(current).firstOrNull{it.key==k}?:return false}
+        if(old?.locked==true && draft.locked && (old.start!=draft.start || old.value.durationMinutes!=draft.durationMinutes))return false
+        if(key?.startsWith("N:")==true) {
+            val event=current.orderedEvents().firstOrNull{it.id==key.removePrefix("N:")}?:return false
+            val unchangedTime=old!!.start==draft.start && old.value.durationMinutes==draft.durationMinutes && !old.untimed
+            val spec=if(unchangedTime)event.timeSpec else if((draft.durationMinutes?:0)>0)EventDateTimeSpec.Range(DateTimeValue.explicit(draft.start),DateTimeValue.explicit(draft.start.plusMinutes(draft.durationMinutes!!)))else EventDateTimeSpec.Single(DateTimeValue.explicit(draft.start))
+            val next=event.copy(name=draft.title.trim(),timeSpec=spec,note=draft.note?.trim()?.ifBlank{null},color=draft.color,notificationMode=draft.notificationMode,dateTimeLocked=draft.locked,groupId=draft.groupId)
+            return commit(UnifiedTimePlan.replaceEvent(current,next).copy(updatedAt=System.currentTimeMillis().toString()))
+        }
+        val item=(old?.value?:TimePlanActionItem(content=draft.title.trim(),scheduledDateTime=draft.start,order=current.actions.size)).copy(
+            content=draft.title.trim(),scheduledDateTime=draft.start,durationMinutes=draft.durationMinutes,note=draft.note?.trim()?.ifBlank{null},
+            groupId=draft.groupId,markerColor=draft.color,notificationEnabled=draft.notificationMode!=ActionNotificationMode.NONE,notificationMode=draft.notificationMode,timeLocked=draft.locked,updatedAt=System.currentTimeMillis().toString())
+        return saveAction(planId,item)
+    }
+    @Synchronized
+    fun addUnifiedEntries(planId:String,drafts:List<UnifiedTimePlanDraft>):Boolean {
+        if(drafts.isEmpty()||drafts.any{!UnifiedTimePlan.validateDraft(it)})return false
+        val current=getPlan(planId)?:return false
+        val additions=drafts.mapIndexed{index,d->TimePlanActionItem(content=d.title.trim(),scheduledDateTime=d.start,durationMinutes=d.durationMinutes,note=d.note,markerColor=d.color,timeLocked=d.locked,groupId=d.groupId,notificationMode=d.notificationMode,notificationEnabled=d.notificationMode!=ActionNotificationMode.NONE,order=current.actions.size+index)}
+        return commit(TimePlanExecutionRules.normalizeActionOrder(current.copy(actions=current.actions+additions,updatedAt=System.currentTimeMillis().toString())))
+    }
+    @Synchronized
+    fun setUnifiedCompletion(planId:String,key:String,state:ActionCompletionState):Boolean {
+        val current=getPlan(planId)?:return false
+        val entry=UnifiedTimePlan.entries(current).firstOrNull{it.key==key}?:return false
+        val candidate=if(key.startsWith("N:")) {
+            val event=current.orderedEvents().firstOrNull{it.id==key.removePrefix("N:")}?:return false
+            UnifiedTimePlan.replaceEvent(current,event.copy(completionState=state))
+        } else current.copy(actions=current.actions.map{if(it.id==entry.value.id)it.copy(completionState=state,updatedAt=System.currentTimeMillis().toString())else it})
+        val saved=commit(candidate.copy(updatedAt=System.currentTimeMillis().toString()))
+        if(saved)notificationChanges.value+=1
+        return saved
     }
 
     @Synchronized
@@ -131,7 +168,13 @@ class DateAwareTimePlanRepository(context: Context) {
         reloadFromPersistence()
         if (!storageReadable) return false
         val plan = getPlan(planId) ?: return false
-        val action = plan.actions.firstOrNull { it.id == actionId } ?: return false
+        val action = plan.actions.firstOrNull { it.id == actionId }
+        if(action==null) {
+            val entry=UnifiedTimePlan.entries(plan).firstOrNull{it.value.id==actionId}?:return false
+            val saved=setUnifiedCompletion(planId,entry.key,ActionCompletionState.COMPLETE)
+            if(saved)TimePlanActionNotificationManager.cancel(appContext,planId,actionId)
+            return saved
+        }
         if (action.completionState != ActionCompletionState.COMPLETE) {
             val now = System.currentTimeMillis().toString()
             val changed = plan.copy(
@@ -243,8 +286,8 @@ class DateAwareTimePlanRepository(context: Context) {
                 // Old links are discarded completely. They will be rebuilt only
                 // from the nodes that survive this transaction.
                 links = emptyList(),
-                // Child Actions of the removed point are deleted in the same snapshot.
-                actions = current.actions.filterNot { it.parentPointId == eventId },
+                // Actions are independent; deleting a schedule never deletes its actions.
+                actions = current.actions,
                 updatedAt = System.currentTimeMillis().toString()
             )
 
@@ -257,7 +300,6 @@ class DateAwareTimePlanRepository(context: Context) {
             TimePlanExecutionRules.normalizeActionOrder(
                 withoutPoint.copy(
                     actions = withoutPoint.actions
-                        .filter { it.parentPointId in survivingNodeIds }
                         .map { action ->
                             if (action.groupId != null && action.groupId !in survivingGroupIds) {
                                 action.copy(groupId = null)
@@ -503,12 +545,16 @@ object DateAwareTimePlanJson {
     private fun eventToJson(e:DateTimeEvent)=JSONObject()
         .put("id",e.id).put("kind",e.kind.name).put("order",e.order).put("name",e.name)
         .put("timeSpec",specToJson(e.timeSpec)).put("note",e.note?:JSONObject.NULL)
-        .put("dateTimeLocked", e.dateTimeLocked)
+        .put("dateTimeLocked", e.dateTimeLocked).put("color", e.color).put("completionState", e.completionState.name).put("notificationMode", e.notificationMode.name).put("groupId",e.groupId?:JSONObject.NULL)
     private fun eventFromJson(j:JSONObject)=DateTimeEvent(
         j.getString("id"), TimeEventKind.valueOf(j.getString("kind")), j.getInt("order"),
         j.getString("name"), specFromJson(j.getJSONObject("timeSpec")),
         if(j.isNull("note")) null else j.getString("note"),
-        j.optBoolean("dateTimeLocked", false)
+        j.optBoolean("dateTimeLocked", false),
+        j.optString("color", "#7543A3").takeIf { it.matches(Regex("#[0-9a-fA-F]{6}")) } ?: "#7543A3",
+        runCatching { ActionCompletionState.valueOf(j.optString("completionState")) }.getOrDefault(ActionCompletionState.INCOMPLETE),
+        runCatching { ActionNotificationMode.valueOf(j.optString("notificationMode")) }.getOrDefault(ActionNotificationMode.NONE),
+        if(j.isNull("groupId"))null else j.getString("groupId")
     )
     private fun linkToJson(l:DateTimeLink)=JSONObject()
         .put("fromNodeId",l.fromNodeId).put("toNodeId",l.toNodeId)
@@ -538,6 +584,7 @@ object DateAwareTimePlanJson {
         .put("notificationEnabled", a.notificationMode != ActionNotificationMode.NONE)
         .put("notificationMode", a.notificationMode.name)
         .put("markerColor", a.markerColor)
+        .put("durationMinutes", a.durationMinutes ?: JSONObject.NULL).put("timeLocked", a.timeLocked)
         .put("groupId", a.groupId ?: JSONObject.NULL)
         .put("note", a.note ?: JSONObject.NULL)
         .put("order", a.order)
@@ -545,7 +592,9 @@ object DateAwareTimePlanJson {
         .put("updatedAt", a.updatedAt)
     private fun actionFromJson(j: JSONObject) = TimePlanActionItem(
         id = j.getString("id"),
-        parentPointId = j.getString("parentPointId"),
+        parentPointId = j.optString("parentPointId", "UNASSIGNED"),
+        durationMinutes = if(j.has("durationMinutes") && !j.isNull("durationMinutes"))j.getLong("durationMinutes")else null,
+        timeLocked = j.optBoolean("timeLocked", false),
         content = j.getString("content"),
         scheduledDateTime = LocalDateTime.parse(j.getString("scheduledDateTime")),
         markerColor = j.optString("markerColor", "#111111").takeIf { it.matches(Regex("#[0-9a-fA-F]{6}")) } ?: "#111111",

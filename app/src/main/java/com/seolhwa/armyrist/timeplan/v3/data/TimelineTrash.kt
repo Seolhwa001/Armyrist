@@ -30,7 +30,7 @@ object TimelineTrash {
         }
         val nodeIds=mids.map{it.id}.toSet()+listOfNotNull(final?.id)+listOf("START","END")
         val added=old.actions.filter{it.id in actionIds&&current.actions.none{a->a.id==it.id}}
-        require(added.all{it.parentPointId in nodeIds})
+        // Actions restore independently, even when their former schedule no longer exists.
         val groupIds=added.mapNotNull{it.groupId}.toSet();val groups=current.actionGroups+old.actionGroups.filter{it.id in groupIds&&current.actionGroups.none{g->g.id==it.id}}
         val candidate=current.copy(midwayEvents=mids.mapIndexed{i,e->e.copy(order=i)},finalPoint=final,actionGroups=groups,actions=current.actions+added,links=emptyList(),updatedAt=System.currentTimeMillis().toString())
         repo.commit(DateTimePlanRules.normalizeTopology(TimePlanExecutionRules.normalizeActionOrder(candidate)))

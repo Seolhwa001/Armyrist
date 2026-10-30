@@ -35,6 +35,6 @@ class CalendarPersistenceUiTest {
         assertTrue(repo.saveAction(plan.id,action));assertTrue(repo.completeActionFromNotification(plan.id,action.id))
         assertTrue(repo.saveAction(plan.id,action.copy(content="수정 점검")))
         val current=repo.getPlan(plan.id)!!.actions.single();assertEquals("수정 점검",current.content);assertEquals(ActionCompletionState.COMPLETE,current.completionState)
-        assertFalse(repo.saveAction(plan.id,action.copy(parentPointId="missing")))
+        assertTrue(repo.saveAction(plan.id,action.copy(parentPointId="missing")));assertEquals(ActionCompletionState.COMPLETE,repo.getPlan(plan.id)!!.actions.single().completionState)
     }
 }
