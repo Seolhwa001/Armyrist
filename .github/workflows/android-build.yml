@@ -2,7 +2,7 @@ name: Android Build
 
 on:
   push:
-    branches: [ "release/0.6.85" ]
+    branches: [ "release/0.6.89" ]
   workflow_dispatch:
 
 permissions:
@@ -18,21 +18,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Apply tested 0.6.85 source changes
-        if: hashFiles('Killomris-0.6.85-source-changes.zip') != ''
+      - name: Apply approved 0.6.89 source changes
+        if: hashFiles('Killomris-0.6.89-source-changes.zip') != ''
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PYTHON'
           import hashlib, zipfile
           from pathlib import Path
-          patch=Path('Killomris-0.6.85-source-changes.zip')
-          assert hashlib.sha256(patch.read_bytes()).hexdigest() == '6c1d7634f78068f9bd95e8c2a504e4e430628b9ba8e6012466d034ee3d9edd13'
+          patch=Path('Killomris-0.6.89-source-changes.zip')
+          assert hashlib.sha256(patch.read_bytes()).hexdigest() == '596e72a06b4e9fb78b02f3e20c01f3ef4ee0e3c2c69f315231f4ede5a06217a2'
           with zipfile.ZipFile(patch) as archive:
               for name in archive.namelist():
                   target=Path(name)
                   assert not target.is_absolute() and '..' not in target.parts
-                  assert name.startswith(('app/', 'release/', 'docs/'))
+                  assert name.startswith(('app/', 'release/'))
                   assert target.suffix not in {'.keystore','.jks','.p12','.pem','.key'}
                   target.parent.mkdir(parents=True,exist_ok=True)
                   target.write_bytes(archive.read(name))
@@ -41,8 +41,8 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'Apply tested 0.6.85 calendar widgets, remaining agenda and reviewed improvements [skip ci]'
-          git push origin HEAD:refs/heads/release/0.6.85
+          git commit -m 'Apply approved 0.6.89 unified activities and save fixes [skip ci]'
+          git push origin HEAD:refs/heads/release/0.6.89
 
       - name: Set up Java 17
         uses: actions/setup-java@v5
@@ -198,8 +198,8 @@ jobs:
 
           test -n "$VERSION_NAME"
           test -n "$VERSION_CODE"
-          test "$VERSION_NAME" = "0.6.85"
-          test "$VERSION_CODE" = "173"
+          test "$VERSION_NAME" = "0.6.89"
+          test "$VERSION_CODE" = "177"
 
           DIST="$RUNNER_TEMP/armyrist-distribution"
           mkdir -p "$DIST"
@@ -243,17 +243,17 @@ jobs:
           if-no-files-found: error
 
       - name: Publish approved stable release
-        if: github.ref == 'refs/heads/release/0.6.85'
+        if: github.ref == 'refs/heads/release/0.6.89'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="v0.6.85"
+          TAG="v0.6.89"
           DIST="$RUNNER_TEMP/armyrist-distribution"
-          RELEASE_ID="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.tag_name == "v0.6.85") | .id')"
+          RELEASE_ID="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.tag_name == "v0.6.89") | .id')"
           test -z "$RELEASE_ID"
-          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" --title "낄롬리스 0.6.85" --notes-file "$DIST/RELEASE_NOTES.txt" --latest "$DIST/Armyrist-0.6.85.apk" "$DIST/release.json"
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" --title "낄롬리스 0.6.89" --notes-file "$DIST/RELEASE_NOTES.txt" --latest "$DIST/Armyrist-0.6.89.apk" "$DIST/release.json"
 
       - name: Remove temporary signing material
         if: always()
