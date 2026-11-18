@@ -145,5 +145,19 @@ class ContinuousTimelineUiTest {
    assertEquals(TimePlanDateDisplayMode.ABSOLUTE,saved.dateDisplayMode)
   }
  }
+ @Test fun todayAlsoRepairsPreviouslyStrandedDatesAfterPreview() {
+  val initial=plan();val today=java.time.LocalDate.now()
+  val start=today.atTime(13,20)
+  val stale=initial.actions.single().copy(scheduledDateTime=today.minusDays(30).atTime(2,0))
+  val p=DateTimePlanRules.normalizeTopology(initial.copy(start=DateTimeAnchor(DateTimeValue.explicit(start)),end=DateTimeAnchor(DateTimeValue.explicit(today.plusDays(1).atTime(8,30))),midwayEvents=emptyList(),actions=listOf(stale),links=emptyList()))
+  assertTrue(app.dateAwareTimePlanRepository.commit(p));show(p)
+  compose.onNodeWithText("시간계획 기간 · 변경").performClick()
+  compose.onNodeWithText("오늘 · 특정 날짜로 변경").performClick()
+  compose.onNodeWithText("오늘 날짜로").performClick();compose.onNodeWithText("적용").performClick()
+  compose.onNodeWithText("기간 밖 항목 날짜도 맞추기").performScrollTo().assertIsDisplayed()
+  compose.runOnIdle{assertEquals(stale,app.dateAwareTimePlanRepository.getPlan(p.id)!!.actions.single())}
+  compose.onNodeWithText("저장").performClick()
+  compose.runOnIdle{assertEquals(today.plusDays(1).atTime(2,0),app.dateAwareTimePlanRepository.getPlan(p.id)!!.actions.single().scheduledDateTime)}
+ }
  private fun screenshot(name:String){val view=android.view.inspector.WindowInspector.getGlobalWindowViews().last();val b=Bitmap.createBitmap(view.width,view.height,Bitmap.Config.ARGB_8888);view.draw(Canvas(b));File("build/preview-screens/$name").also{it.parentFile!!.mkdirs()}.outputStream().use{b.compress(Bitmap.CompressFormat.PNG,100,it)};b.recycle()}
 }

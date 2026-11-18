@@ -48,4 +48,76 @@ class TimePlanPeriodChangesTest {
         val p=plan();assertFalse(repo.changePeriod(p.id,p.copy(end=p.end.copy(value=DateTimeValue.explicit(time.minusDays(1))))))
         assertEquals(p,repo.getPlan(p.id))
     }
+    @Test fun todayRepairsStrandedDatesWhenBaseWasAlreadyChanged() {
+        val p=plan()
+        val stranded=p.copy(actions=listOf(
+            p.actions.single().copy(id="evening",scheduledDateTime=time.minusDays(40).plusHours(1)),
+            p.actions.single().copy(id="night",scheduledDateTime=time.minusDays(40).plusHours(4))
+        ))
+        assertTrue(repo.commit(stranded))
+        assertTrue(repo.changePeriod(p.id,p,repairOutsideDates=true))
+        assertEquals(time.plusHours(1),repo.getPlan(p.id)!!.actions.first().scheduledDateTime)
+        assertEquals(time.plusHours(4),repo.getPlan(p.id)!!.actions.last().scheduledDateTime)
+    }
+
+    @Test fun shiftedPlanRepairsOnlyStrandedEntriesAndPreservesMetadata() {
+        val p=plan()
+        val normal=p.actions.single()
+        val stale=normal.copy(id="stranded",scheduledDateTime=time.minusMonths(2).plusHours(1),completionState=ActionCompletionState.COMPLETE)
+        assertTrue(repo.commit(p.copy(actions=listOf(normal,stale))))
+        val edited=moved(p,8)
+        assertTrue(repo.changePeriod(p.id,edited,true))
+        val saved=repo.getPlan(p.id)!!
+        assertEquals(normal.copy(scheduledDateTime=normal.scheduledDateTime.plusDays(8)),saved.actions.first())
+        assertEquals(stale.copy(scheduledDateTime=time.plusDays(8).plusHours(1)),saved.actions.last())
+    }
+    @Test fun repairCoversLegacyRangeAndFinalPointWithoutChangingDuration() {
+        val p=plan()
+        val stale=p.midwayEvents.single().copy(timeSpec=EventDateTimeSpec.Range(DateTimeValue.explicit(time.minusDays(50)),DateTimeValue.explicit(time.minusDays(50).plusHours(8))))
+        val final=stale.copy(id="final",kind=TimeEventKind.FINAL,order=1,timeSpec=EventDateTimeSpec.Single(DateTimeValue.explicit(time.minusDays(50).plusHours(9))))
+        val dirty=DateTimePlanRules.normalizeTopology(p.copy(midwayEvents=listOf(stale),finalPoint=final,links=emptyList()))
+        assertTrue(repo.commit(dirty));assertTrue(repo.changePeriod(p.id,p,true))
+        val saved=repo.getPlan(p.id)!!
+        assertEquals(time,DateTimePlanRules.arrival(saved.midwayEvents.single().timeSpec))
+        assertEquals(time.plusHours(8),DateTimePlanRules.departure(saved.midwayEvents.single().timeSpec))
+        assertEquals(time.plusHours(9),DateTimePlanRules.arrival(saved.finalPoint!!.timeSpec))
+        assertTrue(saved.midwayEvents.single().dateTimeLocked)
+    }
+    @Test fun multiDayAmbiguityIsReportedAndNeverGuessed() {
+        val p=plan();val stale=p.actions.single().copy(scheduledDateTime=time.minusDays(40).plusHours(4))
+        val dirty=p.copy(end=DateTimeAnchor(DateTimeValue.explicit(time.plusDays(3))),actions=listOf(stale))
+        assertTrue(repo.commit(dirty))
+        val preview=TimePlanPeriodChanges.previewRepairs(dirty,dirty)
+        assertEquals(1,preview.size);assertNull(preview.single().target)
+        assertTrue(repo.changePeriod(p.id,dirty,true))
+        assertEquals(stale,repo.getPlan(p.id)!!.actions.single())
+    }
+    @Test fun normalPeriodEditDoesNotSilentlyReinterpretIntentionalOutsideEntries() {
+        val p=plan();val outside=p.actions.single().copy(scheduledDateTime=time.minusDays(3))
+        assertTrue(repo.commit(p.copy(actions=listOf(outside))))
+        assertTrue(repo.changePeriod(p.id,moved(p,2)))
+        assertEquals(outside.scheduledDateTime.plusDays(2),repo.getPlan(p.id)!!.actions.single().scheduledDateTime)
+    }
+    @Test fun repairUsesLatestEntriesAndCompletionRatherThanEditorSnapshot() {
+        val p=plan();val outside=p.actions.single().copy(scheduledDateTime=time.minusDays(8).plusHours(2))
+        assertTrue(repo.saveAction(p.id,outside))
+        assertTrue(repo.setUnifiedCompletion(p.id,"A:${outside.id}",ActionCompletionState.COMPLETE))
+        assertTrue(repo.changePeriod(p.id,p,true))
+        val saved=repo.getPlan(p.id)!!.actions.single()
+        assertEquals(time.plusHours(2),saved.scheduledDateTime)
+        assertEquals(ActionCompletionState.COMPLETE,saved.completionState)
+    }
+
+    @Test fun repairedDateReplacesTheAlarmReservationWithTheCorrectDay() {
+        val app=ApplicationProvider.getApplicationContext<ArmyristApplication>()
+        org.robolectric.Shadows.shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        val p=plan()
+        val stale=p.actions.single().copy(scheduledDateTime=time.minusDays(40).plusHours(4))
+        assertTrue(repo.saveAction(p.id,stale))
+        assertTrue(repo.changePeriod(p.id,p,true))
+        val alarm=org.robolectric.Shadows.shadowOf(app.getSystemService(android.app.AlarmManager::class.java)).scheduledAlarms.single()
+        assertEquals(time.plusHours(4).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli(),alarm.triggerAtTime)
+        assertEquals("night",org.robolectric.Shadows.shadowOf(alarm.operation).savedIntent.getStringExtra(com.seolhwa.armyrist.notification.TimePlanActionNotificationManager.EXTRA_ACTION_ID))
+    }
+
 }

@@ -57,7 +57,7 @@ private fun entryTime(entry:UnifiedTimePlanEntry,plan:DateAwareTimePlan?=null)=i
 internal fun UnifiedDateAwarePlanDetail(
     plan:DateAwareTimePlan,onHome:()->Unit,onBack:()->Unit,onResult:()->Unit,
     onSaveEntry:(String?,UnifiedTimePlanDraft)->Boolean,onComplete:(String,ActionCompletionState)->Boolean,
-    onTrashSelection:(Set<String>)->Boolean,onAddEntries:(List<UnifiedTimePlanDraft>)->Boolean,onCommit:(DateAwareTimePlan)->Boolean,onPeriod:(DateAwareTimePlan)->Boolean,initialNodeId:String?=null
+    onTrashSelection:(Set<String>)->Boolean,onAddEntries:(List<UnifiedTimePlanDraft>)->Boolean,onCommit:(DateAwareTimePlan)->Boolean,onPeriod:(DateAwareTimePlan,Boolean)->Boolean,initialNodeId:String?=null
 ) {
     val context=LocalContext.current
     val preferences=remember(context){context.getSharedPreferences("unified_timeplan_view",0)}
@@ -133,7 +133,7 @@ internal fun UnifiedDateAwarePlanDetail(
         val additions=applied.mapNotNull{d->d.dateTime?.takeIf{d.name.isNotBlank()&& (d.rangeEnd==null||d.rangeEnd>=it)}?.let{dt->UnifiedTimePlanDraft(d.name,dt,d.rangeEnd?.let{java.time.Duration.between(dt,it).toMinutes()}?.takeIf{it>0},d.note.ifBlank{null})}}
         if(additions.size!=applied.size||!onAddEntries(additions))error="음성 항목을 저장하지 못했습니다. 시각을 확인해주세요." else voiceDrafts=null
     }}
-    if(periodOpen)PlanPeriodEditor(plan,{periodOpen=false}){changed->onPeriod(changed).also{if(it)periodOpen=false}}
+    if(periodOpen)PlanPeriodEditor(plan,{periodOpen=false}){changed,repair->onPeriod(changed,repair).also{if(it)periodOpen=false}}
     if(memoOpen)InlineTextEditor("메모",plan.memo.orEmpty(),false,{memoOpen=false}){text->onCommit(plan.copy(memo=text.trim().ifBlank{null})).also{if(it)memoOpen=false}}
     if(titleOpen)InlineTextEditor("시간계획 이름",plan.title,true,{titleOpen=false}){text->onCommit(plan.copy(title=text.trim())).also{if(it)titleOpen=false}}
     deleteKeys?.let{keys->
@@ -375,12 +375,15 @@ internal fun UnifiedDateAwarePlanDetail(
     }
 }
 
-@Composable private fun PlanPeriodEditor(plan:DateAwareTimePlan,onDismiss:()->Unit,onSave:(DateAwareTimePlan)->Boolean){
+@Composable private fun PlanPeriodEditor(plan:DateAwareTimePlan,onDismiss:()->Unit,onSave:(DateAwareTimePlan,Boolean)->Boolean){
     var baseDateOpen by remember{mutableStateOf(false)}
+    var repairOutsideDates by remember { mutableStateOf(false) }
     var start by remember{mutableStateOf(plan.start.value.value?:LocalDateTime.now().withSecond(0).withNano(0))}
     var end by remember{mutableStateOf(plan.end.value.value?:start.plusHours(1))}
     var startLocked by remember{mutableStateOf(plan.start.dateTimeLocked)};var endLocked by remember{mutableStateOf(plan.end.dateTimeLocked)}
     var absolute by remember{mutableStateOf(plan.dateDisplayMode==TimePlanDateDisplayMode.ABSOLUTE)};var error by remember{mutableStateOf<String?>(null)}
+    fun draft()=plan.copy(start=DateTimeAnchor(DateTimeValue.explicit(start),startLocked),end=DateTimeAnchor(DateTimeValue.explicit(end),endLocked),dateDisplayMode=if(absolute)TimePlanDateDisplayMode.ABSOLUTE else TimePlanDateDisplayMode.RELATIVE_D_DAY)
+    val dateRepairs=remember(plan,start,end){if(end>=start)TimePlanPeriodChanges.previewRepairs(plan,draft())else emptyList()}
     TimePlanEditorFrame("시간계획 기간",onDismiss){
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)){
             OutlinedButton(onClick={baseDateOpen=true},modifier=Modifier.fillMaxWidth()){Text("오늘 · 특정 날짜로 변경")}
@@ -390,17 +393,35 @@ internal fun UnifiedDateAwarePlanDetail(
             Row(verticalAlignment=Alignment.CenterVertically){Checkbox(endLocked,{endLocked=it});Text("종료 시각 고정")}
             Row(verticalAlignment=Alignment.CenterVertically){Switch(absolute,{absolute=it});Text(if(absolute)"날짜로 표시"else"D-Day로 표시")}
             Text("시작 날짜를 바꾸면 모든 실시사항도 같은 일수만큼 이동합니다. 시각·소요 시간·완료 상태는 유지됩니다. 종료만 변경하면 실시사항은 이동하지 않습니다.",style=MaterialTheme.typography.bodySmall,color=ArmyristColors.SecondaryText)
+            if(dateRepairs.isNotEmpty()) {
+                Surface(color=ArmyristColors.WorkSurface,shape=ArmyristControlShape) {
+                    Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                        Text("기간 밖 날짜 확인 · ${dateRepairs.size}개",fontWeight=FontWeight.Bold)
+                        Row(verticalAlignment=Alignment.CenterVertically) {
+                            Checkbox(repairOutsideDates,{repairOutsideDates=it})
+                            Text("기간 밖 항목 날짜도 맞추기")
+                        }
+                        dateRepairs.forEach { repair ->
+                            val before=repair.from.format(DateTimeFormatter.ofPattern("MM.dd HH:mm"))
+                            val after=repair.target?.format(DateTimeFormatter.ofPattern("MM.dd HH:mm"))
+                            Text("${repair.title}: $before → ${if(repairOutsideDates && after!=null)after else "기존 날짜 유지"}",style=MaterialTheme.typography.bodySmall)
+                        }
+                        if(dateRepairs.any{it.target==null})Text("여러 날짜가 가능하거나 기간에 맞지 않는 항목은 임의로 바꾸지 않습니다. 저장 후 해당 항목의 날짜를 확인해주세요.",style=MaterialTheme.typography.bodySmall,color=ArmyristColors.Danger)
+                    }
+                }
+            }
             error?.let{Text(it,color=ArmyristColors.Danger)}
         }
         Button(onClick={
             when{
                 end<start->error="종료는 시작 이후로 입력해주세요."
-                else->if(onSave(plan.copy(start=DateTimeAnchor(DateTimeValue.explicit(start),startLocked),end=DateTimeAnchor(DateTimeValue.explicit(end),endLocked),dateDisplayMode=if(absolute)TimePlanDateDisplayMode.ABSOLUTE else TimePlanDateDisplayMode.RELATIVE_D_DAY)))onDismiss()else error="기간을 저장하지 못했습니다."
+                else->if(onSave(draft(),repairOutsideDates))onDismiss()else error="기간을 저장하지 못했습니다."
             }
         },modifier=Modifier.fillMaxWidth().padding(top=10.dp).heightIn(min=48.dp)){Text("저장")}
     }
     if(baseDateOpen)TimePlanBaseDateDialog(plan.copy(start=DateTimeAnchor(DateTimeValue.explicit(start)),dateDisplayMode=if(absolute)TimePlanDateDisplayMode.ABSOLUTE else TimePlanDateDisplayMode.RELATIVE_D_DAY),{baseDateOpen=false}){date,relative->
         if(date!=null){val days=java.time.temporal.ChronoUnit.DAYS.between(start.toLocalDate(),date);start=start.plusDays(days);end=end.plusDays(days)}
+        repairOutsideDates=date!=null && !relative
         absolute=!relative;baseDateOpen=false
     }
 }

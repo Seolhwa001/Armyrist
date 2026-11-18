@@ -394,7 +394,7 @@ fun DateAwareTimePlanApp(
             onComplete={key,state->repository.setUnifiedCompletion(selected.id,key,state).also{if(it)revision++}},
             onTrashSelection={keys->com.seolhwa.armyrist.timeplan.v3.data.TimelineTrash.move(repository,trashRepository,selected.id,keys).also{if(it)revision++}},
             onAddEntries={drafts->repository.addUnifiedEntries(selected.id,drafts).also{if(it){revision++;if(drafts.any{draft->draft.notificationMode!=ActionNotificationMode.NONE})requestAlarmPermissions()}}},
-            onPeriod={changed->repository.changePeriod(selected.id,changed).also{if(it)revision++}},
+            onPeriod={changed,repair->repository.changePeriod(selected.id,changed,repair).also{if(it)revision++}},
             onCommit={changed->
                 val latest=repository.getPlan(selected.id)
                 val groupIds=changed.actionGroups.map{it.id}.toSet()
