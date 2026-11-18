@@ -20,6 +20,7 @@ class TimePlanActionAlarmReceiver : BroadcastReceiver() {
         val action = com.seolhwa.armyrist.timeplan.v3.domain.UnifiedTimePlan.actions(plan).firstOrNull { it.id == actionId } ?: return
 
         if (
+            action.scheduledDateTime > java.time.LocalDateTime.now() ||
             plan.dateDisplayMode == TimePlanDateDisplayMode.RELATIVE_D_DAY ||
             action.completionState != ActionCompletionState.INCOMPLETE ||
             action.notificationMode == com.seolhwa.armyrist.timeplan.v3.domain.ActionNotificationMode.NONE ||

@@ -32,6 +32,10 @@ object TimePlanActionNotificationManager {
         Build.VERSION.SDK_INT < 33 ||
             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
+    fun exactAlarmAvailable(context: Context): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
+
     fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = context.getSystemService(NotificationManager::class.java)
@@ -133,13 +137,16 @@ object TimePlanActionNotificationManager {
             notificationPermissionGranted(context)
     }
 
-    fun reconcile(context: Context, repository: DateAwareTimePlanRepository) {
+    fun reconcile(
+        context: Context,
+        repository: DateAwareTimePlanRepository,
+        now: java.time.LocalDateTime = java.time.LocalDateTime.now()
+    ) {
         if (!repository.storageReadable) return
         createChannel(context)
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val previously = prefs.getStringSet(KEY_IDS, emptySet()).orEmpty().toSet()
         val tracked = mutableSetOf<String>()
-        val now = java.time.LocalDateTime.now()
         val permission = notificationPermissionGranted(context)
 
         repository.getPlans().forEach { plan ->
@@ -153,7 +160,9 @@ object TimePlanActionNotificationManager {
                     AlarmDisposition.PRESERVE_DELIVERED -> {
                         // Keep tracking fired actions, so deletion/completion on a
                         // subsequent reconcile can still clear their notification.
-                        cancelScheduledOnly(context, plan.id, action.id)
+                        // Due does not mean delivered: Android may still be deferring
+                        // this PendingIntent in Doze. Keep it alive until delivery or
+                        // explicit completion/deletion/notification disablement.
                         if (action.notificationMode != com.seolhwa.armyrist.timeplan.v3.domain.ActionNotificationMode.MUSIC) {
                             stopMusicAlarm(context, plan.id, action.id)
                         }
@@ -191,13 +200,15 @@ object TimePlanActionNotificationManager {
         val exactAllowed =
             Build.VERSION.SDK_INT < Build.VERSION_CODES.S || manager.canScheduleExactAlarms()
 
-        when {
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && exactAllowed ->
+        try {
+            if (exactAllowed) {
                 manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pending)
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ->
+            } else {
                 manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pending)
-            else ->
-                manager.set(AlarmManager.RTC_WAKEUP, triggerAt, pending)
+            }
+        } catch (_: SecurityException) {
+            // Permission can be revoked after canScheduleExactAlarms() was checked.
+            manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pending)
         }
         return true
     }

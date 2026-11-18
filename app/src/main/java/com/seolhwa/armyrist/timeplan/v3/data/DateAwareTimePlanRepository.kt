@@ -131,6 +131,11 @@ class DateAwareTimePlanRepository(context: Context) {
         return saveAction(planId,item)
     }
     @Synchronized
+    fun changePeriod(planId:String, edited:DateAwareTimePlan):Boolean {
+        val current=getPlan(planId)?:return false
+        return runCatching { commit(TimePlanPeriodChanges.apply(current,edited)) }.getOrDefault(false)
+    }
+    @Synchronized
     fun addUnifiedEntries(planId:String,drafts:List<UnifiedTimePlanDraft>):Boolean {
         if(drafts.isEmpty()||drafts.any{!UnifiedTimePlan.validateDraft(it)})return false
         val current=getPlan(planId)?:return false

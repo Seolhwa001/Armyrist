@@ -19,6 +19,7 @@ class TimePlanActivity : ComponentActivity() {
         super.onResume()
         val app = application as ArmyristApplication
         app.dateAwareTimePlanRepository.reloadFromPersistence()
+        com.seolhwa.armyrist.notification.TimePlanActionNotificationManager.reconcile(this, app.dateAwareTimePlanRepository)
         resumeRevision++
     }
 

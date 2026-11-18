@@ -127,5 +127,23 @@ class ContinuousTimelineUiTest {
   compose.onNodeWithText("실시사항 편집").assertDoesNotExist()
   compose.runOnIdle{val e=app.dateAwareTimePlanRepository.getPlan(p.id)!!.midwayEvents.single();assertFalse(e.dateTimeLocked);assertEquals(120L,java.time.Duration.between(DateTimePlanRules.arrival(e.timeSpec),DateTimePlanRules.departure(e.timeSpec)).toMinutes())}
  }
+ @Test fun periodTodayMovesAllEntriesButCancelDoesNotSave(){
+  val p=plan();show(p)
+  compose.onNodeWithText("시간계획 기간 · 변경").performClick()
+  compose.onNodeWithText("오늘 · 특정 날짜로 변경").performClick()
+  compose.onNodeWithText("특정 날짜로").assertIsDisplayed()
+  compose.onNodeWithText("오늘 날짜로").performClick()
+  compose.onNodeWithText("적용").performClick()
+  compose.runOnIdle{assertEquals(p,app.dateAwareTimePlanRepository.getPlan(p.id))}
+  compose.onNodeWithText("저장").performClick()
+  compose.runOnIdle{
+   val saved=app.dateAwareTimePlanRepository.getPlan(p.id)!!
+   val days=java.time.temporal.ChronoUnit.DAYS.between(p.start.value.value!!.toLocalDate(),java.time.LocalDate.now())
+   assertEquals(p.actions.single().scheduledDateTime.plusDays(days),saved.actions.single().scheduledDateTime)
+   assertEquals(DateTimePlanRules.arrival(p.midwayEvents.single().timeSpec)!!.plusDays(days),DateTimePlanRules.arrival(saved.midwayEvents.single().timeSpec))
+   assertEquals(p.end.value.value!!.plusDays(days),saved.end.value.value)
+   assertEquals(TimePlanDateDisplayMode.ABSOLUTE,saved.dateDisplayMode)
+  }
+ }
  private fun screenshot(name:String){val view=android.view.inspector.WindowInspector.getGlobalWindowViews().last();val b=Bitmap.createBitmap(view.width,view.height,Bitmap.Config.ARGB_8888);view.draw(Canvas(b));File("build/preview-screens/$name").also{it.parentFile!!.mkdirs()}.outputStream().use{b.compress(Bitmap.CompressFormat.PNG,100,it)};b.recycle()}
 }

@@ -107,8 +107,43 @@ fun DateAwareTimePlanApp(
     onOpenExecution: (String, String, Set<String>) -> Unit
 ) {
     val notificationContext = LocalContext.current
-    val notificationPermission = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) {
+    var exactAlarmPrompt by rememberSaveable { mutableStateOf(false) }
+    val exactAlarmSettings = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         com.seolhwa.armyrist.notification.TimePlanActionNotificationManager.reconcile(notificationContext, repository)
+    }
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        com.seolhwa.armyrist.notification.TimePlanActionNotificationManager.reconcile(notificationContext, repository)
+        if (granted && !com.seolhwa.armyrist.notification.TimePlanActionNotificationManager.exactAlarmAvailable(notificationContext)) exactAlarmPrompt = true
+    }
+    fun requestAlarmPermissions() {
+        if (android.os.Build.VERSION.SDK_INT >= 33 && !com.seolhwa.armyrist.notification.TimePlanActionNotificationManager.notificationPermissionGranted(notificationContext)) {
+            notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        } else if (!com.seolhwa.armyrist.notification.TimePlanActionNotificationManager.exactAlarmAvailable(notificationContext)) {
+            exactAlarmPrompt = true
+        }
+    }
+    LaunchedEffect(Unit) {
+        val hasUpcomingAlarm = repository.getPlans().any { plan ->
+            plan.dateDisplayMode != TimePlanDateDisplayMode.RELATIVE_D_DAY &&
+                UnifiedTimePlan.actions(plan).any { action ->
+                    action.notificationMode != ActionNotificationMode.NONE &&
+                        action.completionState == ActionCompletionState.INCOMPLETE &&
+                        action.scheduledDateTime > LocalDateTime.now()
+                }
+        }
+        if (hasUpcomingAlarm) requestAlarmPermissions()
+    }
+    if (exactAlarmPrompt) {
+        AlertDialog(onDismissRequest = { exactAlarmPrompt = false },
+            title = { Text("정확한 알람 허용") },
+            text = { Text("실시사항을 지정한 시각에 알리려면 ‘알람 및 리마인더’를 허용해주세요. 허용하지 않으면 절전 상태에서 알림이 늦어질 수 있습니다.") },
+            confirmButton = { TextButton(onClick = {
+                exactAlarmPrompt = false
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    runCatching { exactAlarmSettings.launch(android.content.Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, android.net.Uri.parse("package:${notificationContext.packageName}"))) }
+                }
+            }) { Text("설정 열기") } },
+            dismissButton = { TextButton(onClick = { exactAlarmPrompt = false }) { Text("나중에") } })
     }
     var selectedId by rememberSaveable { mutableStateOf(initialPlanId) }
     var selectedLegacyId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -354,11 +389,12 @@ fun DateAwareTimePlanApp(
         UnifiedDateAwarePlanDetail(
             plan=selected,onHome=onHome,onBack={selectedId=null},onResult={sharingId=selected.id},initialNodeId=initialNodeId,
             onSaveEntry={key,draft->repository.saveUnifiedEntry(selected.id,key,draft).also{saved->
-                if(saved){revision++;if(draft.notificationMode!=ActionNotificationMode.NONE && android.os.Build.VERSION.SDK_INT>=33 && !com.seolhwa.armyrist.notification.TimePlanActionNotificationManager.notificationPermissionGranted(notificationContext))notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)}
+                if(saved){revision++;if(draft.notificationMode!=ActionNotificationMode.NONE)requestAlarmPermissions()}
             }},
             onComplete={key,state->repository.setUnifiedCompletion(selected.id,key,state).also{if(it)revision++}},
             onTrashSelection={keys->com.seolhwa.armyrist.timeplan.v3.data.TimelineTrash.move(repository,trashRepository,selected.id,keys).also{if(it)revision++}},
-            onAddEntries={drafts->repository.addUnifiedEntries(selected.id,drafts).also{if(it)revision++}},
+            onAddEntries={drafts->repository.addUnifiedEntries(selected.id,drafts).also{if(it){revision++;if(drafts.any{draft->draft.notificationMode!=ActionNotificationMode.NONE})requestAlarmPermissions()}}},
+            onPeriod={changed->repository.changePeriod(selected.id,changed).also{if(it)revision++}},
             onCommit={changed->
                 val latest=repository.getPlan(selected.id)
                 val groupIds=changed.actionGroups.map{it.id}.toSet()
@@ -2297,7 +2333,7 @@ private enum class BaseDateChoice {
 }
 
 @Composable
-private fun TimePlanBaseDateDialog(
+internal fun TimePlanBaseDateDialog(
     plan: DateAwareTimePlan,
     onDismiss: () -> Unit,
     onApply: (LocalDate?, Boolean) -> Unit
