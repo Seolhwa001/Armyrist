@@ -70,4 +70,39 @@ class TimePlanAlarmDeliveryTest {
         })
         assertNotNull(shadowOf(notifications).getNotification(TimePlanActionNotificationManager.notificationId(plan.id,action.id)))
     }
+    @Test fun restrictedMusicStartFallsBackToAudibleSimpleChannel() {
+        assertTrue(repo.saveAction(plan.id,action.copy(notificationMode=ActionNotificationMode.MUSIC,scheduledDateTime=LocalDateTime.now().minusMinutes(1))))
+        val restricted=object: android.content.ContextWrapper(context) {
+            override fun startForegroundService(service: Intent): android.content.ComponentName? {
+                throw IllegalStateException("Background service start restricted")
+            }
+        }
+        TimePlanActionAlarmReceiver().onReceive(restricted,Intent().apply {
+            putExtra(TimePlanActionNotificationManager.EXTRA_PLAN_ID,plan.id)
+            putExtra(TimePlanActionNotificationManager.EXTRA_ACTION_ID,this@TimePlanAlarmDeliveryTest.action.id)
+        })
+        val notification=shadowOf(notifications).getNotification(TimePlanActionNotificationManager.notificationId(plan.id,action.id))
+        assertNotNull(notification)
+        assertEquals(TimePlanActionNotificationManager.channelId(action),notification.channelId)
+    }
+
+    @Test fun diagnosticTestUsesSeparateAlarmAndDoesNotModifyPlan() {
+        val before=repo.exportSnapshot()
+        TimePlanAlarmDiagnostics.scheduleTest(context)
+        assertEquals(2,shadowOf(alarms).scheduledAlarms.size)
+        TimePlanActionAlarmReceiver().onReceive(context,Intent().putExtra(TimePlanAlarmDiagnostics.EXTRA_TEST,true))
+        assertEquals(before,repo.exportSnapshot())
+        assertTrue(TimePlanAlarmDiagnostics.report(context,plan).contains("시험 알림 표시 요청"))
+    }
+
+    @Test fun diagnosticReportExplainsRelativeDateAndMutedChannel() {
+        TimePlanActionNotificationManager.createChannel(context)
+        val channel=notifications.getNotificationChannel(TimePlanActionNotificationManager.channelId(action))
+        channel.setSound(null,null)
+        notifications.createNotificationChannel(channel)
+        val report=TimePlanAlarmDiagnostics.report(context,plan.copy(dateDisplayMode=TimePlanDateDisplayMode.RELATIVE_D_DAY))
+        assertTrue(report.contains("날짜 미설정(D-Day)"))
+        assertTrue(report.contains("소리 없음"))
+    }
+
 }

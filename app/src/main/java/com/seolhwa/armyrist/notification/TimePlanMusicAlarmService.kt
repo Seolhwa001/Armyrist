@@ -65,11 +65,26 @@ class TimePlanMusicAlarmService : Service() {
 
                 val notification = buildNotification(this, plan, action)
 
-                startForeground(
-                    TimePlanActionNotificationManager.notificationId(plan.id, action.id),
-                    notification
-                )
-                startLoopingAlarm()
+                try {
+                    startForeground(TimePlanActionNotificationManager.notificationId(plan.id, action.id), notification)
+                } catch (failure: RuntimeException) {
+                    TimePlanAlarmDiagnostics.record(this, "음악 실행 제한 · 일반 알림으로 전환")
+                    val fallback=TaskReminderNotification.build(this,
+                        TimePlanActionNotificationManager.channelId(action.copy(notificationMode=ActionNotificationMode.SIMPLE)),
+                        action.content, "${plan.title} · 음악 실행 제한으로 일반 알림",
+                        TimePlanActionNotificationManager.openActionPendingIntent(this,plan.id,action.id),
+                        TimePlanActionNotificationManager.completeActionPendingIntent(this,plan.id,action.id))
+                    getSystemService(android.app.NotificationManager::class.java).notify(TimePlanActionNotificationManager.notificationId(plan.id,action.id),fallback)
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+                try {
+                    startLoopingAlarm()
+                    TimePlanAlarmDiagnostics.record(this, "음악 재생 시작")
+                } catch (failure: Exception) {
+                    TimePlanAlarmDiagnostics.record(this, "음악 재생 실패 · 알림은 유지")
+                    android.util.Log.e("TimePlanAlarm", "Alarm playback failed", failure)
+                }
             }
         }
         return START_NOT_STICKY
@@ -79,21 +94,31 @@ class TimePlanMusicAlarmService : Service() {
         if (player?.isPlaying == true) return
 
         player?.release()
-        player = MediaPlayer().apply {
-            setAudioAttributes(
-                AudioAttributes.Builder()
+        player = null
+        val candidates = listOfNotNull(
+            runCatching { RingtoneManager.getActualDefaultRingtoneUri(this, RingtoneManager.TYPE_ALARM) }.getOrNull(),
+            runCatching { RingtoneManager.getActualDefaultRingtoneUri(this, RingtoneManager.TYPE_NOTIFICATION) }.getOrNull(),
+            android.net.Uri.parse("android.resource://$packageName/${com.seolhwa.armyrist.R.raw.timeplan_alarm_fallback}")
+        ).distinct()
+        var lastFailure: Exception? = null
+        for (uri in candidates) {
+            val candidate = MediaPlayer()
+            try {
+                candidate.setAudioAttributes(AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_ALARM)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .build()
-            )
-            val alarmUri =
-                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            setDataSource(applicationContext, alarmUri)
-            isLooping = true
-            prepare()
-            start()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
+                candidate.setDataSource(applicationContext, uri)
+                candidate.isLooping = true
+                candidate.prepare()
+                candidate.start()
+                player = candidate
+                return
+            } catch (failure: Exception) {
+                lastFailure = failure
+                candidate.release()
+            }
         }
+        throw lastFailure ?: IllegalStateException("No playable alarm sound")
     }
 
     private fun stopAlarm() {

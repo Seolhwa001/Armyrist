@@ -72,16 +72,19 @@ internal fun UnifiedDateAwarePlanDetail(
     var voiceDrafts by remember{mutableStateOf<List<TimePlanVoiceDraft>?>(null)}
     var memoOpen by rememberSaveable(plan.id){mutableStateOf(false)}
     var titleOpen by rememberSaveable(plan.id){mutableStateOf(false)}
+    var alarmCheck by rememberSaveable { mutableStateOf(false) }
     var deleteKeys by remember { mutableStateOf<Set<String>?>(null) }
     var error by remember{mutableStateOf<String?>(null)}
     val entries=remember(plan){UnifiedTimePlan.entries(plan)}
     fun finishSelection(){selecting=false;selectedList=emptyList()}
     fun select(keys:Set<String>){selectedList=keys.toList();selecting=true}
     fun open(key:String){if(selecting)selectedList=(if(key in selected)selected-key else selected+key).toList()else editKey=key}
+    if(alarmCheck) TimePlanAlarmCheckDialog(plan,onDismiss={alarmCheck=false})
     BackHandler { if(selecting)finishSelection()else onBack() }
     Scaffold(containerColor=ArmyristColors.AppBackground,topBar={
         ArmyristTopBar(title=plan.title,subtitle="시간계획 · 실시사항",leadingLabel="홈",leadingIcon=ArmyristTopBarLeadingIcon.HOME,onLeading=onHome,
             secondaryLeadingLabel="메뉴",onSecondaryLeading=onBack,onTitleClick={titleOpen=true},actions={
+                TextButton(onClick={alarmCheck=true}){Text("알림 점검",color=ArmyristColors.OnDark)}
                 TextButton(onClick=onResult){Text("결과",color=ArmyristColors.OnDark)}
             })
     },bottomBar={
@@ -400,4 +403,27 @@ internal fun UnifiedDateAwarePlanDetail(
         if(date!=null){val days=java.time.temporal.ChronoUnit.DAYS.between(start.toLocalDate(),date);start=start.plusDays(days);end=end.plusDays(days)}
         absolute=!relative;baseDateOpen=false
     }
+}
+
+@Composable
+private fun TimePlanAlarmCheckDialog(plan:DateAwareTimePlan,onDismiss:()->Unit) {
+    val context=LocalContext.current
+    var refresh by remember { mutableIntStateOf(0) }
+    val settings=androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()){refresh++}
+    val permission=androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()){refresh++}
+    val report=remember(plan,refresh){com.seolhwa.armyrist.notification.TimePlanAlarmDiagnostics.report(context,plan)}
+    AlertDialog(onDismissRequest=onDismiss,title={Text("시간계획 알림 점검")},
+        text={Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)){
+            Text(report)
+            Text("시험 알림을 누른 뒤 홈 화면으로 나가 기다려주세요. 정확한 알람 미허용 시 10초보다 늦어질 수 있습니다.")
+            Button(onClick={com.seolhwa.armyrist.notification.TimePlanAlarmDiagnostics.scheduleTest(context);refresh++},modifier=Modifier.fillMaxWidth()){Text("10초 뒤 시험 알림")}
+            OutlinedButton(onClick={
+                if(android.os.Build.VERSION.SDK_INT>=33 && !com.seolhwa.armyrist.notification.TimePlanActionNotificationManager.notificationPermissionGranted(context))permission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                else if(android.os.Build.VERSION.SDK_INT>=26) settings.launch(android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE,context.packageName))
+                else settings.launch(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,android.net.Uri.parse("package:${context.packageName}")))
+            },modifier=Modifier.fillMaxWidth()){Text("알림 권한 · 소리 설정")}
+            if(android.os.Build.VERSION.SDK_INT>=31)OutlinedButton(onClick={settings.launch(android.content.Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,android.net.Uri.parse("package:${context.packageName}")))},modifier=Modifier.fillMaxWidth()){Text("정확한 알람 설정")}
+        }},
+        confirmButton={TextButton(onClick={refresh++}){Text("결과 새로고침")}},
+        dismissButton={TextButton(onClick=onDismiss){Text("닫기")}})
 }
